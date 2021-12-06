@@ -63,3 +63,7 @@ module GenFunctionTests =
     [<Test>]
     let LimitTest () =
         testRunner "Old.dfy" "New.dfy" None "Combine.dfy" "Expect.dfy"
+
+    [<Test>]
+    let ClassTest () =
+        testRunner "Old.dfy" "New.dfy" None "Combine.dfy" "Expect.dfy"
