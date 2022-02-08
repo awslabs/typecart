@@ -1,4 +1,4 @@
-typeCart is an analysis tool for proof evolution to facilitate proof maintenance for continuously integrated software. typeCart is constructed in F# and it
+**typeCart** is an analysis tool for proof evolution to facilitate proof maintenance for continuously integrated software. typeCart is constructed in F# and it
 
 1. reads two Dafny files into Dafny AST,
 2. analyses the ASTs to identify syntactically equivalent types between them, and
@@ -6,7 +6,7 @@ typeCart is an analysis tool for proof evolution to facilitate proof maintenance
 
 Additionally, typeCart generates the verification contracts (Dafny's `require` and `ensure` clauses) for the mapping functions, enabling the Dafny verifier to successfully verify the generated functions. Such functions helps proof engineers in estimating a quantitative measure about incremental changes between two version of the same specs written in Dafny.
 
-*Trivia:* `Cart` in `typeCart` represents cartography: typeCart generates mapping functions for equal types.
+**Trivia:** `Cart` in `typeCart` represents cartography: typeCart generates mapping functions for equal types.
 
 ## Build
 
