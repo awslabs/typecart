@@ -22,9 +22,7 @@ To run tests, use
 ```
 Other `make` options: `deps, check_format, clean`
 
-## Security
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+**Contributions are welcomed!** See [CONTRIBUTING](CONTRIBUTING.md) guidelines for more information.
 
 ## License
 
