@@ -8,6 +8,8 @@ Additionally, typeCart generates the verification contracts (Dafny's `require` a
 
 **Trivia:** `Cart` in `typeCart` represents cartography: typeCart generates mapping functions for equal types.
 
+See [examples and features](docs/ExamplesFeatures.md).
+
 ## Build
 
 typeCart builds on [.NET 5.0](https://dotnet.microsoft.com/en-us/download/dotnet/5.0), it supports Dafny 3.3.0 and Z3 4.8.5. The Makefile is configured to install Dafny and Z3 locally in the root directory. After installing .NET 5.0, run in the root directory 
