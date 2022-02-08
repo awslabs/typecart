@@ -1,0 +1,14 @@
+**/.DS_Store
+**/Output.dfy
+**/Combine.dfy
+**/Output.txt
+**/Combine.txt
+.idea/
+TypeInjections/TypeInjections/bin
+TypeInjections/TypeInjections/obj
+TypeInjections/packages
+build
+dafny/
+/TypeInjections/TypeInjections.sln.DotSettings.user
+TypeInjections/TypeInjections.Test/bin
+TypeInjections/TypeInjections.Test/obj

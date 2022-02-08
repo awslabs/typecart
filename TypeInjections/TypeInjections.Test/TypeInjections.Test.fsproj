@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net5.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+        <GenerateProgramFile>false</GenerateProgramFile>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="NUnit" Version="3.13.1" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.0.0-beta.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="TestUtils.fs" />
+        <Compile Include="TypeEqTests.fs" />
+        <Compile Include="GenFunctionTests.fs" />
+        <Compile Include="ClassGenTests.fs" />
+        <Compile Include="DummyMain.fs" />
+        <Content Include="Resources\**\*" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\TypeInjections\TypeInjections.fsproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="Dafny, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\dafny\Dafny.dll</HintPath>
+      </Reference>
+      <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+</Project>

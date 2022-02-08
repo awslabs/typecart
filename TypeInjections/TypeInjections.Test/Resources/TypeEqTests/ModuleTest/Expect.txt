@@ -1,0 +1,11 @@
+EQUAL TYPES
+-----------
+A.sameModuleEq
+B.sameModuleEq
+
+NON-EQUAL TYPES
+---------------
+A.sameModuleNeq
+A.diffModuleEq
+B.sameModuleNeq
+B.diffModuleEq

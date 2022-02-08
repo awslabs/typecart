@@ -1,0 +1,22 @@
+EQUAL TYPES
+-----------
+A.intAltEq
+A.fooEq
+A.subSyNeq
+A.fooAltEq
+A.nestedSyNeq
+A.boundEq
+A.boundAltEq
+A.newSynDataEq
+A.newSynDataSubEq
+A.intAltAltEq
+A.diffSyntaxSameType
+
+NON-EQUAL TYPES
+---------------
+A.neq
+A.newSynDataNeq
+A.usesNeq
+A.neqNew
+A.neqNewAlt
+A.usesNeqNew

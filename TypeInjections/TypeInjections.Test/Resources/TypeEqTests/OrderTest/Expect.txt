@@ -1,0 +1,13 @@
+EQUAL TYPES
+-----------
+A.constructorDiffOrderEq
+A.constructorDiffOrderPermEq
+A.genericRenameSimpleEq
+A.eitherEq
+A.genericRenameComplexEq
+
+NON-EQUAL TYPES
+---------------
+A.constructorDiffOrderNeq
+A.genericRenameSimpleNeq
+A.genericRenameComplexNeq

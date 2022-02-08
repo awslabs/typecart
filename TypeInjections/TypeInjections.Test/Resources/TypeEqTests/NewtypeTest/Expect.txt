@@ -1,0 +1,28 @@
+EQUAL TYPES
+-----------
+A.noVarNoCondEq
+A.varTrivialCondEq
+A.varImpossibleEq
+A.varEq
+A.varLt
+A.varLe
+A.varGt
+A.varGe
+A.varLeGe
+A.varLtGe
+A.varLeGt
+A.varLtGt
+A.varDiffTypeEq
+A.compoundExpEq
+A.compoundSubstMultipleEq
+A.fooEq
+
+NON-EQUAL TYPES
+---------------
+A.noVarNoCondNeq
+A.boolNeq
+A.litNeq
+A.opNeq
+A.oneSameOneNeq
+A.typeNeq
+A.barNeq

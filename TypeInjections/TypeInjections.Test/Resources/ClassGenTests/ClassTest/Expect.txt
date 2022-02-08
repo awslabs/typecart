@@ -1,0 +1,16 @@
+OK CLASSES
+-----------
+AOk
+COk
+GOk
+EOk
+
+NOT OK CLASSES
+---------------
+BNotOk
+CNotOk
+DNotOk
+INotOk
+JNotOk
+LNotOk
+TNotOk
