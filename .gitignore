@@ -12,3 +12,5 @@ dafny/
 /TypeInjections/TypeInjections.sln.DotSettings.user
 TypeInjections/TypeInjections.Test/bin
 TypeInjections/TypeInjections.Test/obj
+*.dll
+*.runtimeconfig.json
