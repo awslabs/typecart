@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function unaryNatOldToNew(u: Old.Ref.unaryNat): New.Ref.unaryNat
+    function method unaryNatOldToNew(u: Old.Ref.unaryNat): New.Ref.unaryNat
       decreases u
     {
       match u
@@ -16,7 +16,7 @@ include "New.dfy"
         New.Ref.unaryNat.Z
     }
 
-    function natRefOldToNew(n: Old.Ref.natRef): New.Ref.natRef
+    function method natRefOldToNew(n: Old.Ref.natRef): New.Ref.natRef
       decreases n
     {
       match n
@@ -26,7 +26,7 @@ include "New.dfy"
         New.Ref.natRef.B(z)
     }
 
-    function natRefRefOldToNew(n: Old.Ref.natRefRef): New.Ref.natRefRef
+    function method natRefRefOldToNew(n: Old.Ref.natRefRef): New.Ref.natRefRef
       decreases n
     {
       match n
@@ -36,7 +36,7 @@ include "New.dfy"
         New.Ref.natRefRef.Foo(natRefOldToNew(n1), natRefOldToNew(n2))
     }
 
-    function recAndRefOldToNew(r: Old.Ref.recAndRef): New.Ref.recAndRef
+    function method recAndRefOldToNew(r: Old.Ref.recAndRef): New.Ref.recAndRef
       decreases r
     {
       match r

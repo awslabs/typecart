@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
+    function method seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
       ensures |s| == |r|
       decreases s
     {
@@ -16,7 +16,7 @@ include "New.dfy"
         [f(s[0])] + seqMap(f, s[1..])
     }
 
-    function fooOldToNew(f: Old.S.foo): New.S.foo
+    function method fooOldToNew(f: Old.S.foo): New.S.foo
       decreases f
     {
       match f
@@ -26,7 +26,7 @@ include "New.dfy"
         New.S.foo.Baz(y)
     }
 
-    function seqOfFooOldToNew(s: Old.S.seqOfFoo): New.S.seqOfFoo
+    function method seqOfFooOldToNew(s: Old.S.seqOfFoo): New.S.seqOfFoo
       decreases s
     {
       match s
@@ -36,7 +36,7 @@ include "New.dfy"
         New.S.seqOfFoo.A2
     }
 
-    function seqOfBuiltinOldToNew(s: Old.S.seqOfBuiltin): New.S.seqOfBuiltin
+    function method seqOfBuiltinOldToNew(s: Old.S.seqOfBuiltin): New.S.seqOfBuiltin
       decreases s
     {
       match s

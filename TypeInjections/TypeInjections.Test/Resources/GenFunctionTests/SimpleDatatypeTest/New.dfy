@@ -15,5 +15,5 @@ module New.A {
 
   datatype manyCtorsManyArgs = G1(x: int, y: int) 
   							 | G2(s: string, c: char, b: bool) 
-							 | G3 (i: int, str: string)
+							   | G3 (i: int, str: string)
 }

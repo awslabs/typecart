@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function sigAOldToNew(s: Old.SignalA.sigA): New.SignalA.sigA
+    function method sigAOldToNew(s: Old.SignalA.sigA): New.SignalA.sigA
       decreases s
     {
       match s
@@ -16,7 +16,7 @@ include "New.dfy"
         New.SignalA.sigA.Internal(msg)
     }
 
-    function sigBOldToNew(s: Old.SignalB.sigB): New.SignalB.sigB
+    function method sigBOldToNew(s: Old.SignalB.sigB): New.SignalB.sigB
       decreases s
     {
       match s
@@ -26,7 +26,7 @@ include "New.dfy"
         New.SignalB.sigB.Internal(msg)
     }
 
-    function sigABOldToNew(s: Old.Eval.sigAB): New.Eval.sigAB
+    function method sigABOldToNew(s: Old.Eval.sigAB): New.Eval.sigAB
       decreases s
     {
       match s
@@ -36,7 +36,7 @@ include "New.dfy"
         New.Eval.sigAB.SigB(sigBOldToNew(bSig))
     }
 
-    function resultOldToNew<U, U'>(fU: U -> U', r: Old.Eval.result<U>): New.Eval.result<U'>
+    function method resultOldToNew<U, U'>(fU: U -> U', r: Old.Eval.result<U>): New.Eval.result<U'>
       decreases r
     {
       match r

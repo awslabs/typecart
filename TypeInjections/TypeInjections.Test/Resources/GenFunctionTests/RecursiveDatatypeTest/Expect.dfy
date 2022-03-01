@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function unaryNatOldToNew(u: Old.A.unaryNat): New.A.unaryNat
+    function method unaryNatOldToNew(u: Old.A.unaryNat): New.A.unaryNat
       decreases u
     {
       match u
@@ -16,7 +16,7 @@ include "New.dfy"
         New.A.unaryNat.Z
     }
 
-    function stringAltOldToNew(s: Old.A.stringAlt): New.A.stringAlt
+    function method stringAltOldToNew(s: Old.A.stringAlt): New.A.stringAlt
       decreases s
     {
       match s
@@ -26,7 +26,7 @@ include "New.dfy"
         New.A.stringAlt.C(c)
     }
 
-    function intTreeOldToNew(i: Old.A.intTree): New.A.intTree
+    function method intTreeOldToNew(i: Old.A.intTree): New.A.intTree
       decreases i
     {
       match i
@@ -38,7 +38,7 @@ include "New.dfy"
         New.A.intTree.Right(intTreeOldToNew(r))
     }
 
-    function complicatedOldToNew(c: Old.A.complicated): New.A.complicated
+    function method complicatedOldToNew(c: Old.A.complicated): New.A.complicated
       decreases c
     {
       match c

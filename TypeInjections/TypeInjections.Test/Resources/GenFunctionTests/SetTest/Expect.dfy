@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function setMap<T, U>(f: T --> U, s: set<T>): (res: set<U>)
+    function method setMap<T, U>(f: T --> U, s: set<T>): (res: set<U>)
       requires forall x: T :: x in s ==> f.requires(x)
       ensures |res| <= |s|
       ensures Injective(f, s) ==> |s| == |res|
@@ -16,7 +16,7 @@ include "New.dfy"
       if s == {} then
         {}
       else
-        ghost var v: T :| v in s; {f(v)} + setMap(f, s - {v})
+        var v: T :| v in s; {f(v)} + setMap(f, s - {v})
     }
 
     predicate Injective<T(!new), U>(f: T --> U, s: set<T>)
@@ -30,7 +30,7 @@ include "New.dfy"
           f(x) != f(y)
     }
 
-    function fooOldToNew(f: Old.S.foo): New.S.foo
+    function method fooOldToNew(f: Old.S.foo): New.S.foo
       decreases f
     {
       match f
@@ -40,7 +40,7 @@ include "New.dfy"
         New.S.foo.Baz(y)
     }
 
-    function setOfFooOldToNew(s: Old.S.setOfFoo): New.S.setOfFoo
+    function method setOfFooOldToNew(s: Old.S.setOfFoo): New.S.setOfFoo
       decreases s
     {
       match s
@@ -50,7 +50,7 @@ include "New.dfy"
         New.S.setOfFoo.A2
     }
 
-    function setOfBuiltinOldToNew(s: Old.S.setOfBuiltin): New.S.setOfBuiltin
+    function method setOfBuiltinOldToNew(s: Old.S.setOfBuiltin): New.S.setOfBuiltin
       decreases s
     {
       match s
