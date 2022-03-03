@@ -7,16 +7,13 @@ on:
     branches: [ main ]
 
 env:
-  Z3_DOWNLOAD_LOCATION: https://github.com/Z3Prover/z3/releases/download/Z3-4.8.5/z3-4.8.5-x64-ubuntu-16.04.zip
   DAFNY_DOWNLOAD_LOCATION: https://github.com/dafny-lang/dafny/releases/download/v3.3.0/dafny-3.3.0-x64-ubuntu-16.04.zip
+  DAFNY_ZIP: dafny-3.3.0-x64-ubuntu-16.04.zip
   TOOL_DLL: TypeInjections/TypeInjections/bin/Debug/net5.0/TypeInjections.dll
   TOOL_SLN: TypeInjections/TypeInjections.sln
   TOOL_TEST: TypeInjections/TypeInjections.Test/TypeInjections.Test.fsproj
-  DAFNY_DIR: dafny
-  DAFNY: $(DAFNY_DIR)/dafny
-  DAFNY_ZIP: $(shell basename $(DAFNY_DOWNLOAD_LOCATION))
-  Z3_ZIP: $(shell basename $(Z3_DOWNLOAD_LOCATION))
-	
+  
+  
 jobs:
   job0:
     name: TypeCart CI
@@ -27,8 +24,9 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 5.0.x
-    - name: Restore dependencies
+    - name: Install Dafny, build and test
       run: |
-        curl $(DAFNY_DOWNLOAD_LOCATION) -L -o $(DAFNY_ZIP)
-        unzip $(DAFNY_ZIP) && rm $(DAFNY_ZIP)
+        curl $DAFNY_DOWNLOAD_LOCATION -L -o $DAFNY_ZIP
+        unzip $DAFNY_ZIP && rm $DAFNY_ZIP
         dotnet build TypeInjections/TypeInjections.sln -p:Configuration=Debug
+        dotnet test $TOOL_TEST
