@@ -13,6 +13,11 @@
         <Compile Include="TypeInjections.fs" />
         <Compile Include="InjectionIO.fs" />
         <Compile Include="Program.fs" />
+        <Compile Include="Utils-fr.fs" />
+        <Compile Include="YIL.fs" />
+        <Compile Include="DafnyToYIL.fs" />
+        <Compile Include="Diff.fs" />
+        <Compile Include="Program-fr.fs" />
     </ItemGroup>
 
     <ItemGroup>

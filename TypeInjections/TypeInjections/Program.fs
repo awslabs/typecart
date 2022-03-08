@@ -138,8 +138,8 @@ module Program =
 
         InjectionIO.printEqResults outputPath
 
-    [<EntryPoint>]
-    let main argv =
+    //[<EntryPoint>]
+    let main (argv: string array) =
         // TODO: this whole part will be changed once this runs on folders rather than individual files
         // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
