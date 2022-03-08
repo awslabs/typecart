@@ -22,7 +22,7 @@ module TypeEquality =
     let oldDecls : Dictionary<string, TopLevelDecl> = Dictionary<string, TopLevelDecl>()
     let newDecls : Dictionary<string, TopLevelDecl> = Dictionary<string, TopLevelDecl>()
 
-    let private fieldsOf (c: ClassDecl) : Field list =
+    let fieldsOf (c: ClassDecl) : Field list =
         List.choose
             (fun (m: MemberDecl) ->
                 match m with
@@ -441,7 +441,8 @@ module TypeEquality =
 
     and private constantFieldEq (typeArgs: Map<string, string>) (c1: ConstantField) (c2: ConstantField) : bool =
         fieldEq typeArgs c1 c2
-        && exprEq None c1.Rhs c2.Rhs
+        && ((c1.Rhs = null && c2.Rhs = null)
+            || exprEq None c1.Rhs c2.Rhs)
 
     // Field inherits to ConstantField, DatatypeDestructor, SpecialField
     and private fieldEq (typeArgs: Map<string, string>) (f1: Field) (f2: Field) : bool =

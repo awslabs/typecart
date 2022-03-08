@@ -35,6 +35,7 @@ module NameUtils =
         | :? DatatypeDecl as d -> nameHelp d.FullName
         | :? NewtypeDecl as n -> nameHelp n.FullName
         | :? TypeSynonymDecl as t -> nameHelp t.FullName
+        | :? ClassDecl as c -> nameHelp c.FullName
         | _ ->
             System.Console.WriteLine("Tried to generate a name for an invalid declaration")
             null
@@ -53,6 +54,9 @@ module NameUtils =
 
     // We generate a lot of NameSegments, so this is a convenient shorthand
     let genNameSegment name : NameSegment = NameSegment(Token.NoToken, name, null)
+
+    let mkMemSelectExp (obj: string) (name: string) =
+        MemberSelectExpr(Token.NoToken, genNameSegment obj, name)
 
     let genbinding name : ActualBinding =
         ActualBinding(null, NameSegment(Token.NoToken, name, null))
