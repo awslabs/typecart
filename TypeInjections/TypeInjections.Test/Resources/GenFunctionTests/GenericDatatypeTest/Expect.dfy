@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
+    function method seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
       ensures |s| == |r|
       decreases s
     {
@@ -16,7 +16,7 @@ include "New.dfy"
         [f(s[0])] + seqMap(f, s[1..])
     }
 
-    function listOldToNew<A, A'>(fA: A -> A', l: Old.Gen.list<A>): New.Gen.list<A'>
+    function method listOldToNew<A, A'>(fA: A -> A', l: Old.Gen.list<A>): New.Gen.list<A'>
       decreases l
     {
       match l
@@ -26,7 +26,7 @@ include "New.dfy"
         New.Gen.list.Nil
     }
 
-    function treeOldToNew<A, A'>(fA: A -> A', t: Old.Gen.tree<A>): New.Gen.tree<A'>
+    function method treeOldToNew<A, A'>(fA: A -> A', t: Old.Gen.tree<A>): New.Gen.tree<A'>
       decreases t
     {
       match t
@@ -38,7 +38,7 @@ include "New.dfy"
         New.Gen.tree.Right(treeOldToNew(fA, r))
     }
 
-    function optionOldToNew<A, A'>(fA: A -> A', o: Old.Gen.option<A>): New.Gen.option<A'>
+    function method optionOldToNew<A, A'>(fA: A -> A', o: Old.Gen.option<A>): New.Gen.option<A'>
       decreases o
     {
       match o
@@ -48,7 +48,7 @@ include "New.dfy"
         New.Gen.option.Some(fA(x))
     }
 
-    function eitherOldToNew<S, T, S', T'>(fS: S -> S', fT: T -> T', e: Old.Gen.either<S, T>): New.Gen.either<S', T'>
+    function method eitherOldToNew<S, T, S', T'>(fS: S -> S', fT: T -> T', e: Old.Gen.either<S, T>): New.Gen.either<S', T'>
       decreases e
     {
       match e
@@ -58,7 +58,7 @@ include "New.dfy"
         New.Gen.either.Right(fT(t))
     }
 
-    function withSeqOldToNew<A, A'>(fA: A -> A', w: Old.Gen.withSeq<A>): New.Gen.withSeq<A'>
+    function method withSeqOldToNew<A, A'>(fA: A -> A', w: Old.Gen.withSeq<A>): New.Gen.withSeq<A'>
       decreases w
     {
       match w
@@ -68,7 +68,7 @@ include "New.dfy"
         New.Gen.withSeq.Snd(seqMap(fA, l))
     }
 
-    function complicatedOldToNew<A, B, C, A', B', C'>(fA: A -> A', fB: B -> B', fC: C -> C', c: Old.Gen.complicated<A, B, C>): New.Gen.complicated<A', B', C'>
+    function method complicatedOldToNew<A, B, C, A', B', C'>(fA: A -> A', fB: B -> B', fC: C -> C', c: Old.Gen.complicated<A, B, C>): New.Gen.complicated<A', B', C'>
       decreases c
     {
       match c
@@ -80,7 +80,7 @@ include "New.dfy"
         New.Gen.complicated.C3(complicatedOldToNew(fC, fB, fA, c2))
     }
 
-    function genRefOldToNew<A, B, A', B'>(fA: A -> A', fB: B -> B', g: Old.Gen.genRef<A, B>): New.Gen.genRef<A', B'>
+    function method genRefOldToNew<A, B, A', B'>(fA: A -> A', fB: B -> B', g: Old.Gen.genRef<A, B>): New.Gen.genRef<A', B'>
       decreases g
     {
       match g

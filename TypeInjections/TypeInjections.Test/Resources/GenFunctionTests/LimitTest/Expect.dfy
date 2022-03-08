@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function sigOldToNew(s: Old.SignalA.sig): New.SignalA.sig
+    function method sigOldToNew(s: Old.SignalA.sig): New.SignalA.sig
       decreases s
     {
       match s
@@ -16,7 +16,7 @@ include "New.dfy"
         New.SignalA.sig.Send(value)
     }
 
-    function sigOldToNew(s: Old.SignalB.sig): New.SignalB.sig
+    function method sigOldToNew(s: Old.SignalB.sig): New.SignalB.sig
       decreases s
     {
       match s
@@ -26,7 +26,7 @@ include "New.dfy"
         New.SignalB.sig.Send(value)
     }
 
-    function sigOldToNew(s: Old.Together.sig): New.Together.sig
+    function method sigOldToNew(s: Old.Together.sig): New.Together.sig
       decreases s
     {
       match s
@@ -36,7 +36,7 @@ include "New.dfy"
         New.Together.sig.MsgB(sigOldToNew(bMsg))
     }
 
-    function commOldToNew(c: Old.Together.comm): New.Together.comm
+    function method commOldToNew(c: Old.Together.comm): New.Together.comm
       decreases c
     {
       match c

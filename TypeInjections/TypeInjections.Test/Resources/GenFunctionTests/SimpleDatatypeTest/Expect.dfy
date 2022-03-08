@@ -6,7 +6,7 @@ include "New.dfy"
     import Old
 
     import New
-    function singleNoArgsOldToNew(s: Old.A.singleNoArgs): New.A.singleNoArgs
+    function method singleNoArgsOldToNew(s: Old.A.singleNoArgs): New.A.singleNoArgs
       decreases s
     {
       match s
@@ -14,7 +14,7 @@ include "New.dfy"
         New.A.singleNoArgs.A1
     }
 
-    function twoNoArgsOldToNew(t: Old.A.twoNoArgs): New.A.twoNoArgs
+    function method twoNoArgsOldToNew(t: Old.A.twoNoArgs): New.A.twoNoArgs
       decreases t
     {
       match t
@@ -24,7 +24,7 @@ include "New.dfy"
         New.A.twoNoArgs.B2
     }
 
-    function manyNoArgsDiffOrderOldToNew(m: Old.A.manyNoArgsDiffOrder): New.A.manyNoArgsDiffOrder
+    function method manyNoArgsDiffOrderOldToNew(m: Old.A.manyNoArgsDiffOrder): New.A.manyNoArgsDiffOrder
       decreases m
     {
       match m
@@ -38,7 +38,7 @@ include "New.dfy"
         New.A.manyNoArgsDiffOrder.C4
     }
 
-    function singleArgOldToNew(s: Old.A.singleArg): New.A.singleArg
+    function method singleArgOldToNew(s: Old.A.singleArg): New.A.singleArg
       decreases s
     {
       match s
@@ -46,7 +46,7 @@ include "New.dfy"
         New.A.singleArg.D(x)
     }
 
-    function manyCtorsSingleArgOldToNew(m: Old.A.manyCtorsSingleArg): New.A.manyCtorsSingleArg
+    function method manyCtorsSingleArgOldToNew(m: Old.A.manyCtorsSingleArg): New.A.manyCtorsSingleArg
       decreases m
     {
       match m
@@ -58,7 +58,7 @@ include "New.dfy"
         New.A.manyCtorsSingleArg.E3(s)
     }
 
-    function singleCtorManyArgsOldToNew(s: Old.A.singleCtorManyArgs): New.A.singleCtorManyArgs
+    function method singleCtorManyArgsOldToNew(s: Old.A.singleCtorManyArgs): New.A.singleCtorManyArgs
       decreases s
     {
       match s
@@ -66,7 +66,7 @@ include "New.dfy"
         New.A.singleCtorManyArgs.F(b, c, d)
     }
 
-    function manyCtorsManyArgsOldToNew(m: Old.A.manyCtorsManyArgs): New.A.manyCtorsManyArgs
+    function method manyCtorsManyArgsOldToNew(m: Old.A.manyCtorsManyArgs): New.A.manyCtorsManyArgs
       decreases m
     {
       match m

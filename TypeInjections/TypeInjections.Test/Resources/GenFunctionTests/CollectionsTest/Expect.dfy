@@ -6,25 +6,25 @@ include "New.dfy"
     import Old
 
     import New
-    function mapMap<K, K', V, V'>(f: K -> K', g: V -> V', m: map<K, V>): map<K', V'>
+    function method mapMap<K, K', V, V'>(f: K -> K', g: V -> V', m: map<K, V>): map<K', V'>
       decreases m
     {
       if m == map[] then
         map[]
       else
-        ghost var k: K :| k in m; ghost var v: V := m[k]; map[f(k) := g(v)] + mapMap(f, g, m - {k})
+        var k: K :| k in m; var v: V := m[k]; map[f(k) := g(v)] + mapMap(f, g, m - {k})
     }
 
-    function mapMapKey<K, K', V>(f: K -> K', m: map<K, V>): map<K', V>
+    function method mapMapKey<K, K', V>(f: K -> K', m: map<K, V>): map<K', V>
       decreases m
     {
       if m == map[] then
         map[]
       else
-        ghost var k: K :| k in m; ghost var v: V := m[k]; map[f(k) := v] + mapMapKey(f, m - {k})
+        var k: K :| k in m; var v: V := m[k]; map[f(k) := v] + mapMapKey(f, m - {k})
     }
 
-    function setMap<T, U>(f: T --> U, s: set<T>): (res: set<U>)
+    function method setMap<T, U>(f: T --> U, s: set<T>): (res: set<U>)
       requires forall x: T :: x in s ==> f.requires(x)
       ensures |res| <= |s|
       ensures Injective(f, s) ==> |s| == |res|
@@ -34,10 +34,10 @@ include "New.dfy"
       if s == {} then
         {}
       else
-        ghost var v: T :| v in s; {f(v)} + setMap(f, s - {v})
+        var v: T :| v in s; {f(v)} + setMap(f, s - {v})
     }
 
-    function seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
+    function method seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
       ensures |s| == |r|
       decreases s
     {
@@ -58,7 +58,7 @@ include "New.dfy"
           f(x) != f(y)
     }
 
-    function fooOldToNew(f: Old.S.foo): New.S.foo
+    function method fooOldToNew(f: Old.S.foo): New.S.foo
       decreases f
     {
       match f
@@ -68,7 +68,7 @@ include "New.dfy"
         New.S.foo.Baz(y)
     }
 
-    function listOldToNew<T, T'>(fT: T -> T', l: Old.S.list<T>): New.S.list<T'>
+    function method listOldToNew<T, T'>(fT: T -> T', l: Old.S.list<T>): New.S.list<T'>
       decreases l
     {
       match l
@@ -78,7 +78,7 @@ include "New.dfy"
         New.S.list.Nil
     }
 
-    function multipleCollOldToNew(m: Old.S.multipleColl): New.S.multipleColl
+    function method multipleCollOldToNew(m: Old.S.multipleColl): New.S.multipleColl
       decreases m
     {
       match m

@@ -6,18 +6,18 @@ include "New.dfy"
     import Old
 
     import New
-    function mapMapValue<K, V, V'>(f: V -> V', m: map<K, V>): (m': map<K, V'>)
+    function method mapMapValue<K, V, V'>(f: V -> V', m: map<K, V>): (m': map<K, V'>)
       requires forall k: K :: k in m.Keys ==> f.requires(m[k])
       ensures m.Keys == m'.Keys
       ensures |m| == |m'|
       decreases m
     {
-      ghost var result: map<K, V'> := map k: K {:trigger m[k]} {:trigger k in m} | k in m :: f(m[k]);
+      var result: map<K, V'> := map k: K {:trigger m[k]} {:trigger k in m} | k in m :: f(m[k]);
       assert |result.Keys| == |result|;
       result
     }
 
-    function setMap<T, U>(f: T --> U, s: set<T>): (res: set<U>)
+    function method setMap<T, U>(f: T --> U, s: set<T>): (res: set<U>)
       requires forall x: T :: x in s ==> f.requires(x)
       ensures |res| <= |s|
       ensures Injective(f, s) ==> |s| == |res|
@@ -27,10 +27,10 @@ include "New.dfy"
       if s == {} then
         {}
       else
-        ghost var v: T :| v in s; {f(v)} + setMap(f, s - {v})
+        var v: T :| v in s; {f(v)} + setMap(f, s - {v})
     }
 
-    function seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
+    function method seqMap<A, B>(f: A -> B, s: seq<A>): (r: seq<B>)
       ensures |s| == |r|
       decreases s
     {
@@ -40,13 +40,13 @@ include "New.dfy"
         [f(s[0])] + seqMap(f, s[1..])
     }
 
-    function mapMap<K, K', V, V'>(f: K -> K', g: V -> V', m: map<K, V>): map<K', V'>
+    function method mapMap<K, K', V, V'>(f: K -> K', g: V -> V', m: map<K, V>): map<K', V'>
       decreases m
     {
       if m == map[] then
         map[]
       else
-        ghost var k: K :| k in m; ghost var v: V := m[k]; map[f(k) := g(v)] + mapMap(f, g, m - {k})
+        var k: K :| k in m; var v: V := m[k]; map[f(k) := g(v)] + mapMap(f, g, m - {k})
     }
 
     predicate Injective<T(!new), U>(f: T --> U, s: set<T>)
@@ -67,7 +67,7 @@ include "New.dfy"
       s
     }
 
-    function FooOldToNew(f: Old.N.Foo): New.N.Foo
+    function method FooOldToNew(f: Old.N.Foo): New.N.Foo
       decreases f
     {
       match f
@@ -188,7 +188,7 @@ include "New.dfy"
       s
     }
 
-    function OutcomeOldToNew<T, T'>(fT: T -> T', o: Old.N.Outcome<T>): New.N.Outcome<T'>
+    function method OutcomeOldToNew<T, T'>(fT: T -> T', o: Old.N.Outcome<T>): New.N.Outcome<T'>
       decreases o
     {
       match o
@@ -219,7 +219,7 @@ include "New.dfy"
       m
     }
 
-    function ListOldToNew<T, T'>(fT: T -> T', l: Old.N.List<T>): New.N.List<T'>
+    function method ListOldToNew<T, T'>(fT: T -> T', l: Old.N.List<T>): New.N.List<T'>
       decreases l
     {
       match l

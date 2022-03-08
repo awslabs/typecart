@@ -6,36 +6,36 @@ include "New.dfy"
     import Old
 
     import New
-    function mapMap<K, K', V, V'>(f: K -> K', g: V -> V', m: map<K, V>): map<K', V'>
+    function method mapMap<K, K', V, V'>(f: K -> K', g: V -> V', m: map<K, V>): map<K', V'>
       decreases m
     {
       if m == map[] then
         map[]
       else
-        ghost var k: K :| k in m; ghost var v: V := m[k]; map[f(k) := g(v)] + mapMap(f, g, m - {k})
+        var k: K :| k in m; var v: V := m[k]; map[f(k) := g(v)] + mapMap(f, g, m - {k})
     }
 
-    function mapMapValue<K, V, V'>(f: V -> V', m: map<K, V>): (m': map<K, V'>)
+    function method mapMapValue<K, V, V'>(f: V -> V', m: map<K, V>): (m': map<K, V'>)
       requires forall k: K :: k in m.Keys ==> f.requires(m[k])
       ensures m.Keys == m'.Keys
       ensures |m| == |m'|
       decreases m
     {
-      ghost var result: map<K, V'> := map k: K {:trigger m[k]} {:trigger k in m} | k in m :: f(m[k]);
+      var result: map<K, V'> := map k: K {:trigger m[k]} {:trigger k in m} | k in m :: f(m[k]);
       assert |result.Keys| == |result|;
       result
     }
 
-    function mapMapKey<K, K', V>(f: K -> K', m: map<K, V>): map<K', V>
+    function method mapMapKey<K, K', V>(f: K -> K', m: map<K, V>): map<K', V>
       decreases m
     {
       if m == map[] then
         map[]
       else
-        ghost var k: K :| k in m; ghost var v: V := m[k]; map[f(k) := v] + mapMapKey(f, m - {k})
+        var k: K :| k in m; var v: V := m[k]; map[f(k) := v] + mapMapKey(f, m - {k})
     }
 
-    function fooOldToNew(f: Old.S.foo): New.S.foo
+    function method fooOldToNew(f: Old.S.foo): New.S.foo
       decreases f
     {
       match f
@@ -45,7 +45,7 @@ include "New.dfy"
         New.S.foo.Baz(y)
     }
 
-    function mapFooKeyOldToNew(m: Old.S.mapFooKey): New.S.mapFooKey
+    function method mapFooKeyOldToNew(m: Old.S.mapFooKey): New.S.mapFooKey
       decreases m
     {
       match m
@@ -55,7 +55,7 @@ include "New.dfy"
         New.S.mapFooKey.A2
     }
 
-    function mapFooValOldToNew(m: Old.S.mapFooVal): New.S.mapFooVal
+    function method mapFooValOldToNew(m: Old.S.mapFooVal): New.S.mapFooVal
       decreases m
     {
       match m
@@ -65,7 +65,7 @@ include "New.dfy"
         New.S.mapFooVal.B2
     }
 
-    function mapFooBothOldToNew(m: Old.S.mapFooBoth): New.S.mapFooBoth
+    function method mapFooBothOldToNew(m: Old.S.mapFooBoth): New.S.mapFooBoth
       decreases m
     {
       match m
@@ -75,7 +75,7 @@ include "New.dfy"
         New.S.mapFooBoth.C3
     }
 
-    function optionOldToNew<T, T'>(fT: T -> T', o: Old.S.option<T>): New.S.option<T'>
+    function method optionOldToNew<T, T'>(fT: T -> T', o: Old.S.option<T>): New.S.option<T'>
       decreases o
     {
       match o
@@ -85,7 +85,7 @@ include "New.dfy"
         New.S.option.Some(fT(x))
     }
 
-    function typOldToNew<T, T'>(fT: T -> T', t: Old.S.typ<T>): New.S.typ<T'>
+    function method typOldToNew<T, T'>(fT: T -> T', t: Old.S.typ<T>): New.S.typ<T'>
       decreases t
     {
       match t
@@ -103,7 +103,7 @@ include "New.dfy"
         New.S.typ.D5(typOldToNew(h))
     }
 
-    function mapBothDifferentOldToNew(m: Old.S.mapBothDifferent): New.S.mapBothDifferent
+    function method mapBothDifferentOldToNew(m: Old.S.mapBothDifferent): New.S.mapBothDifferent
       decreases m
     {
       match m
@@ -113,7 +113,7 @@ include "New.dfy"
         New.S.mapBothDifferent.D2(s)
     }
 
-    function mapBothDifferentInOldToNew(m: Old.S.mapBothDifferentIn): New.S.mapBothDifferentIn
+    function method mapBothDifferentInOldToNew(m: Old.S.mapBothDifferentIn): New.S.mapBothDifferentIn
       decreases m
     {
       match m
@@ -123,7 +123,7 @@ include "New.dfy"
         New.S.mapBothDifferentIn.D2(s)
     }
 
-    function mapBuiltInOldToNew(m: Old.S.mapBuiltIn): New.S.mapBuiltIn
+    function method mapBuiltInOldToNew(m: Old.S.mapBuiltIn): New.S.mapBuiltIn
       decreases m
     {
       match m
