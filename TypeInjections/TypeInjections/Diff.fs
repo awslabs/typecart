@@ -1,8 +1,5 @@
 namespace TypeInjections
 
-open TypeInjections.YIL
-open TypeInjections.YIL
-
 /// AST for differences between two YIL programs
 /// In particular, for every YIL AST type X that occurs in lists, the Diff AST has a type X with constructors
 /// - AddX if the new list has a new element
@@ -207,11 +204,10 @@ module Diff =
             | AddClassType c -> ADD + YIL.printer().classType(c)
             | DeleteClassType n -> DEL + n.ToString()
 
-
 /// diffs two YIL AST items and returns the corresponding AST item in Diff._
 module Differ =
-    module D = Diff
     module Utils = UtilsFR
+    open YIL
     
     /// diff between two names
     let rec name(old: string, nw: string): Diff.Name =
