@@ -626,7 +626,7 @@ module YIL =
                 + (this.decls ds)
             | Datatype (n, tpvs, cons, ds, a) ->
                 let consS =
-                    List.map (fun (c: DatatypeConstructor) -> c.name + (this.localDecls c.ins)) cons
+                    List.map this.datatypeConstructor cons
                 "datatype "
                 + (this.meta a)
                 + n
@@ -688,6 +688,9 @@ module YIL =
             | Export p -> "export " + p.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
+        member this.datatypeConstructor(c: DatatypeConstructor) =
+            c.name + (this.localDecls c.ins)
+        
         member this.tps(ts: Type list) =
             if ts.IsEmpty then
                 ""

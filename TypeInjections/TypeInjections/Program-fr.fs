@@ -82,9 +82,15 @@ module ProgramFR =
                 failwith ("file not found: " + a)
 
         // process files
-        let dafnyFiles = Seq.map DafnyFile files
-        let dafnyProg = runDafny dafnyFiles
-        let yilProg = DafnyToYIL.program dafnyProg
-        let yilProgS = YIL.printer().prog(yilProg)
-        System.Console.WriteLine(yilProgS)
+        let oldFile = DafnyFile (files.Item(0))
+        let newFile = DafnyFile (files.Item(1))
+        let oldDafny = runDafny [oldFile]
+        let oldYIL = DafnyToYIL.program oldDafny
+        let newDafny = runDafny [newFile]
+        let newYIL = DafnyToYIL.program newDafny
+        
+        let diff = Differ.prog(oldYIL, newYIL)
+        
+        let diffS = (new Diff.Printer()).prog(diff)
+        System.Console.WriteLine(diffS)
         0

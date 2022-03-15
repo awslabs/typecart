@@ -1,12 +1,20 @@
 namespace TypeInjections
 
 open TypeInjections.YIL
+open TypeInjections.YIL
 
 /// AST for differences between two YIL programs
+/// In particular, for every YIL AST type X that occurs in lists, the Diff AST has a type X with constructors
+/// - AddX if the new list has a new element
+/// - DeleteX if the new list misses an element
+/// - C for every constructor C of X if an element was changed
+/// The distinction between a change and a Delete+Add is not always clear,
+/// but at least the kind and/or a name can be used to detect a change. 
 module Diff =
     module Y = YIL
-    
-    type Name = (string*string) option
+    module Utils = UtilsFR
+
+    type Name = SameName of string | Rename of string*string
    
     and Program = {name: Name; decls: Decl list}
  
@@ -14,11 +22,11 @@ module Diff =
         AddDecl of Y.Decl
       | DeleteDecl of string
       | Module of Name * Decl list
-      | Class of Name * TypeArg list * ClassType list * Decl list
+      | Class of Name * bool * TypeArg list * ClassType list * Decl list
       | Datatype of Name * TypeArg list * DatatypeConstructor list * Decl list
       | ClassConstructor of Name * TypeArg list * LocalDecl list * ExprO
       | Field of Name * Type * ExprO
-      | Method of Name * TypeArg list * LocalDecl list * OutputSpec option * ExprO
+      | Method of Name * TypeArg list * LocalDecl list * OutputSpec * ExprO
     
     and DatatypeConstructor =
         AddDatatypeConstructor of Y.DatatypeConstructor
@@ -36,16 +44,169 @@ module Diff =
     and LocalDecl =
         AddLocalDecl of Y.LocalDecl
       | DeleteLocalDecl of string
-      | LocalDecl of Name * Y.Type option
+      | LocalDecl of Name * Type
     
     and OutputSpec =
+      | SameOutputSpec // unchanged
       | UpdateToOutputType of Y.Type // was anything, now output type
       | UpdateToOutputDecls of Y.LocalDecl list // was output type, now decls
       | ChangeOutputDecls of LocalDecl list // was output decls, now different decls
 
-    and ExprO = Y.Expr option option
-    
-    and Type = Y.Type option
+    /// change to an optional expression
+    and ExprO =
+      | SameExprO // unchanged
+      | AddExpr of Y.Expr // None ---> Some e
+      | UpdateExpr of Y.Expr // Some e ---> Some e'
+      | DeleteExpr // Some e -> None
+        
+    /// change to a type
+    and Type =
+      | SameType // unchanged
+      | UpdateType of Y.Type // changed
+
+    type Printer() =
+        let mutable indentLevel = 0
+        let indent () =
+            Utils.listToString (List.map (fun _ -> "  ") [ 2 .. indentLevel ], "")
+        let indented(s: string) = indent() + s + "\n"
+        let withIndent(code: string Lazy) =
+            indentLevel <- indentLevel + 1
+            let s = code.Force()
+            indentLevel <- indentLevel - 1
+            s
+        
+        let ADD = "ADD "
+        let DEL = "DEL "
+        let UPD = "UPD"
+        let UNC = "UNC"
+        
+        member this.prog(p: Program) = this.decls p.decls
+
+        member this.name(nm: Name) =
+            match nm with
+            | SameName o -> o
+            | Rename(o,n) -> "(" + o + " -> " + n + ")"
+        
+        member this.typeargs(ts: TypeArg list) =
+            if ts.IsEmpty then
+                ""
+            else
+                let s = List.map this.typearg ts
+                "<" + Utils.listToString (s, ", ") + ">"
+
+        member this.typearg(t: TypeArg) =
+            match t with
+            | AddTypeArg s -> ADD + s
+            | DeleteTypeArg s -> DEL + s
+        
+        member this.decls(ds: Decl list) =
+            withIndent(lazy
+               Utils.listToString (List.map (fun d -> indented (this.decl d)) ds, "")
+            )
+        member this.decl(d: Decl) =
+            match d with
+            | AddDecl d -> ADD + YIL.printer().decl(d)
+            | DeleteDecl n -> DEL + n
+            | Module (n, ds) ->
+                "module "
+                + (this.name n)
+                + "\n"
+                + (this.decls ds)
+            | Datatype (n, tpvs, cons, ds) ->
+                let consS =
+                    List.map this.datatypeConstructor cons
+                "datatype "
+                + (this.name n)
+                + (this.typeargs tpvs)
+                + " = "
+                + Utils.listToString (consS, " | ")
+                + "\n"
+                + (this.decls ds)
+            | Class (n, isTrait, tpvs, p, ds) ->
+                if isTrait then "trait " else "class "
+                + (this.name n)
+                + (this.typeargs tpvs)
+                + if p.IsEmpty then
+                      ""
+                  else
+                      (" extends "
+                       + Utils.listToString (List.map this.classType p, ",")
+                       + " ")
+                + " {\n"
+                + (this.decls ds)
+            | Field (n, t, e) ->
+                "field "
+                + (this.name n)
+                + ": "
+                + (this.tp t)
+                + " = "
+                + this.exprO e
+            | Method (n, tpvs, ins, outs, b) ->
+                "method "
+                + (this.name n)
+                + (this.typeargs tpvs)
+                + (this.localDecls ins)
+                + ": "
+                + (this.outputSpec outs)
+                + " = \n"
+                + this.exprO b
+            | ClassConstructor (n, tpvs, ins, b) ->
+                "constructor "
+                + (this.name n)
+                + (this.typeargs tpvs)
+                + (this.localDecls ins)
+                + " = \n"
+                + this.exprO b
+
+        member this.datatypeConstructor(c: DatatypeConstructor) =
+            match c with
+            | AddDatatypeConstructor c -> ADD + YIL.printer().datatypeConstructor c
+            | DeleteDatatypeConstructor n -> DEL + n
+            | DatatypeConstructor(n,ins) -> (this.name n) + (this.localDecls ins)
+        
+        member this.outputSpec(s: OutputSpec) =
+            match s with
+            | SameOutputSpec -> UNC
+            | UpdateToOutputType t -> UPD + YIL.printer().tp(t)
+            | UpdateToOutputDecls ds -> UPD + (YIL.printer().localDecls ds)
+            | ChangeOutputDecls ds -> this.localDecls ds
+        
+        member this.tps(ts: Type list) =
+            if ts.IsEmpty then
+                ""
+            else
+                "<"
+                + Utils.listToString (List.map this.tp ts, ",")
+                + ">"
+
+        member this.tp(tO: Type) =
+            match tO with
+            | SameType -> UNC
+            | UpdateType t -> UPD + (t.ToString())
+
+        member this.exprO(eO: ExprO) =
+            match eO with
+            | SameExprO -> UNC
+            | UpdateExpr e -> UPD + (YIL.printer().expr e)
+            | DeleteExpr -> DEL
+            | AddExpr e -> ADD + (YIL.printer().expr e)
+ 
+        member this.localDecls(lds: LocalDecl list) =
+            "("
+            + Utils.listToString (List.map this.localDecl lds, ", ")
+            + ")"
+
+        member this.localDecl(ld: LocalDecl) =
+            match ld with
+            | AddLocalDecl d -> ADD + YIL.printer().localDecl d
+            | DeleteLocalDecl n -> DEL + n
+            | LocalDecl(n,tO) -> (this.name n) + ": " + (this.tp tO)
+
+        member this.classType(ct: ClassType) =
+            match ct with
+            | AddClassType c -> ADD + YIL.printer().classType(c)
+            | DeleteClassType n -> DEL + n.ToString()
+
 
 /// diffs two YIL AST items and returns the corresponding AST item in Diff._
 module Differ =
@@ -54,7 +215,7 @@ module Differ =
     
     /// diff between two names
     let rec name(old: string, nw: string): Diff.Name =
-        if old = nw then None else Some(old,nw)
+        if old = nw then Diff.SameName(old) else Diff.Rename(old,nw)
     
     /// diff between two programs
     and prog(old: Program, nw: Program): Diff.Program =
@@ -88,6 +249,7 @@ module Differ =
         | Class(nO,tO,vsO,psO,msO,_), Class(nN,tN,vsN,psN,msN,_) when tO = tN ->
             [Diff.Class(
                 name(nO,nN),
+                tO,
                 typeargs(vsO,vsN),
                 classtypes(psO,psN),
                 decls(msO,msN)
@@ -173,7 +335,7 @@ module Differ =
              // now o.name = n.name
              let n = newLeft.Head
              if o.tp <> n.tp then
-               changes <- changes @ [Diff.LocalDecl(None, Some n.tp)]
+               changes <- changes @ [Diff.LocalDecl(Diff.SameName o.name, Diff.UpdateType n.tp)]
               // else n = o, i.e., no change
              newLeft <- newLeft.Tail
            else
@@ -188,13 +350,14 @@ module Differ =
     /// diffs two output specifications
     and outputSpec(old: OutputSpec, nw: OutputSpec) =
         match old, nw with
-        | o,n when o = n -> None
+        | o,n when o = n ->
+            Diff.SameOutputSpec
         | _, OutputType n ->
-            Some (Diff.UpdateToOutputType n)
+            Diff.UpdateToOutputType n
         | OutputType _, OutputDecls n ->
-            Some (Diff.UpdateToOutputDecls n)
+            Diff.UpdateToOutputDecls n
         | OutputDecls o, OutputDecls n ->
-            Some (Diff.ChangeOutputDecls(localDecls(o,n)))
+            Diff.ChangeOutputDecls(localDecls(o,n))
        
     /// diffs two expressions, no recursion: expressions are either equal or not
     and expr(old: Expr, nw: Expr) =
@@ -203,17 +366,18 @@ module Differ =
         else
             Some nw
 
-    /// diffs two optional expressions        
+    /// diffs two optional expressions, no recursion: expressions are either equal or not     
     and exprO(old: Expr option, nw: Expr option) =
-        if old = nw then
-            None
-        else
-            Some nw
+        match old,nw with
+        | None, None -> Diff.SameExprO
+        | Some o, Some n -> if o = n then Diff.SameExprO else Diff.UpdateExpr n
+        | Some _, None -> Diff.DeleteExpr
+        | None, Some n -> Diff.AddExpr n
 
-    /// diffs two types, no recursion: expressions are either equal or not
+    /// diffs two types, no recursion: types are either equal or not
     and tp(old: Type, nw: Type) =
         if old = nw then
-            None
+            Diff.SameType
         else
-            Some nw
+            Diff.UpdateType nw
 
