@@ -15,7 +15,7 @@ typeCart generates functions for equivalent parametric datatypes, newtypes and s
 
 **Example 1: mapping function for datatype**
 
-```
+```dafny
   datatype option<A> =
     None
   | Some(x: A)
@@ -32,7 +32,7 @@ typeCart generates functions for equivalent parametric datatypes, newtypes and s
 ```
 **Example 2: mapping function for newtype:**
 
-```
+```dafny
   newtype int8 = x | -128 <= x < 128
 
   function int8OldToNew(i: Old.M.int8): (i': New.M.int8)
@@ -43,7 +43,7 @@ typeCart generates functions for equivalent parametric datatypes, newtypes and s
   }
 ```
 **Example 3: mapping function for subtype:**
-```
+```dafny
   ghost const INT_MAX := 0x7fff_ffff
 
   type string32 = x: string | 0 <= |x| <= INT_MAX
@@ -57,7 +57,7 @@ typeCart generates functions for equivalent parametric datatypes, newtypes and s
 ```
 
 **Example 4: mapping function for collection types:**
-```
+```dafny
   datatype collectionType<T> =
     A(a: T)
   | B(b: seq<T>)
