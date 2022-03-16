@@ -52,7 +52,6 @@ module Compat {
     }
   }
 
-  // (partial) translation function for type of the same name
   function expr(e: Old.expr): New.expr
     requires exprDefined(e)
   {
