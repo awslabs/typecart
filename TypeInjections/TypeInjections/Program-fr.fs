@@ -1,96 +1,117 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: MIT
+
 namespace TypeInjections
 
-// Dafny
 open Microsoft.Dafny
 
-// a barebones main program for testing - should be merged with the existing Program.fs
 module ProgramFR =
-    
-    module Utils = UtilsFR
 
-    let private log (s: string) = System.Console.WriteLine(s)
+    let log (s: string) = System.Console.WriteLine(s)
+    let logObject (s: string) (arg: obj) = System.Console.WriteLine(s, arg)
 
-    /// Directory of the running program
-    let private codebase = Utils.location
+    // extraFile contains the extra mapping function that we might need to paste in the output file
+    let extraDafnyFile (root: string) (extraFilename: string Option) : DafnyFile option =
+        let rt =
+            System
+                .IO
+                .Directory
+                .GetParent(
+                    System.IO.Directory.GetParent(root).FullName
+                )
+                .FullName
 
-    let private runDafny sources =
+        let rt =
+            System.IO.Path.Combine([| rt; "LibFunctions" |])
+
+        Option.bind (fun file -> Some(DafnyFile(System.IO.Path.Combine([| rt; file |])))) extraFilename
+
+    let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
         let reporter = ConsoleErrorReporter()
-        let dafnyOptions = DafnyOptions(reporter)
-        dafnyOptions.WarnShadowing <- true
-        log ("***** searching for DafnyPrelude.bpl")
+        let options = DafnyOptions(reporter)
+        log "***** searching for DafnyPrelude.bpl"
         (* Dafny initialization always call Boogie initialization, which depends on loading DafnyPrelude.bpl, a Boogie file
-           implementing the Dafny built-ins. Even though we will not run Boogie, we need to go through this step.
-           But Dafny cannot find the file in dafny/Binaries because it uses the location of the current program to locate it.
-           So we copy the file into the current project and point Dafny to it.
-        *)
-
-        // A lazy version of `Option.orElse dflt opt` that computes `dflt` only if `opt == None`.
-        // This is used to avoid calling `Utils.findFile` once the file has been found.
-        let orElse (dflt: 'a option Lazy) (opt: 'a option) : 'a option =
-            if Option.isSome opt then
-                opt
-            else
-                dflt.Force()
-
+               implementing the Dafny built-ins. Even though we will not run Boogie, we need to go through this step.
+               But Dafny cannot find the file in dafny/Binaries because it uses the location of the current program to locate it.
+               So we copy the file into the current project and point Dafny to it.
+            *)
+        // get the directory of the running program
+        let codebase = Utils.location
+        //ToDo: the orElse branch could only be checked if the first test failed
         let dafnyPrelude =
             // When using the binary installation of Dafny:
             Utils.findFile (codebase, "dafny", "DafnyPrelude.bpl")
             // When using Dafny built from source:
-            |> orElse (lazy (Utils.findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl")))
+            |> Option.orElse (Utils.findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl"))
             |> Option.get
 
-        dafnyOptions.DafnyPrelude <- dafnyPrelude
-        DafnyOptions.Install(dafnyOptions)
-        log ("  found")
+        System.Console.WriteLine(dafnyPrelude)
 
-        // the main call to dafny, adapted from DafnyDriver.ProcessFiles
-        let programName = "yucca"
+        let dafnyPreludeDir =
+            Utils.findDirectory (codebase, "dafny", "DafnyPrelude.bpl")
+            |> Option.get
+
+        logObject "found in: {0}" dafnyPreludeDir
+
+        log "***** initialising Dafny"
+        options.DafnyPrelude <- dafnyPrelude
+        DafnyOptions.Install(options)
+        log "***** Dafny initialised"
+
+        reporter
+
+    let parseAST
+        (file: string)
+        (programName: string)
+        (reporter: ConsoleErrorReporter):
+        Program =
+        
+        let dafnyFile = DafnyFile(file)
         let mutable dafnyProgram = Unchecked.defaultof<Program>
-        // the first part of the dafny computation
-        log ("***** calling Dafny parser and checker")
+        
+        logObject "***** calling Dafny parser and checker for {0}" file
+        let dafnyFiles = [ dafnyFile ]
 
         let err =
-            Main.ParseCheck(Utils.toIList sources, programName, reporter, &dafnyProgram)
+            Main.ParseCheck(Utils.toIList dafnyFiles, programName, reporter, &dafnyProgram)
 
-        if not (isNull err) && err <> "" then
-            failwithf "Dafny errors: %s" err
-
-        // we skip the remaining parts: Translate (translation to boogie), Boogie (boogie verification), and Compile (output generation)
-
+        if err <> null && err <> "" then
+            failwith ("Dafny errors: " + err)
+            
         dafnyProgram
 
-    let private dafnyToYIL dafnyProgram =
-        log "***** traversing Dafny AST"
-        DafnyToYIL.program dafnyProgram
-
     [<EntryPoint>]
-    let main argv =
+    let main (argv: string array) =
+        // for now, typeCart requires fully qualified paths of files
+        // TODO: update to read Dafny project folder
         // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
-        if argv.Length <= 1 then
-            failwith "empty list of arguments"
+        if argv.Length <= 2 then
+            failwith "typeCart requires at least two input files"
 
         let argvList = argv |> Array.toList
-
         let outFolder = argvList.Head
         let files = argvList.Tail
 
-        // make sure all files exist
+        // make sure all input files exist
         for a in files do
             if not (System.IO.File.Exists(a)) then
                 failwith ("file not found: " + a)
+        
+        //initialise Dafny
+        let reporter = initDafny
 
-        // process files
-        let oldFile = DafnyFile (files.Item(0))
-        let newFile = DafnyFile (files.Item(1))
-        let oldDafny = runDafny [oldFile]
-        let oldYIL = DafnyToYIL.program oldDafny
-        let newDafny = runDafny [newFile]
-        let newYIL = DafnyToYIL.program newDafny
+        // parse input files
+        let oldDafnyFile = parseAST (files.Item(0)) "old" reporter
+        let newDafnyFile = parseAST (files.Item(1)) "old" reporter
         
-        let diff = Differ.prog(oldYIL, newYIL)
+        let oldYIL = DafnyToYIL.program oldDafnyFile
+        let newYIL = DafnyToYIL.program newDafnyFile
         
-        let diffS = (new Diff.Printer()).prog(diff)
-        System.Console.WriteLine(diffS)
+        //let diff = Differ.prog(oldYIL, newYIL)
+        //let diffS = (new Diff.Printer()).prog(diff)
+        //System.Console.WriteLine(diffS)
+        
+        System.Console.ReadKey() |> ignore
         0
