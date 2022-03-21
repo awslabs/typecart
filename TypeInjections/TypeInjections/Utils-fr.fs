@@ -49,4 +49,3 @@ module UtilsFR =
                 .GetExecutingAssembly()
                 .Location
         )
-

@@ -61,15 +61,11 @@ module ProgramFR =
 
         reporter
 
-    let parseAST
-        (file: string)
-        (programName: string)
-        (reporter: ConsoleErrorReporter):
-        Program =
-        
+    let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+
         let dafnyFile = DafnyFile(file)
         let mutable dafnyProgram = Unchecked.defaultof<Program>
-        
+
         logObject "***** calling Dafny parser and checker for {0}" file
         let dafnyFiles = [ dafnyFile ]
 
@@ -78,10 +74,10 @@ module ProgramFR =
 
         if err <> null && err <> "" then
             failwith ("Dafny errors: " + err)
-            
+
         dafnyProgram
 
-    [<EntryPoint>]
+    //[<EntryPoint>]
     let main (argv: string array) =
         // for now, typeCart requires fully qualified paths of files
         // TODO: update to read Dafny project folder
@@ -98,20 +94,20 @@ module ProgramFR =
         for a in files do
             if not (System.IO.File.Exists(a)) then
                 failwith ("file not found: " + a)
-        
+
         //initialise Dafny
         let reporter = initDafny
 
         // parse input files
         let oldDafnyFile = parseAST (files.Item(0)) "old" reporter
         let newDafnyFile = parseAST (files.Item(1)) "old" reporter
-        
+
         let oldYIL = DafnyToYIL.program oldDafnyFile
         let newYIL = DafnyToYIL.program newDafnyFile
-        
+
         //let diff = Differ.prog(oldYIL, newYIL)
         //let diffS = (new Diff.Printer()).prog(diff)
         //System.Console.WriteLine(diffS)
-        
+
         System.Console.ReadKey() |> ignore
         0

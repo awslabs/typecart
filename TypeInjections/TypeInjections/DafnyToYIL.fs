@@ -30,7 +30,7 @@ module DafnyToYIL =
 
     let unsupported msg = failwith msg
     let error msg = failwith msg
-    
+
     // infix operators for recursing into lists (C# list input yields F# list output)
     let (@) f l = List.map f (fromIList l)
     let (@/) f l = List.collect f (fromIList l)
@@ -54,17 +54,14 @@ module DafnyToYIL =
         let declsRev = List.rev (fromIList decls)
         let ddecls = List.collect decl declsRev
 
-        { name = p.Name
-          decls = ddecls}
+        { name = p.Name; decls = ddecls }
 
     // meta information attached to a named declaration
-    and namedMeta (dcl: Declaration): Y.Meta =
-       {position = Some(position dcl.tok) }
+    and namedMeta (dcl: Declaration) : Y.Meta = { position = Some(position dcl.tok) }
 
     // Dafny does not define a common superclass of INamedRegion and IAttributeBearingDeclaration and F# does not support intersection types
     // So we need to duplicate the method here for Declaration and ModuleDefinition
-    and namedMetaModDef (dcl: ModuleDefinition): Y.Meta =
-       {position = Some(position dcl.tok) }
+    and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta = { position = Some(position dcl.tok) }
 
     // trivial conversion of Dafny source position to YIL source positions
     and position (t: Microsoft.Boogie.IToken) : Y.Position =
@@ -84,6 +81,7 @@ module DafnyToYIL =
             // TODO check inheritance etc.
             if d.TypeArgs.Count <> 0 then
                 unsupported "module with type parameters"
+
             let ms = d.ModuleDef.TopLevelDecls
             let dName = d.Name
             let meta = namedMetaModDef d.ModuleDef
@@ -95,17 +93,19 @@ module DafnyToYIL =
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs
+
             let super, pred =
-              match d with
-              | :? SubsetTypeDecl as d ->
-                   let bv = boundVar d.Var
-                   bv.tp, Some (bv.name, expr d.Constraint)
-              | _ -> tp d.Rhs, None
+                match d with
+                | :? SubsetTypeDecl as d ->
+                    let bv = boundVar d.Var
+                    bv.tp, Some(bv.name, expr d.Constraint)
+                | _ -> tp d.Rhs, None
+
             [ Y.TypeDef(d.Name, tpvars, super, pred, false, namedMeta d) ]
-         | :? NewtypeDecl as d ->
+        | :? NewtypeDecl as d ->
             // like SubsetTypeDecl but only for a numeric supertype and new type is not a subtype of the old type
             let bv = boundVar d.Var
-            [ Y.TypeDef(d.Name, [], bv.tp, Some (bv.name, expr d.Constraint), true, namedMeta d) ]
+            [ Y.TypeDef(d.Name, [], bv.tp, Some(bv.name, expr d.Constraint), true, namedMeta d) ]
         | :? IteratorDecl ->
             unsupported
                 "Dafny iterators are too idiosyncratic to be compiled easily to other languages and are therefore not supported"
@@ -133,7 +133,8 @@ module DafnyToYIL =
 
             let exportPaths : YIL.Path list =
                 d.Exports |> List.ofSeq |> List.choose exportPath
-            [Y.Export exportPaths]
+
+            [ Y.Export exportPaths ]
         | _ ->
             // default module contains a default class, which contains non-nesting declarations
             unsupported (
@@ -145,6 +146,7 @@ module DafnyToYIL =
 
     and constructorDecl (c: DatatypeCtor) : Y.DatatypeConstructor =
         let cName = c.Name
+
         { name = cName
           ins = formal @ c.Formals
           meta = namedMeta c }
@@ -160,7 +162,7 @@ module DafnyToYIL =
 
         { cons = e.Ctor.Name
           vars = vardecls
-          body = bd}
+          body = bd }
 
     and isTrait (d: TopLevelDecl) =
         match d with
@@ -183,13 +185,16 @@ module DafnyToYIL =
         | :? Function as m ->
             // keywords function (ghost), function method, predicate (ghost)
             let tpvars = typeParameter @ m.TypeArgs
+
             let body =
                 if (m.Body = null) then
                     None
                 else
                     Some(expr m.Body)
+
             let mName = m.Name
             let meta = namedMeta m
+
             Y.Method(
                 mName,
                 tpvars,
@@ -229,16 +234,7 @@ module DafnyToYIL =
 
             let mName = m.Name
 
-            Y.Method(
-                mName,
-                tpvars,
-                ins,
-                output,
-                body,
-                m.IsGhost,
-                m.IsStatic,
-                namedMeta m
-            )
+            Y.Method(mName, tpvars, ins, output, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m
@@ -434,11 +430,14 @@ module DafnyToYIL =
         | :? SetDisplayExpr as e ->
             if not (e.Finite) then
                 unsupported "Infinite set definition"
+
             let elems = expr @ e.Elements
+
             let t =
                 match (tp e.Type) with
                 | Y.TSet (a) -> a
                 | _ -> error "Unexpected set type"
+
             Y.ESet(t, elems)
         | :? SeqDisplayExpr as e ->
             let elems = expr @ e.Elements
@@ -472,6 +471,7 @@ module DafnyToYIL =
                 | "Cardinality", Y.TArray _ -> "Cardinality-Array"
                 | "Cardinality", _ -> unsupported (sprintf "cardinality %s" ((tp e.E.Type).ToString()))
                 | o, _ -> o
+
             Y.EUnOpApply(oT, expr e.E)
         | :? BinaryExpr as e ->
             let o = e.ResolvedOp.ToString()
@@ -481,6 +481,7 @@ module DafnyToYIL =
                 | "InSeq", _, Y.TString -> o + "-String"
                 | "NotInSeq", _, Y.TString -> o + "-String"
                 | _ -> o
+
             Y.EBinOpApply(oT, expr e.E0, expr e.E1)
         | :? DatatypeValue as e ->
             let ctor = e.Ctor
@@ -529,15 +530,17 @@ module DafnyToYIL =
                 // Dafny quantifiers can only have type args when using the attribute `{:typeQuantifier}`,
                 // https://github.com/dafny-lang/dafny/blob/288cab1c53eefbddaf13e2f8fb60eda394f87aa8/Source/Dafny/AST/DafnyAst.cs#L11481
                 unsupported "quantifier with type arguments"
+
             let q =
                 match e with
                 | :? ForallExpr -> Y.Forall
                 | :? ExistsExpr -> Y.Exists
                 | _ -> error "unknown quantifier"
+
             Y.EQuant(q, boundVar @ e.BoundVars, exprO e.Range, expr e.Term)
         | :? MapComprehension as e -> unsupported "missing case: map comprehension"
-        | :? MapDisplayExpr ->  unsupported "missing case: map display"
-        | :? SetComprehension ->  unsupported "missing case: set comprehension"
+        | :? MapDisplayExpr -> unsupported "missing case: map display"
+        | :? SetComprehension -> unsupported "missing case: set comprehension"
         | null -> error "expression is null"
         | _ -> unsupported ("expression " + e.ToString())
 
@@ -720,7 +723,7 @@ module DafnyToYIL =
 
             Y.EIf(expr s.Guard, statement s.Thn, els)
         | :? WhileStmt as s -> Y.EWhile(expr s.Guard, statement s.Body, None)
-        | :? ForLoopStmt as s -> Y.EFor (boundVar s.LoopIndex, expr s.Start, expr s.End, s.GoingUp, statement s.Body)
+        | :? ForLoopStmt as s -> Y.EFor(boundVar s.LoopIndex, expr s.Start, expr s.End, s.GoingUp, statement s.Body)
         | :? BreakStmt as s ->
             if s.TargetLabel <> null || s.BreakCount > 1 then
                 unsupported "Non-trivial break statement"
@@ -758,7 +761,7 @@ module DafnyToYIL =
     and boundVar (bv: IVariable) : Y.LocalDecl =
         { name = bv.DisplayName
           tp = tp bv.Type
-          ghost = bv.IsGhost}
+          ghost = bv.IsGhost }
 
     and classType (t: Type) : Y.ClassType =
         match t with

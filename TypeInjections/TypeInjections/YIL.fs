@@ -16,7 +16,7 @@ open UtilsFR
 
 module YIL =
     let error msg = failwith msg
-    
+
     /// a qualified identifier of a declaration, see lookupByPath for semantics
     type Path =
         | Path of string list
@@ -58,9 +58,7 @@ module YIL =
        - We way want to add information here later.
        - It is convenient to have a type of programs and not just a constructor.
     *)
-    type Program =
-        { name: string
-          decls: Decl list }
+    type Program = { name: string; decls: Decl list }
 
     (* declarations
        Modules and datatypes are child-bearing, i.e., can contain nested declarations.
@@ -103,7 +101,13 @@ module YIL =
              else: type synonym
            if isNew: type is not a subtype of the supertype (which must be nat or real and thus tpvars = [])
         *)
-        | TypeDef of name: string * tpvars: string list * super: Type * predicate: (string * Expr) option * isNew: bool * meta: Meta
+        | TypeDef of
+            name: string *
+            tpvars: string list *
+            super: Type *
+            predicate: (string * Expr) option *
+            isNew: bool *
+            meta: Meta
         (* Dafny declares mutable fields only in classes, and then without initializer deferring initialization to the class constructor.
            Immutable fields are called ConstantField in Dafny.
         *)
@@ -135,8 +139,8 @@ module YIL =
             | Class (_, _, _, _, _, meta) -> meta
             | Method (_, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
-            | TypeDef(_, _, _, _, _, meta) -> meta
-            | _ -> {position = None}
+            | TypeDef (_, _, _, _, _, meta) -> meta
+            | _ -> { position = None }
 
         member this.name =
             match this with
@@ -220,10 +224,7 @@ module YIL =
        All of those can be ghosts, i.e., only needed for specifications and proofs.
        Those can be removed when compiling for computation.
     *)
-    and LocalDecl =
-        { name: string
-          tp: Type
-          ghost: bool }
+    and LocalDecl = { name: string; tp: Type; ghost: bool }
 
     (* constructor of an inductive type
     *)
@@ -236,7 +237,7 @@ module YIL =
     and Case =
         { cons: string
           vars: LocalDecl list
-          body: Expr}
+          body: Expr }
 
     and OutputSpec =
         // usual case: return type
@@ -377,7 +378,7 @@ module YIL =
             | Exists -> "exists"
 
     // meta-information
-    and Meta = {position: Position option}
+    and Meta = { position: Position option }
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
     and Position =
         { filename: String
@@ -389,7 +390,7 @@ module YIL =
 
     // ***** auxiliary methods
 
-    let emptyMeta = {position = None}
+    let emptyMeta = { position = None }
 
     /// wrapping lists of expressions in a block
     let listToExpr (es: Expr list) : Expr =
@@ -490,10 +491,12 @@ module YIL =
             // TODO copy over lookup code from YuccaDafnyCompiler to look up in parent classes
             let parentDecl = lookupByPath (prog, path.parent)
             let children = declChildren (parentDecl)
+
             match List.tryFind (fun (x: Decl) -> x.name = path.name) children with
             | Some d -> d
             | None ->
                 let implChildren = (implicitChildren parentDecl)
+
                 match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
                 | Some (d) -> d
                 | None -> error $"{path} not valid in {prog.name}"
@@ -516,13 +519,7 @@ module YIL =
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix of openDecls
     *)
-    type Context
-        (
-            prog: Program,
-            currentDecl: Path,
-            tpvars: string list,
-            vars: LocalDecl list
-        ) =
+    type Context(prog: Program, currentDecl: Path, tpvars: string list, vars: LocalDecl list) =
         // convenience constructor and accessor methods
         new(p: Program) = Context(p, Path([]), [], [])
         member this.prog = prog
@@ -550,9 +547,10 @@ module YIL =
             match this.lookupLocalDeclO (n) with
             | None ->
                 error $"variable {n} not visible {this}"
+
                 { name = n
                   tp = TUnimplemented
-                  ghost = false}
+                  ghost = false }
             | Some t -> t
 
         member this.lookupLocalDeclO(n: string) : LocalDecl option =
@@ -562,7 +560,9 @@ module YIL =
         override this.ToString() =
             "in declaration "
             + currentDecl.ToString()
-            + (match this.lookupCurrent().meta.position with | Some p -> "(" + p.ToString() + ")"  | _ -> "")
+            + (match this.lookupCurrent().meta.position with
+               | Some p -> "(" + p.ToString() + ")"
+               | _ -> "")
             + " with type variables "
             + listToString (tpvars, ",")
             + " and variables "
@@ -579,11 +579,7 @@ module YIL =
             Context(prog, currentDecl, tpvars, List.append vars ds)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context =
-            this.add (
-                [ { name = n
-                    tp = t
-                    ghost = false} ]
-            )
+            this.add ([ { name = n; tp = t; ghost = false } ])
 
     (* ***** printer for the language above
 
@@ -609,13 +605,16 @@ module YIL =
         member this.decls(ds: Decl list) =
             indentLevel <- indentLevel + 1
             let ind = indent ()
+
             let s =
                 listToString (List.map (fun d -> ind + (this.decl d) + "\n") ds, "")
+
             indentLevel <- indentLevel - 1
             s
         // array dimensions/indices
         member this.dims(ds: Expr list) = "[" + this.exprsNoBr (ds) + "]"
         member this.meta(m: Meta) = ""
+
         member this.decl(d: Decl) =
             match d with
             | Module (n, ds, a) ->
@@ -625,8 +624,8 @@ module YIL =
                 + "\n"
                 + (this.decls ds)
             | Datatype (n, tpvs, cons, ds, a) ->
-                let consS =
-                    List.map this.datatypeConstructor cons
+                let consS = List.map this.datatypeConstructor cons
+
                 "datatype "
                 + (this.meta a)
                 + n
@@ -648,13 +647,15 @@ module YIL =
                        + " ")
                 + " {\n"
                 + (this.decls ds)
-            | TypeDef (n, tpvs, sup, predO, isNew, _ ) ->
+            | TypeDef (n, tpvs, sup, predO, isNew, _) ->
                 (if isNew then "newtype " else "type ")
                 + n
                 + (this.tpvars tpvs)
                 + " = "
                 + (this.tp sup)
-                + (match predO with | Some (x,p) -> " where " + x + "." + (this.expr p) | None -> "")
+                + (match predO with
+                   | Some (x, p) -> " where " + x + "." + (this.expr p)
+                   | None -> "")
             | Field (n, t, e, _, _, _, a) ->
                 "field "
                 + (this.meta a)
@@ -688,9 +689,8 @@ module YIL =
             | Export p -> "export " + p.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
-        member this.datatypeConstructor(c: DatatypeConstructor) =
-            c.name + (this.localDecls c.ins)
-        
+        member this.datatypeConstructor(c: DatatypeConstructor) = c.name + (this.localDecls c.ins)
+
         member this.tps(ts: Type list) =
             if ts.IsEmpty then
                 ""
