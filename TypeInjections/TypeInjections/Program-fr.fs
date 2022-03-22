@@ -77,7 +77,7 @@ module ProgramFR =
 
         dafnyProgram
 
-    //[<EntryPoint>]
+    [<EntryPoint>]
     let main (argv: string array) =
         // for now, typeCart requires fully qualified paths of files
         // TODO: update to read Dafny project folder
@@ -100,10 +100,14 @@ module ProgramFR =
 
         // parse input files
         let oldDafnyFile = parseAST (files.Item(0)) "old" reporter
-        let newDafnyFile = parseAST (files.Item(1)) "old" reporter
+        let newDafnyFile = parseAST (files.Item(1)) "new" reporter
 
         let oldYIL = DafnyToYIL.program oldDafnyFile
         let newYIL = DafnyToYIL.program newDafnyFile
+
+        // inspect the results
+        log "***** Running typeCart"
+        InjectionIOFR.findEqTypes (oldYIL, newYIL)
 
         //let diff = Differ.prog(oldYIL, newYIL)
         //let diffS = (new Diff.Printer()).prog(diff)

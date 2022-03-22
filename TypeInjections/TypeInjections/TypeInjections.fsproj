@@ -17,6 +17,7 @@
         <Compile Include="YIL.fs" />
         <Compile Include="NameUtils-fr.fs" />
         <Compile Include="TypeEquality-fr.fs" />
+        <Compile Include="TypeInjections-fr.fs" />
         <Compile Include="InjectionIO-fr.fs" />
         <Compile Include="DafnyToYIL.fs" />
         <Compile Include="Diff.fs" />

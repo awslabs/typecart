@@ -4,14 +4,9 @@
 namespace TypeInjections
 
 open System.Collections.Generic
-open System.IO
-open Microsoft.Boogie
-open Microsoft.Dafny
-open Utils
-open NameUtilsFR
 open TypeEqualityFR
-open TypeInjections
 open YIL
+open TypeInjectionsFR
 
 // Read data from input Programs and write results out to files
 // No type equality or translation logic is in this file; see TypeEquality.fs and TypeInjections.fs, respectively
@@ -48,15 +43,13 @@ module InjectionIOFR =
 
         // identify matching type declarations (by name) - use a Dictionary so we can do this in O(n)
         let namesOfNewTypes = Dictionary<string, Decl>()
-        List.iter (fun (d: Decl) -> namesOfNewTypes.Add(typeName d, d)) (allTypeDecls declsNew)
+        List.iter (fun (d: Decl) -> namesOfNewTypes.Add(d.name, d)) (allTypeDecls declsNew)
 
         let potentialPairs =
             List.fold
                 (fun acc (x: Decl) ->
-                    let name = typeName x
-
-                    if namesOfNewTypes.ContainsKey(name) then
-                        (x, namesOfNewTypes.[name]) :: acc
+                    if namesOfNewTypes.ContainsKey(x.name) then
+                        (x, namesOfNewTypes.[x.name]) :: acc
                     else
                         acc)
                 []

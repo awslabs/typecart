@@ -49,3 +49,16 @@ module UtilsFR =
                 .GetExecutingAssembly()
                 .Location
         )
+
+    // Like List.forall2, but returns false when the lengths of the lists differ
+    // rather than throwing an exception
+    let forallSafe (pred: 'a -> 'b -> bool) (l1: 'a list) (l2: 'b list) =
+        List.length l1 = List.length l2
+        && List.forall2 pred l1 l2
+
+    // Update no matter whether the key exists or not
+    let updateDict<'K, 'V when 'K: equality and 'V: equality> (d: Dictionary<'K, 'V>) (k: 'K) (v: 'V) =
+        if d.ContainsKey k then
+            ignore (d.[k] = v)
+        else
+            d.Add(k, v)
