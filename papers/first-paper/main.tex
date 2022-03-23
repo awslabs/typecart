@@ -1,0 +1,50 @@
+\documentclass{article}
+
+\usepackage{../lib/dafny}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx} % If possible, figure files should be included in EPS format.
+\usepackage{listings} 
+\usepackage{xspace} 
+\usepackage[show]{ed}
+
+\usepackage[colorlinks,urlcolor=blue,citecolor=blue,linkcolor=blue,bookmarks]{hyperref}
+
+\usepackage{local}
+\usepackage{../lib/florrabe}
+
+\begin{document}
+
+\author{TBD}
+\title{Proof Evolution for Dafny}
+
+\maketitle
+
+\begin{abstract}
+We introduce a system for formally relating two versions of the same formally verified software, e.g., to prove backwards-compatibility.
+We exemplify our ideas on a fragment of the Dafny language for which we introduce a proof evolution tool.
+\end{abstract}
+
+\section{Introduction and Related Work}\label{sec:intro}
+ \input{introduction}
+
+\section{The Dafny Language}\label{sec:dafny}
+\input{dafny}
+
+\section{Relating Two Versions}\label{sec:pe}
+\input{relating}
+
+\section{Case Study}\label{sec:example}
+\input{example}
+
+\section{Conclusion and Future Work}\label{sec:conclusion}
+  \input{conclusion}
+
+\bibliographystyle{alpha}
+\bibliography{../lib/references}
+
+%\appendix
+%\section{Meta-Information}
+%\input{meta}
+
+\end{document}
+
