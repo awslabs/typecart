@@ -90,7 +90,7 @@ module YIL =
         | Class of
             name: string *
             isTrait: bool *
-            tpvars: string list *
+            tpvars: TypeArg list *
             parent: ClassType list *
             members: Decl list *
             meta: Meta
@@ -103,7 +103,7 @@ module YIL =
         *)
         | TypeDef of
             name: string *
-            tpvars: string list *
+            tpvars: TypeArg list *
             super: Type *
             predicate: (string * Expr) option *
             isNew: bool *
@@ -121,9 +121,10 @@ module YIL =
             meta: Meta
         (* methods *)
         | Method of
+            isLemma: bool *
             name: string *
-            tpvars: string list *
-            ins: LocalDecl list *
+            tpvars: TypeArg list *
+            ins: InputSpec *
             out: OutputSpec *
             body: Expr option *
             ghost: bool *
@@ -137,7 +138,7 @@ module YIL =
             | Module (_, _, meta) -> meta
             | Datatype (_, _, _, _, meta) -> meta
             | Class (_, _, _, _, _, meta) -> meta
-            | Method (_, _, _, _, _, _, _, meta) -> meta
+            | Method (_,_, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
             | TypeDef (_, _, _, _, _, meta) -> meta
             | _ -> { position = None }
@@ -148,7 +149,7 @@ module YIL =
             | Datatype (n, _, _, _, _) -> n
             | Class (n, _, _, _, _, _) -> n
             | ClassConstructor (n, _, _, _, _) -> n
-            | Method (n, _, _, _, _, _, _, _) -> n
+            | Method (_,n, _, _, _, _, _, _, _) -> n
             | Field (n, _, _, _, _, _, _) -> n
             | TypeDef (n, _, _, _, _, _) -> n
             | Export _
@@ -161,11 +162,13 @@ module YIL =
             | Class (_, _, tpvs, _, _, _) -> tpvs
             | TypeDef (_, tpvs, _, _, _, _) -> tpvs
             | Field _ -> []
-            | Method (_, tpvs, _, _, _, _, _, _) -> tpvs
+            | Method (_,_, tpvs, _, _, _, _, _, _) -> tpvs
             | ClassConstructor (_, tpvs, _, _, _) -> tpvs
             | Export _ -> error "export does not have type arguments"
             | DUnimplemented -> error "skipped declaration has no name"
 
+    and TypeArg = string
+    
     (* types
        We do not allow module inheritance or Dafny classes.
        Therefore, there is no subtyping except for numbers.
@@ -224,7 +227,15 @@ module YIL =
        All of those can be ghosts, i.e., only needed for specifications and proofs.
        Those can be removed when compiling for computation.
     *)
-    and LocalDecl = { name: string; tp: Type; ghost: bool }
+    and LocalDecl =
+        LocalDecl of string * Type * bool
+          member this.name = match this with | LocalDecl(n,_,_) -> n
+          member this.tp = match this with | LocalDecl(_,t,_) -> t
+          member this.ghost = match this with | LocalDecl(_,_,g) -> g
+         
+    
+    (* pre/postcondition of a method/lemma *)
+    and Condition = Expr
 
     (* constructor of an inductive type
     *)
@@ -239,11 +250,16 @@ module YIL =
           vars: LocalDecl list
           body: Expr }
 
+    and InputSpec = InputSpec of LocalDecl list * Condition list
+    
     and OutputSpec =
         // usual case: return type
-        | OutputType of Type
+        | OutputType of Type * Condition list
         // case with multiple named outputs; empty list never seems to occur in Dafny
-        | OutputDecls of LocalDecl list
+        | OutputDecls of LocalDecl list * Condition list
+        member this.conditions =
+            match this with
+            | OutputType(_,cs) | OutputDecls(_,cs) -> cs
 
     (* a reference to a module or class with all its type parameters instantiated
        Since we do not use classes, this barely comes up, but
@@ -340,7 +356,7 @@ module YIL =
         | EPrint of exprs: Expr list
         // temporary dummy for missing cases
         | EUnimplemented
-
+    
     (* Dafny methods may return multiple outputs, and these may be named.
        This may seem awkward but is practical for specifications and proofs.
        We allow only the first output to be non-ghost.
@@ -405,9 +421,16 @@ module YIL =
         | EBlock es -> es
         | e -> [ e ]
 
-    // makes a plain update := e
+    /// makes a plain update := e
     let plainUpdate (e: Expr) = { df = e; monadic = None }
 
+    /// s = t
+    let EEqual(s:Expr,t:Expr) = EBinOpApply("Eq", s, t)
+    /// convenience for building a lambda-abstraction 
+    let lambda(name: string, tp: Type, out: Type, b: Expr -> Expr) =
+       let ld = LocalDecl(name,tp,false)
+       EFun([ld], out, b (EVar name))
+    
     // True if a datatype is simply an enum, i.e.,
     // it has more than one constructor---all without arguments, and no type parameters
     let isEnum (d: Decl) =
@@ -441,7 +464,7 @@ module YIL =
     let outputDecls (o: OutputSpec) : LocalDecl list =
         match o with
         | OutputType _ -> []
-        | OutputDecls (ds) -> ds
+        | OutputDecls (ds,_) -> ds
 
     // name of the tester method generator for constructor with name s
     let testerName (s: string) = s + "?"
@@ -466,15 +489,10 @@ module YIL =
         | Datatype (_, _, cs, _, _) ->
             let selectors =
                 List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
-
             let testers =
                 List.map
-                    (fun (c: DatatypeConstructor) ->
-                        { name = testerName (c.name)
-                          tp = TBool
-                          ghost = false })
+                    (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name,TBool,false))
                     cs
-
             List.map mkField (List.append (List.distinct selectors) testers)
         | _ -> []
 
@@ -547,10 +565,7 @@ module YIL =
             match this.lookupLocalDeclO (n) with
             | None ->
                 error $"variable {n} not visible {this}"
-
-                { name = n
-                  tp = TUnimplemented
-                  ghost = false }
+                LocalDecl(n,TUnimplemented,false)
             | Some t -> t
 
         member this.lookupLocalDeclO(n: string) : LocalDecl option =
@@ -579,7 +594,7 @@ module YIL =
             Context(prog, currentDecl, tpvars, List.append vars ds)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context =
-            this.add ([ { name = n; tp = t; ghost = false } ])
+            this.add [LocalDecl(n,t,false)]
 
     (* ***** printer for the language above
 
@@ -613,7 +628,7 @@ module YIL =
             s
         // array dimensions/indices
         member this.dims(ds: Expr list) = "[" + this.exprsNoBr (ds) + "]"
-        member this.meta(m: Meta) = ""
+        member this.meta(_: Meta) = ""
 
         member this.decl(d: Decl) =
             match d with
@@ -664,16 +679,12 @@ module YIL =
                 + (this.tp t)
                 + " = "
                 + Option.fold (fun _ -> this.expr) "" e
-            | Method (n, tpvs, ins, outs, b, _, _, _) ->
-                let outsS =
-                    match outs with
-                    | OutputType (t) -> this.tp t
-                    | OutputDecls (lds) -> this.localDecls lds
-
-                "method "
+            | Method (isL, n, tpvs, ins, outs, b, _, _, _) ->
+                let outsS = this.outputSpec outs
+                (if isL then "lemma " else "method ")
                 + n
                 + (this.tpvars tpvs)
-                + (this.localDecls ins)
+                + (this.inputSpec ins)
                 + ": "
                 + outsS
                 + " = \n"
@@ -689,8 +700,24 @@ module YIL =
             | Export p -> "export " + p.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
-        member this.datatypeConstructor(c: DatatypeConstructor) = c.name + (this.localDecls c.ins)
+        member this.inputSpec(ins: InputSpec) =
+            match ins with
+            | InputSpec(lds,rs) -> this.localDecls lds + " " + this.conditions(true, rs)
 
+        member this.outputSpec(outs: OutputSpec) =
+            match outs with
+            | OutputType (t,es) -> this.tp t + " " + this.conditions(false, es)
+            | OutputDecls (lds,es) -> this.localDecls lds + " " + this.conditions(false, es)
+        
+        member this.conditions(require: bool, cs: Condition list) =
+            listToString(List.map (fun c -> this.condition(require, c)) cs, "\n")
+
+        member this.condition(require: bool, c: Condition) =
+            let kw = if require then "requires" else "ensures"
+            kw + " " + this.expr c
+
+        member this.datatypeConstructor(c: DatatypeConstructor) = c.name + (this.localDecls c.ins)
+        
         member this.tps(ts: Type list) =
             if ts.IsEmpty then
                 ""

@@ -185,7 +185,8 @@ module DafnyToYIL =
         | :? Function as m ->
             // keywords function (ghost), function method, predicate (ghost)
             let tpvars = typeParameter @ m.TypeArgs
-
+            let input = Y.InputSpec(formal @ m.Formals, condition @ m.Req)
+            let output = Y.OutputType(tp m.ResultType, condition @ m.Ens)
             let body =
                 if (m.Body = null) then
                     None
@@ -196,10 +197,11 @@ module DafnyToYIL =
             let meta = namedMeta m
 
             Y.Method(
+                false,
                 mName,
                 tpvars,
-                formal @ m.Formals,
-                Y.OutputType(tp m.ResultType),
+                input,
+                output,
                 body,
                 m.IsGhost,
                 m.IsStatic,
@@ -209,14 +211,17 @@ module DafnyToYIL =
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
             let ins = formal @ m.Ins
+            let reqs = condition @ m.Req
+            let input = Y.InputSpec(ins, reqs)
             let outs = formal @ m.Outs
+            let ens = condition @ m.Ens
             (* Dafny allows multiple outputs, which are named to allow mentioning them in the post-conditions.
               We only allow one computational output followed by some ghost outputs (which can be dropped for computation).
               Dafny allows zero outputs, in which case we use the unit type.
            *)
             let output =
                 if outs.IsEmpty then
-                    Y.OutputType(Y.TUnit)
+                    Y.OutputType(Y.TUnit, ens)
                 else
                     let onlyOneNonGhost =
                         List.forall (fun (d: Y.LocalDecl) -> d.ghost) outs.Tail
@@ -224,7 +229,7 @@ module DafnyToYIL =
                     if not onlyOneNonGhost then
                         unsupported "More than one non-ghost return value in method"
 
-                    Y.OutputDecls(outs)
+                    Y.OutputDecls(outs, ens)
 
             let body =
                 if (m.Body = null) then
@@ -233,8 +238,10 @@ module DafnyToYIL =
                     Some(statement m.Body)
 
             let mName = m.Name
-
-            Y.Method(mName, tpvars, ins, output, body, m.IsGhost, m.IsStatic, namedMeta m)
+            let isLemma = match m with
+                          | :? Lemma -> true
+                          | _ -> false
+            Y.Method(isLemma, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m
@@ -248,17 +255,17 @@ module DafnyToYIL =
         | _ -> unsupported (m.ToString())
 
     and formal (f: Formal) : Y.LocalDecl =
-        { name = f.Name
-          tp = tp f.Type
-          ghost = f.IsGhost }
+        Y.LocalDecl(f.Name, tp f.Type, f.IsGhost)
 
     and typeParameter (t: TypeParameter) : string =
         if t.Variance <> TypeParameter.TPVariance.Non
            || (not t.StrictVariance) then
             unsupported "Type parameter with variance"
-
         t.Name
-
+        
+    and condition(a: AttributedExpression): Y.Condition =
+        expr a.E
+        
     and tp (t: Type) : Y.Type =
         match t with
         | :? UserDefinedType as t ->
@@ -757,11 +764,10 @@ module DafnyToYIL =
             .child (d.Name)
 
     and pathOfUserDefinedType (u: UserDefinedType) : Y.Path = pathOfTopLevelDecl (u.ResolvedClass)
+
     // ***** auxiliary translation functions
     and boundVar (bv: IVariable) : Y.LocalDecl =
-        { name = bv.DisplayName
-          tp = tp bv.Type
-          ghost = bv.IsGhost }
+        Y.LocalDecl(bv.DisplayName, tp bv.Type, bv.IsGhost)
 
     and classType (t: Type) : Y.ClassType =
         match t with

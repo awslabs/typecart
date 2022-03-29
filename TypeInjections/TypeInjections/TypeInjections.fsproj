@@ -21,6 +21,7 @@
         <Compile Include="InjectionIO-fr.fs" />
         <Compile Include="DafnyToYIL.fs" />
         <Compile Include="Diff.fs" />
+        <Compile Include="Translation.fs" />
         <Compile Include="Program-fr.fs" />
     </ItemGroup>
 
