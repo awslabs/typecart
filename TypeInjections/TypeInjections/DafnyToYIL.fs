@@ -159,10 +159,8 @@ module DafnyToYIL =
             | :? MatchCaseExpr as c -> expr c.Body
             | :? MatchCaseStmt as c -> Y.EBlock(statement @ c.Body)
             | _ -> error "Unexpected match case"
-
-        { cons = e.Ctor.Name
-          vars = vardecls
-          body = bd }
+        let p = pathOfTopLevelDecl(e.Ctor.EnclosingDatatype).child(e.Ctor.Name)
+        YIL.plainCase(p, vardecls, bd)
 
     and isTrait (d: TopLevelDecl) =
         match d with
@@ -530,7 +528,7 @@ module DafnyToYIL =
             else
                 Y.ELet(v.Var.Name, tp v.Var.Type, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
-        | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases)
+        | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
         | :? QuantifierExpr as e ->
             // mostly in logic parts; but can only be computational if domain is finite (occurs once in Yucca)
             if e.TypeArgs.Count > 0 then
@@ -736,7 +734,7 @@ module DafnyToYIL =
                 unsupported "Non-trivial break statement"
 
             Y.EBreak None
-        | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases)
+        | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
         // | :? AssertStmt as s ->
         // | :? AssumeStmt ->

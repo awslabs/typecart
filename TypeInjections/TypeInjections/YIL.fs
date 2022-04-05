@@ -243,11 +243,15 @@ module YIL =
         { name: string
           ins: LocalDecl list
           meta: Meta }
-    (* pattern match case for a constructor of an inductive type
-       Dafny's concrete syntax allows for nested constructors in patters, but these are resolved away.    *)
+    (* pattern match case
+       Dafny's concrete syntax allows for nested constructors in patterns and literal patterns.
+       But these are resolved away, and abstract syntax only shows pattern = c(x1,...,xn) where c is a
+       constructor of the datatype being matched on and the x1 are the local decls.
+       But we might generate more general constructors.
+     *)
     and Case =
-        { cons: string
-          vars: LocalDecl list
+        { vars: LocalDecl list
+          pattern: Expr
           body: Expr }
 
     and InputSpec = InputSpec of LocalDecl list * Condition list
@@ -330,7 +334,7 @@ module YIL =
         | EFor of index: LocalDecl * init: Expr * last: Expr * up: bool * body: Expr
         | EReturn of Expr list // if empty, there is no return value or they have been set by assignments to the output variables
         | EBreak of string option
-        | EMatch of on: Expr * tp: Type * cases: Case list
+        | EMatch of on: Expr * tp: Type * cases: Case list * dflt: Expr option // Dafny never produces default cases, but we might
         (* *** declaration of a local mutable variable with optional initial value
            Multiple declarations appear at once because Dafny allows
             var x1,...,xn := V1,...,Vn  and  var x1,...,xn = V (if V is call to a method with n outputs).
@@ -421,15 +425,12 @@ module YIL =
         | EBlock es -> es
         | e -> [ e ]
 
-    /// makes a plain update := e
-    let plainUpdate (e: Expr) = { df = e; monadic = None }
-
     /// s = t
     let EEqual(s:Expr,t:Expr) = EBinOpApply("Eq", s, t)
-    /// convenience for building a lambda-abstraction 
-    let lambda(name: string, tp: Type, out: Type, b: Expr -> Expr) =
-       let ld = LocalDecl(name,tp,false)
-       EFun([ld], out, b (EVar name))
+    /// conjunction of some expressions
+    let EConj(es: Expr list) =
+        if es.IsEmpty then EBool true
+        else List.fold (fun sofar next -> EBinOpApply("And", sofar, next)) es.Head es.Tail
     
     // True if a datatype is simply an enum, i.e.,
     // it has more than one constructor---all without arguments, and no type parameters
@@ -446,11 +447,20 @@ module YIL =
         | Class (_, _, _, _, ds, _) -> ds
         | _ -> error "not a child-bearing declaration"
 
-    // name of a local declaration
+    /// name of a local declaration
     let localDeclName (l: LocalDecl) = l.name
+    /// type of a local Declaration
+    let localDeclType (l: LocalDecl) = l.tp
+    /// EVar referencing a local Declaration
+    let localDeclTerm (l: LocalDecl) = EVar(l.name)
 
-    let localDeclTypes (lds: LocalDecl list) : Type list =
-        List.map (fun (ld: LocalDecl) -> ld.tp) lds
+    /// makes a plain update := e
+    let plainUpdate (e: Expr) = { df = e; monadic = None }
+    /// makes pattern-match case c(x1,...,xn) => bd for a constructor c
+    let plainCase(c:Path, lds: LocalDecl list, bd: Expr): Case =
+        /// type arguments are empty because there is no matching on types
+        let pat = EConstructorApply(c, [], List.map localDeclTerm lds)
+        {vars = lds; pattern = pat; body = bd}
 
     // local variables introduced by an expression (relevant when extending the context during traversal)
     // also defines which variables are visible to later statements in the same block
@@ -840,15 +850,17 @@ module YIL =
                     | None -> ""
 
                 sprintf "break%s" label
-            | EMatch (e, t, cases) ->
+            | EMatch (e, t, cases, dfltO) ->
                 let csS =
                     List.map (fun (c: Case) -> this.case (c)) cases
-
+                let dS = match dfltO with
+                         | Some d -> ["_ -> " + expr d]
+                         | None -> [] 
                 (expr e)
                 + ": "
                 + (tp t)
                 + " match "
-                + listToString (csS, " | ")
+                + listToString (csS@dS, " | ")
             | EDecls (ds) ->
                 let doOne (ld: LocalDecl, uO: UpdateRHS option) =
                     "var "
@@ -886,8 +898,7 @@ module YIL =
             | ObjectReceiver (e) -> this.expr e
 
         member this.case(case: Case) =
-            case.cons
-            + (this.localDecls case.vars)
+            this.expr case.pattern
             + " => "
             + (this.expr case.body)
 
