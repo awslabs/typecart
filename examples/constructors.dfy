@@ -32,7 +32,7 @@ module New {
 }
 
 
-module Compat {
+module FunctionalCompat {
   import Old
   import New
 
@@ -60,5 +60,41 @@ module Compat {
   lemma eval(e: Old.expr)
     requires exprDefined(e)
     ensures New.eval(expr(e)) == Old.eval(e)
+  {}
+}
+
+// Alternative example using logical relations
+
+// benefits
+// * can handle higher-order function types
+// * speculate, it may be able to handle classes (by using bisimulation)
+// * can handle partial injection functions more easily because no extra exprDefined is needed
+// * subsumes functional approach if we use a functional relation
+// * can express more complex relations between old and new datatypes
+// drawbacks
+// * overkill if we have injection functions and relations get in the way
+// * some proofs might be more involved
+//   if relations are functional, some of the generated lemma preconditions are effectively "requires xN = ..."
+//   these redundant lemma variables may (or many not) harm provers
+    
+module RelationalCompat {
+  import Old
+  import New
+
+  // relation between old and new type (same name as the type)
+  // RelationCompat.expr(eO,eN) iff FunctionalCompat.expr(eO) = eN
+  function expr(eO: Old.expr, eN: New.expr): bool
+  {
+    match (eO,eN) {
+      case (Const(nO),Const(nN)) => nO == nN
+      case (Add(xO, yO), Add(xN,yN)) => expr(xO,xN) && expr(yO,yN)
+      case _ => false
+    }
+  }
+
+  // logical relation lemma property for function of the same name
+  lemma eval(eO: Old.expr, eN: New.expr)
+    requires expr(eO,eN)
+    ensures Old.eval(eO) == New.eval(eN)
   {}
 }

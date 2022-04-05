@@ -28,7 +28,7 @@ module New {
   }
 }
 
-module Compat {
+module FunctionalCompat {
   import Old
   import New
 
@@ -76,6 +76,46 @@ module Compat {
      case True =>
      case Equal(e1,e2) =>
      case And(f1,f2) => // verification fails here, not sure yet why
+    }
+  }
+}
+
+module RelationalCompat {
+  import Old
+  import New
+
+  function expr(eO: Old.expr, eN: New.expr): bool
+  {
+    match (eO,eN) {
+      case (Const(nO),Const(nN)) => nO == nN
+      case (Add(e1O, e2O), Add(e1N,e2N)) => expr(e1O,e1N) && expr(e2O,e2N)
+      case _ => false
+    }
+  }
+
+  function form<a_old,a_new>(a: (a_old, a_new) -> bool, fO: Old.form<a_old>, fN: New.form<a_new>): bool
+    {
+      match (fO,fN) {
+        case (Equal(e1O,e2O), Equal(e1N,e2N)) => a(e1O,e1N) && a(e2O,e2N)
+        case (True,True) => true
+        case (And(f1O,f2O), And(f1N,f2N)) => form(a, f1O, f1N) && form(a, f2O, f2N)
+        case _ => false
+     }
+    }
+
+
+  lemma simplify<a_old,a_new>(a: (a_old,a_new) -> bool, fO: Old.form<a_old>, fN: New.form<a_new>)
+    requires form(a, fO, fN)
+    ensures form(a, Old.simplify(fO), New.simplify(fN))
+  {
+    match (fO,fN) {
+     case True =>
+     case (Equal(e1O,e2O), Equal(e1N,e2N)) =>
+       // a(e1O,e1N);
+       // a(e2O,e2N);  // verification fails here, not sure yet why
+     case (And(f1O,f2O), And(f1N,f2N)) =>
+       // form(f1O,f1N)
+       // form(f2O,f2N) // verification fails here, not sure yet why
     }
   }
 }
