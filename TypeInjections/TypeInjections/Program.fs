@@ -9,23 +9,7 @@ module Program =
 
     let log (s: string) = System.Console.WriteLine(s)
     let logObject (s: string) (arg: obj) = System.Console.WriteLine(s, arg)
-
-    // extraFile contains the extra mapping function that we might need to paste in the output file
-    let extraDafnyFile (root: string) (extraFilename: string Option) : DafnyFile option =
-        let rt =
-            System
-                .IO
-                .Directory
-                .GetParent(
-                    System.IO.Directory.GetParent(root).FullName
-                )
-                .FullName
-
-        let rt =
-            System.IO.Path.Combine([| rt; "LibFunctions" |])
-
-        Option.bind (fun file -> Some(DafnyFile(System.IO.Path.Combine([| rt; file |])))) extraFilename
-
+    
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
         let reporter = ConsoleErrorReporter()
@@ -107,11 +91,9 @@ module Program =
 
         // inspect the results
         log "***** Running typeCart"
-        InjectionIO.findEqTypes (oldYIL, newYIL)
-
-        //let diff = Differ.prog(oldYIL, newYIL)
-        //let diffS = (new Diff.Printer()).prog(diff)
-        //System.Console.WriteLine(diffS)
+        let diff = Differ.prog(oldYIL, newYIL)
+        let diffS = (new Diff.Printer()).prog(diff)
+        System.Console.WriteLine(diffS)
 
         System.Console.ReadKey() |> ignore
         0

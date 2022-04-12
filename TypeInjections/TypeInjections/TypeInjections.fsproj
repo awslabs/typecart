@@ -9,10 +9,6 @@
     <ItemGroup>
         <Compile Include="Utils.fs" />
         <Compile Include="YIL.fs" />
-        <Compile Include="NameUtils.fs" />
-        <Compile Include="TypeEquality.fs" />
-        <Compile Include="TypeInjections.fs" />
-        <Compile Include="InjectionIO.fs" />
         <Compile Include="DafnyToYIL.fs" />
         <Compile Include="Diff.fs" />
         <Compile Include="Translation.fs" />
