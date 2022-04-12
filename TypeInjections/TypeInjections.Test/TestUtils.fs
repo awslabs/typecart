@@ -48,38 +48,6 @@ module TestUtils =
 
         compare actual expected
 
-    // By convention, the test's resources are to be stored in directory
-    //   Resources/<test module name>/<test name>
-    let public testRunnerEq
-        (testToRun: TestFormat)
-        (testModule: string)
-        (inputFileName1: string)
-        (inputFileName2: string)
-        (outputFileName: string)
-        (expectedFileName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputFile1 =
-            System.IO.Path.Combine([| pwd; inputFileName1 |])
-
-        let inputFile2 =
-            System.IO.Path.Combine([| pwd; inputFileName2 |])
-
-        let dafnyFile1 = DafnyFile(inputFile1)
-        let dafnyFile2 = DafnyFile(inputFile2)
-
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
-
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
-
-        TypeInjections.Program.testTypeEq dafnyFile1 dafnyFile2 outputFile
-        |> ignore
-
-        testToRun outputFile expectedFile
-
     // Run the tests for generated functions
     // FilePath is synonym for string list
     // the test generator expects multiple output and expected files,
@@ -89,7 +57,6 @@ module TestUtils =
         (testModule: string)
         (inputFileName1: string)
         (inputFileName2: string)
-        (extraFileName: string Option)
         (outputFileName: string)
         (expectedFileName: string)
         =
@@ -107,72 +74,9 @@ module TestUtils =
         let expectedFile =
             System.IO.Path.Combine([| pwd; expectedFileName |])
 
-        TypeInjections.Program.runTypeCart inputFile1 inputFile2 pwd extraFileName false outputFileName
-        |> ignore
-
-        testToRun outputFile expectedFile
-
-    // run the tool to generate only the output file,
-    // does not require an expected output file
-    let public testRunnerOut
-        (testModule: string)
-        (inputFileName1: string)
-        (inputFileName2: string)
-        (extraFileName: string Option)
-        (isInclude: bool)
-        (outputFileName: string)
-        (expectedFileName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputFile1 =
-            System.IO.Path.Combine([| pwd; inputFileName1 |])
-
-        let inputFile2 =
-            System.IO.Path.Combine([| pwd; inputFileName2 |])
-
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
-
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
-
-
-        TypeInjections.Program.runTypeCart inputFile1 inputFile2 pwd extraFileName isInclude outputFileName
-        |> ignore
-
-        fileCompare outputFile expectedFile
-
-    let public testRunnerClass
-        (testToRun: TestFormat)
-        (testModule: string)
-        (inputFileName: string)
-        (outputFileName: string)
-        (expectedFileName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputFile =
-            System.IO.Path.Combine([| pwd; inputFileName |])
-
-        let dafnyFile = DafnyFile(inputFile)
-
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
-
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
-
-        // Run syntactic check for classes; used for testing
-        // this will be removed later
-        let reporter = TypeInjections.Program.initDafny
-
-        // the main call to dafny, adapted from DafnyDriver.ProcessFiles
-        let programName1 = "test"
-        let mutable dafnyProgram = Unchecked.defaultof<Program>
-        TypeInjections.Program.parseAST dafnyFile programName1 reporter &dafnyProgram
-
-        TypeInjections.InjectionIO.checkClasses dafnyProgram outputFile
+        TypeInjections.Program.main [| outputFile
+                                       inputFile1
+                                       inputFile2 |]
         |> ignore
 
         testToRun outputFile expectedFile

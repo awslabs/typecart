@@ -16,9 +16,7 @@
 
     <ItemGroup>
         <Compile Include="TestUtils.fs" />
-        <Compile Include="TypeEqTests.fs" />
         <Compile Include="GenFunctionTests.fs" />
-        <Compile Include="ClassGenTests.fs" />
         <Compile Include="DummyMain.fs" />
         <Content Include="Resources\**\*" />
     </ItemGroup>
@@ -34,10 +32,6 @@
       <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
         <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
       </Reference>
-    </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="Resources\YILTests\output" />
     </ItemGroup>
 
 </Project>

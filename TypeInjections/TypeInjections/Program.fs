@@ -9,7 +9,7 @@ module Program =
 
     let log (s: string) = System.Console.WriteLine(s)
     let logObject (s: string) (arg: obj) = System.Console.WriteLine(s, arg)
-    
+
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
         let reporter = ConsoleErrorReporter()
@@ -91,9 +91,9 @@ module Program =
 
         // inspect the results
         log "***** Running typeCart"
-        let diff = Differ.prog(oldYIL, newYIL)
-        let diffS = (new Diff.Printer()).prog(diff)
-        System.Console.WriteLine(diffS)
+        let diff = Differ.prog (oldYIL, newYIL)
+        let diffS = (new Diff.Printer()).prog (diff)
+        //System.Console.WriteLine(diffS)
 
-        System.Console.ReadKey() |> ignore
+        //System.Console.ReadKey() |> ignore
         0
