@@ -1,4 +1,4 @@
-﻿// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT
 
 namespace TypeInjections
@@ -61,13 +61,12 @@ module Program =
 
         reporter
 
-    let parseAST
-        (dafnyFile: DafnyFile)
-        (programName: string)
-        (reporter: ConsoleErrorReporter)
-        (dafnyProgram: outref<Program>)
-        : unit =
-        logObject "***** calling Dafny parser and checker for {0}" dafnyFile.SourceFileName
+    let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+
+        let dafnyFile = DafnyFile(file)
+        let mutable dafnyProgram = Unchecked.defaultof<Program>
+
+        logObject "***** calling Dafny parser and checker for {0}" file
         let dafnyFiles = [ dafnyFile ]
 
         let err =
@@ -76,98 +75,43 @@ module Program =
         if err <> null && err <> "" then
             failwith ("Dafny errors: " + err)
 
-    // Print the generated type functions to the given outputPath. All given parts are relative to the root
-    let runTypeCart file1 file2 root (extraFilename: string Option) (includeLemmas: bool) outputFile : unit =
+        dafnyProgram
 
-        let reporter = initDafny
-
-        // the main call to dafny, adapted from DafnyDriver.ProcessFiles
-        let dafnyFile1 = DafnyFile(file1)
-        let programName1 = "old"
-        let mutable dafnyProgram1 = Unchecked.defaultof<Program>
-        parseAST dafnyFile1 programName1 reporter &dafnyProgram1
-
-        let dafnyFile2 = DafnyFile(file2)
-        let programName2 = "new"
-        let mutable dafnyProgram2 = Unchecked.defaultof<Program>
-        parseAST dafnyFile2 programName2 reporter &dafnyProgram2
-
-        // inspect the results
-        log "***** Running typeCart"
-        InjectionIO.findEqTypes (&dafnyProgram1, &dafnyProgram2)
-
-        // extraFile contains the extra mapping function that we might need to paste in the output file
-        let extraFile = extraDafnyFile root extraFilename
-
-        // At some points, we want to add extra functions manually. We could write them directly in the AST, but this is
-        // very tedious, so we parse them from a file.
-        match extraFile with
-        | None -> ()
-        | Some file ->
-            let programName = "extra"
-            let mutable dafnyProgram = Unchecked.defaultof<Program>
-            parseAST file programName reporter &dafnyProgram
-            // inspect the results
-            log "***** traversing Dafny AST for extra file"
-            InjectionIO.parseExtraFunctions dafnyProgram
-
-        let fileName1 = System.IO.Path.GetFileName(file1)
-        let fileName2 = System.IO.Path.GetFileName(file2)
-
-        let outputPath =
-            System.IO.Path.Combine([| root; outputFile |])
-
-        InjectionIO.printGenFunctions fileName1 fileName2 includeLemmas outputPath
-
-    // Run just type equality check; used for testing
-    let testTypeEq dafnyFile1 dafnyFile2 outputPath : unit =
-        let reporter = initDafny
-
-        // the main call to dafny, adapted from DafnyDriver.ProcessFiles
-        let programName1 = "old"
-        let mutable dafnyProgram1 = Unchecked.defaultof<Program>
-        parseAST dafnyFile1 programName1 reporter &dafnyProgram1
-
-        let programName2 = "new"
-        let mutable dafnyProgram2 = Unchecked.defaultof<Program>
-        parseAST dafnyFile2 programName2 reporter &dafnyProgram2
-
-        // inspect the results
-        log "***** Running typeCart"
-        InjectionIO.findEqTypes (&dafnyProgram1, &dafnyProgram2)
-
-        InjectionIO.printEqResults outputPath
-
-    //[<EntryPoint>]
+    [<EntryPoint>]
     let main (argv: string array) =
-        // TODO: this whole part will be changed once this runs on folders rather than individual files
+        // for now, typeCart requires fully qualified paths of files
+        // TODO: update to read Dafny project folder
         // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
-        if argv.Length <= 1 then
-            failwith "Need to include 2 .dfy files"
+        if argv.Length <= 2 then
+            failwith "typeCart requires at least two input files"
 
-        // make sure all files exist
-        for a in argv do
+        let argvList = argv |> Array.toList
+        let outFolder = argvList.Head
+        let files = argvList.Tail
+
+        // make sure all input files exist
+        for a in files do
             if not (System.IO.File.Exists(a)) then
                 failwith ("file not found: " + a)
 
-        // argv has type string array [| |], convert argv to string list []
-        let argvList = argv |> Array.toList
+        //initialise Dafny
+        let reporter = initDafny
 
-        //we expect only two input files at the moment
-        let file1 = argvList.Head
-        let file2 = argvList.[1]
+        // parse input files
+        let oldDafnyFile = parseAST (files.Item(0)) "old" reporter
+        let newDafnyFile = parseAST (files.Item(1)) "new" reporter
 
-        let file1Path = System.IO.Path.GetFullPath(file1)
-        let file2Path = System.IO.Path.GetFullPath(file2)
+        let oldYIL = DafnyToYIL.program oldDafnyFile
+        let newYIL = DafnyToYIL.program newDafnyFile
 
-        let root = System.IO.Path.GetDirectoryName(file1)
+        // inspect the results
+        log "***** Running typeCart"
+        InjectionIO.findEqTypes (oldYIL, newYIL)
 
-        // runTypeCart expects:
-        // 1. two input filenames
-        // 2. an optional Extra file for map functions
-        // 3. output file name
-        runTypeCart file1Path file2Path root (Some "Extra.dfy") false "Combine.dfy"
+        //let diff = Differ.prog(oldYIL, newYIL)
+        //let diffS = (new Diff.Printer()).prog(diff)
+        //System.Console.WriteLine(diffS)
 
         System.Console.ReadKey() |> ignore
         0

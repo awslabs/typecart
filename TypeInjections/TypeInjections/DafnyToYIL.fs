@@ -7,7 +7,7 @@ open Microsoft.BaseTypes
 // Dafny
 open Microsoft.Dafny
 // Yucca
-open UtilsFR
+open Utils
 
 (* convert C# Dafny AST to F# Dafny AST
 
@@ -159,8 +159,12 @@ module DafnyToYIL =
             | :? MatchCaseExpr as c -> expr c.Body
             | :? MatchCaseStmt as c -> Y.EBlock(statement @ c.Body)
             | _ -> error "Unexpected match case"
-        let p = pathOfTopLevelDecl(e.Ctor.EnclosingDatatype).child(e.Ctor.Name)
-        YIL.plainCase(p, vardecls, bd)
+
+        let p =
+            pathOfTopLevelDecl(e.Ctor.EnclosingDatatype)
+                .child (e.Ctor.Name)
+
+        YIL.plainCase (p, vardecls, bd)
 
     and isTrait (d: TopLevelDecl) =
         match d with
@@ -183,8 +187,13 @@ module DafnyToYIL =
         | :? Function as m ->
             // keywords function (ghost), function method, predicate (ghost)
             let tpvars = typeParameter @ m.TypeArgs
-            let input = Y.InputSpec(formal @ m.Formals, condition @ m.Req)
-            let output = Y.OutputType(tp m.ResultType, condition @ m.Ens)
+
+            let input =
+                Y.InputSpec(formal @ m.Formals, condition @ m.Req)
+
+            let output =
+                Y.OutputType(tp m.ResultType, condition @ m.Ens)
+
             let body =
                 if (m.Body = null) then
                     None
@@ -194,17 +203,7 @@ module DafnyToYIL =
             let mName = m.Name
             let meta = namedMeta m
 
-            Y.Method(
-                false,
-                mName,
-                tpvars,
-                input,
-                output,
-                body,
-                m.IsGhost,
-                m.IsStatic,
-                meta
-            )
+            Y.Method(false, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
@@ -236,9 +235,12 @@ module DafnyToYIL =
                     Some(statement m.Body)
 
             let mName = m.Name
-            let isLemma = match m with
-                          | :? Lemma -> true
-                          | _ -> false
+
+            let isLemma =
+                match m with
+                | :? Lemma -> true
+                | _ -> false
+
             Y.Method(isLemma, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
@@ -259,11 +261,11 @@ module DafnyToYIL =
         if t.Variance <> TypeParameter.TPVariance.Non
            || (not t.StrictVariance) then
             unsupported "Type parameter with variance"
+
         t.Name
-        
-    and condition(a: AttributedExpression): Y.Condition =
-        expr a.E
-        
+
+    and condition (a: AttributedExpression) : Y.Condition = expr a.E
+
     and tp (t: Type) : Y.Type =
         match t with
         | :? UserDefinedType as t ->
