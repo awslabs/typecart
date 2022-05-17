@@ -434,6 +434,12 @@ module YIL =
         | EBlock es -> es
         | e -> [ e ]
 
+    /// wraps in a block if not yet a block
+    let block(b: Expr): Expr =
+        match b with
+        | EBlock _ -> b
+        | _ -> EBlock [b]
+    
     /// s = t
     let EEqual (s: Expr, t: Expr) = EBinOpApply("Eq", s, t)
     /// conjunction of some expressions
@@ -626,12 +632,13 @@ module YIL =
     // F# has string interpolation now, so this code could be made more readable
     type Printer() =
         let UNIMPLEMENTED = "<UNIMPLEMENTED>"
-        let mutable indentLevel = 0
+        let indentString = "  "
+        let indented(s: string, braced: Boolean) =
+            let s = ("\n"+s).Replace("\n","\n"+indentString)
+            if braced then " {" + s + "\n}\n" else s
+        let indentedBraced(s: string) = indented(s,true)
 
-        let indent () =
-            listToString (List.map (fun _ -> "  ") [ 2 .. indentLevel ], "")
-
-        member this.prog(p: Program) = this.decls p.decls
+        member this.prog(p: Program) = this.declsGeneral(p.decls, false)
 
         member this.tpvars(ns: string list) =
             if ns.IsEmpty then
@@ -639,17 +646,12 @@ module YIL =
             else
                 "[" + listToString (ns, ", ") + "]"
 
+        member this.declsGeneral(ds: Decl list, braced: Boolean) =
+                indented(listToString (List.map (fun d -> (this.decl d) + "\n") ds, ""), braced)
         member this.decls(ds: Decl list) =
-            indentLevel <- indentLevel + 1
-            let ind = indent ()
-
-            let s =
-                listToString (List.map (fun d -> ind + (this.decl d) + "\n") ds, "")
-
-            indentLevel <- indentLevel - 1
-            s
+                this.declsGeneral(ds, true) 
         // array dimensions/indices
-        member this.dims(ds: Expr list) = "[" + this.exprsNoBr (ds) + "]"
+        member this.dims(ds: Expr list) = "[" + this.exprsNoBr ds ", " + "]"
         member this.meta(_: Meta) = ""
 
         member this.decl(d: Decl) =
@@ -658,18 +660,15 @@ module YIL =
                 "module "
                 + (this.meta a)
                 + n
-                + "\n"
                 + (this.decls ds)
             | Datatype (n, tpvs, cons, ds, a) ->
                 let consS = List.map this.datatypeConstructor cons
-
                 "datatype "
                 + (this.meta a)
                 + n
                 + (this.tpvars tpvs)
-                + " = "
+                + " = " 
                 + listToString (consS, " | ")
-                + "\n"
                 + (this.decls ds)
             | Class (n, isTrait, tpvs, p, ds, a) ->
                 if isTrait then "trait " else "class "
@@ -682,7 +681,6 @@ module YIL =
                       (" extends "
                        + listToString (List.map this.classType p, ",")
                        + " ")
-                + " {\n"
                 + (this.decls ds)
             | TypeDef (n, tpvs, sup, predO, isNew, _) ->
                 (if isNew then "newtype " else "type ")
@@ -708,18 +706,17 @@ module YIL =
                 + n
                 + (this.tpvars tpvs)
                 + (this.inputSpec ins)
-                + ": "
-                + outsS
-                + " = \n"
-                + Option.fold (fun _ -> this.expr) "<empty body>" b
+                + (if isL then "" else ":" + outsS)
+                + "\n"
+                + Option.fold (fun _ -> this.expr) "{}" (Option.map block b)
             | ClassConstructor (n, tpvs, ins, b, a) ->
                 "constructor "
                 + (this.meta a)
                 + n
                 + (this.tpvars tpvs)
                 + (this.localDecls ins)
-                + " = \n"
-                + Option.fold (fun _ -> this.expr) "<empty body>" b
+                + "\n"
+                + Option.fold (fun _ -> this.expr) "{}" b
             | Export p -> "export " + p.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
@@ -727,19 +724,17 @@ module YIL =
             match ins with
             | InputSpec (lds, rs) ->
                 this.localDecls lds
-                + " "
                 + this.conditions (true, rs)
 
         member this.outputSpec(outs: OutputSpec) =
             match outs with
-            | OutputType (t, es) -> this.tp t + " " + this.conditions (false, es)
+            | OutputType (t, es) -> this.tp t + this.conditions (false, es)
             | OutputDecls (lds, es) ->
                 this.localDecls lds
-                + " "
                 + this.conditions (false, es)
 
         member this.conditions(require: bool, cs: Condition list) =
-            listToString (List.map (fun c -> this.condition (require, c)) cs, "\n")
+            if cs.IsEmpty then "" else indented(listToString (List.map (fun c -> this.condition (require, c)) cs, "\n"), false)
 
         member this.condition(require: bool, c: Condition) =
             let kw =
@@ -762,10 +757,10 @@ module YIL =
 
         member this.tp(t: Type) = t.ToString()
 
-        member this.exprsNoBr(es: Expr list) =
-            listToString (List.map this.expr es, ", ")
+        member this.exprsNoBr(es: Expr list)(sep: string) =
+            listToString (List.map this.expr es, sep)
 
-        member this.exprs(es: Expr list) = "(" + (this.exprsNoBr es) + ")"
+        member this.exprs(es: Expr list) = "(" + (this.exprsNoBr es ", ") + ")"
 
         member this.exprO(eO: Expr option, sep: string) =
             Option.defaultValue ("") (Option.map (fun e -> sep + (this.expr e)) eO)
@@ -817,14 +812,14 @@ module YIL =
                 + ".."
                 + exprO (t, "")
                 + "]"
-            | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] = " + (expr e)
+            | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] := " + (expr e)
             | EArray (t, d) -> "new " + t.ToString() + this.dims (d)
             | EArrayAt (a, i) -> (expr a) + this.dims (i)
-            | EArrayUpdate (a, i, e) -> (expr a) + this.dims (i) + " = " + (expr e)
+            | EArrayUpdate (a, i, e) -> (expr a) + this.dims (i) + " := " + (expr e)
             | EMapAt (m, e) -> (expr m) + (this.dims [ e ])
             | EMapKeys (e) -> (expr e) + ".Keys"
-            | EUnOpApply (op, e) -> op + " " + (expr e)
-            | EBinOpApply (op, e1, e2) -> "(" + (expr e1) + " " + op + " " + (expr e2) + ")"
+            | EUnOpApply (op, e) -> (this.operator op) + (expr e)
+            | EBinOpApply (op, e1, e2) -> "(" + (expr e1) + (this.operator op) + (expr e2) + ")"
             | EAnonApply (f, es) -> (expr f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) ->
                 this.receiver (r)
@@ -833,7 +828,7 @@ module YIL =
                 + (tps ts)
                 + (exprs es)
             | EConstructorApply (c, ts, es) -> c.ToString() + (tps ts) + (exprs es)
-            | EBlock (es) -> "{" + (this.exprsNoBr es) + "}"
+            | EBlock (es) -> indentedBraced(this.exprsNoBr es ";\n")
             | ELet (n, t, d, e) ->
                 "let "
                 + n
@@ -866,7 +861,7 @@ module YIL =
                     | None -> ""
 
                 sprintf "%swhile (%s)%s" label (expr c) (expr e)
-            | EReturn (es) -> "return " + (this.exprsNoBr es)
+            | EReturn (es) -> "return " + (this.exprsNoBr es ", ")
             | EBreak l ->
                 let label =
                     match l with
@@ -876,18 +871,15 @@ module YIL =
                 sprintf "break%s" label
             | EMatch (e, t, cases, dfltO) ->
                 let csS =
-                    List.map (fun (c: Case) -> this.case (c)) cases
-
+                    List.map (fun (c: Case) -> this.case c) cases
                 let dS =
                     match dfltO with
-                    | Some d -> [ "_ -> " + expr d ]
+                    | Some d -> [ "case _ => " + expr d ]
                     | None -> []
 
-                (expr e)
-                + ": "
-                + (tp t)
-                + " match "
-                + listToString (csS @ dS, " | ")
+                "match "
+                + (expr e)
+                + indentedBraced(listToString(csS @ dS, "\n"))
             | EDecls (ds) ->
                 let doOne (ld: LocalDecl, uO: UpdateRHS option) =
                     "var "
@@ -904,6 +896,13 @@ module YIL =
             | EUnimplemented -> UNIMPLEMENTED
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
+
+        member this.operator(op: string) =
+            match op with
+            | "Eq" -> " = "
+            | "And" -> " && "
+            | "Or" -> " || "
+            | s -> " " + s + " "
 
         member this.localDecls(lds: LocalDecl list) =
             "("
@@ -925,9 +924,9 @@ module YIL =
             | ObjectReceiver (e) -> this.expr e
 
         member this.case(case: Case) =
-            this.expr case.pattern
+            "case " + this.expr case.pattern
             + " => "
-            + (this.expr case.body)
+            + indented(this.expr case.body, false)
 
     // shortcut to create a fresh printer
     let printer () = Printer()

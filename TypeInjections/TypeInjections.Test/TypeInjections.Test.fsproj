@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net5.0</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
 
         <IsPackable>false</IsPackable>
         <GenerateProgramFile>false</GenerateProgramFile>
@@ -32,6 +32,10 @@
       <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
         <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
       </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Resources\Examples" />
     </ItemGroup>
 
 </Project>

@@ -27,7 +27,7 @@ module Translation =
         let context = Context(p)
 
         match pD.decls with
-        | Diff.SameList l -> { name = "Combine"; decls = l }
+        | Diff.SameList l -> { name = "Combine"; decls = decls context (Diff.SameList l) }
         | Diff.UpdateList l ->
             { name = "Combine"
               decls = List.collect (fun d -> decl context d) l }
@@ -51,10 +51,11 @@ module Translation =
     and declSame (context: Context, d: Decl) : Decl list =
         let p = context.currentDecl.child (d.name)
         let pO, pN, pT = path (p)
+        let contextInner = context.enter(d.name)
 
         match d with
         | Module (n, ms, _) ->
-            let msT = declsSame context ms
+            let msT = declsSame contextInner ms
             [ Module(n, msT, emptyMeta) ]
         | Class _
         | ClassConstructor _ -> failwith (unsupported "classes")
@@ -114,7 +115,7 @@ module Translation =
             let relation =
                 Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
 
-            let memberLemmas = declsSame context ms
+            let memberLemmas = declsSame contextInner ms
             relation :: memberLemmas
         // methods produce lemmas; lemmas produce nothing
         | Method(isLemma = true) -> []

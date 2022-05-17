@@ -4,6 +4,7 @@
 namespace TypeInjections
 
 open Microsoft.Dafny
+open System
 
 module Program =
 
@@ -29,36 +30,26 @@ module Program =
             // When using Dafny built from source:
             |> Option.orElse (Utils.findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl"))
             |> Option.get
-
-        System.Console.WriteLine(dafnyPrelude)
-
+        Console.WriteLine(dafnyPrelude)
         let dafnyPreludeDir =
             Utils.findDirectory (codebase, "dafny", "DafnyPrelude.bpl")
             |> Option.get
-
         logObject "found in: {0}" dafnyPreludeDir
-
         log "***** initialising Dafny"
         options.DafnyPrelude <- dafnyPrelude
         DafnyOptions.Install(options)
         log "***** Dafny initialised"
-
         reporter
 
     let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
-
         let dafnyFile = DafnyFile(file)
         let mutable dafnyProgram = Unchecked.defaultof<Program>
-
         logObject "***** calling Dafny parser and checker for {0}" file
         let dafnyFiles = [ dafnyFile ]
-
         let err =
             Main.ParseCheck(Utils.toIList dafnyFiles, programName, reporter, &dafnyProgram)
-
         if err <> null && err <> "" then
             failwith ("Dafny errors: " + err)
-
         dafnyProgram
 
     [<EntryPoint>]
@@ -67,33 +58,53 @@ module Program =
         // TODO: update to read Dafny project folder
         // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
-        if argv.Length <= 2 then
-            failwith "typeCart requires at least two input files"
+        if argv.Length < 3 then
+            failwith "usage: program OLD NEW OUTPUTFOLDER"
 
         let argvList = argv |> Array.toList
-        let outFolder = argvList.Head
-        let files = argvList.Tail
+        let oldFile = argvList.Item(0)
+        let newFile = argvList.Item(1)
+        let outFolder = argvList.Item(2)
 
         // make sure all input files exist
-        for a in files do
+        for a in [oldFile;newFile] do
             if not (System.IO.File.Exists(a)) then
                 failwith ("file not found: " + a)
-
+        
         //initialise Dafny
         let reporter = initDafny
 
-        // parse input files
-        let oldDafnyFile = parseAST (files.Item(0)) "old" reporter
-        let newDafnyFile = parseAST (files.Item(1)) "new" reporter
+        // parse input files into Dafny programs
+        log "***** calling Dafny to parse and type-check old and new file"
+        let oldDafny = parseAST oldFile "Old" reporter
+        let newDafny = parseAST newFile "New" reporter
 
-        let oldYIL = DafnyToYIL.program oldDafnyFile
-        let newYIL = DafnyToYIL.program newDafnyFile
+        log "***** converting to YIL AST"
+        log ("***** ... the old one ")
+        let oldYIL = DafnyToYIL.program oldDafny
+        log ("***** ... the new one ")
+        let newYIL = DafnyToYIL.program newDafny
 
-        // inspect the results
-        log "***** Running typeCart"
+        // diff the programs
+        log "***** diffing the two programs"
         let diff = Differ.prog (oldYIL, newYIL)
-        let diffS = (new Diff.Printer()).prog (diff)
-        //System.Console.WriteLine(diffS)
+        let diffS = (Diff.Printer()).prog diff
+        Console.WriteLine(diffS)
+        
+        // generate translation
+        log "***** generating compatibility code"
+        let trans = Translation.prog(oldYIL, diff)
+        let transS = YIL.printer().prog(trans)
+        Console.WriteLine transS
 
-        //System.Console.ReadKey() |> ignore
+        // write output files
+        log "***** writing output files"
+        let writeOut fileName prog =
+            let f = IO.Path.Combine(outFolder, fileName)
+            IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f)) |> ignore
+            let s = YIL.printer().prog(prog)
+            IO.File.WriteAllText(f, s)
+        writeOut "old.dfy" oldYIL
+        writeOut "new.dfy" newYIL
+        writeOut "compat.dfy" trans
         0
