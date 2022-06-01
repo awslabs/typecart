@@ -183,26 +183,25 @@ module DafnyToYIL =
                     Some(statement m.Body)
 
             let mName = m.Name
-            Y.ClassConstructor(mName, tpvars, formal @ m.Ins, body, namedMeta m)
+            let input =
+                Y.InputSpec(formal @ m.Ins, condition @ m.Req)
+            let output =
+                condition @ m.Ens
+            Y.ClassConstructor(mName, tpvars, input, output, body, namedMeta m)
         | :? Function as m ->
             // keywords function (ghost), function method, predicate (ghost)
             let tpvars = typeParameter @ m.TypeArgs
-
             let input =
                 Y.InputSpec(formal @ m.Formals, condition @ m.Req)
-
             let output =
                 Y.OutputType(tp m.ResultType, condition @ m.Ens)
-
             let body =
                 if (m.Body = null) then
                     None
                 else
                     Some(expr m.Body)
-
             let mName = m.Name
             let meta = namedMeta m
-
             Y.Method(false, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
@@ -213,20 +212,15 @@ module DafnyToYIL =
             let outs = formal @ m.Outs
             let ens = condition @ m.Ens
             (* Dafny allows multiple outputs, which are named to allow mentioning them in the post-conditions.
-              We only allow one computational output followed by some ghost outputs (which can be dropped for computation).
-              Dafny allows zero outputs, in which case we use the unit type.
+               We only allow one computational output followed by some ghost outputs (which can be dropped for computation).
            *)
             let output =
-                if outs.IsEmpty then
-                    Y.OutputType(Y.TUnit, ens)
-                else
+                if not outs.IsEmpty then
                     let onlyOneNonGhost =
                         List.forall (fun (d: Y.LocalDecl) -> d.ghost) outs.Tail
-
                     if not onlyOneNonGhost then
                         unsupported "More than one non-ghost return value in method"
-
-                    Y.OutputDecls(outs, ens)
+                Y.OutputDecls(outs, ens)
 
             let body =
                 if (m.Body = null) then

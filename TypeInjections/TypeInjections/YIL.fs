@@ -23,27 +23,23 @@ module YIL =
         member this.names =
             match this with
             | Path (ns) -> ns
-
         member this.isRoot = this.names.IsEmpty
-
         member this.child(n: string) =
             if n = "" then
                 this
             else
                 Path(this.names @ [ n ])
-
         member this.append(ns: Path) =
             Path(
                 this.names
                 @ List.filter (fun x -> x <> "") ns.names
             )
-
         member this.parent = Path(listDropLast (this.names))
         member this.name = listLast (this.names)
 
+        /// this is prefix of that (reflexive)
         member this.isAncestorOf(p: Path) =
             let l = this.names.Length
-
             p.names.Length >= l
             && p.names.[..l - 1] = this.names
 
@@ -95,7 +91,7 @@ module YIL =
             members: Decl list *
             meta: Meta
         (* Class constructor as opposed to the default constructor in Datatype *)
-        | ClassConstructor of name: string * tpvars: string list * ins: LocalDecl list * body: Expr option * meta: Meta
+        | ClassConstructor of name: string * tpvars: string list * ins: InputSpec * outs: Condition list * body: Expr option * meta: Meta
         (* Type definitions
            if predicate is given: HOL-style subtype definitions (omitting the witness here)
              else: type synonym
@@ -148,7 +144,7 @@ module YIL =
             | Module (n, _, _) -> n
             | Datatype (n, _, _, _, _) -> n
             | Class (n, _, _, _, _, _) -> n
-            | ClassConstructor (n, _, _, _, _) -> n
+            | ClassConstructor (n, _, _, _, _, _) -> n
             | Method (_, n, _, _, _, _, _, _, _) -> n
             | Field (n, _, _, _, _, _, _) -> n
             | TypeDef (n, _, _, _, _, _) -> n
@@ -163,9 +159,15 @@ module YIL =
             | TypeDef (_, tpvs, _, _, _, _) -> tpvs
             | Field _ -> []
             | Method (_, _, tpvs, _, _, _, _, _, _) -> tpvs
-            | ClassConstructor (_, tpvs, _, _, _) -> tpvs
+            | ClassConstructor (_, tpvs, _, _, _, _) -> tpvs
             | Export _ -> error "export does not have type arguments"
             | DUnimplemented -> error "skipped declaration has no name"
+        member this.children =
+            match this with
+            | Module (_, ds, _) -> ds
+            | Datatype (_, _, _, ds, _) -> ds
+            | Class (_, _, _, _, ds, _) -> ds
+            | _ -> []
 
     and TypeArg = string
 
@@ -232,11 +234,9 @@ module YIL =
         member this.name =
             match this with
             | LocalDecl (n, _, _) -> n
-
         member this.tp =
             match this with
             | LocalDecl (_, t, _) -> t
-
         member this.ghost =
             match this with
             | LocalDecl (_, _, g) -> g
@@ -262,13 +262,21 @@ module YIL =
           pattern: Expr
           body: Expr }
 
-    and InputSpec = InputSpec of LocalDecl list * Condition list
+    and InputSpec =
+       | InputSpec of LocalDecl list * Condition list
+       member this.decls = match this with InputSpec(ds,_) -> ds
+       member this.conditions = match this with InputSpec(_,cs) -> cs
 
     and OutputSpec =
         // usual case: return type
         | OutputType of Type * Condition list
         // case with multiple named outputs; empty list never seems to occur in Dafny
         | OutputDecls of LocalDecl list * Condition list
+        member this.outputDecls : LocalDecl list =
+            match this  with
+            | OutputType _ -> []
+            | OutputDecls (ds, _) -> ds
+
         member this.conditions =
             match this with
             | OutputType (_, cs)
@@ -456,14 +464,6 @@ module YIL =
         | Datatype (_, [], ctors, _, _) -> List.forall (fun c -> c.ins.IsEmpty) ctors
         | _ -> false
 
-    // children of a declaration
-    let rec declChildren (d: Decl) : Decl list =
-        match d with
-        | Module (_, ds, _) -> ds
-        | Datatype (_, _, _, ds, _) -> ds
-        | Class (_, _, _, _, ds, _) -> ds
-        | _ -> error "not a child-bearing declaration"
-
     /// name of a local declaration
     let localDeclName (l: LocalDecl) = l.name
     /// type of a local Declaration
@@ -488,12 +488,6 @@ module YIL =
         | EDecls (ds) -> List.map (fun (x, _) -> x) ds
         | EDeclChoice (d, _) -> [ d ]
         | _ -> []
-
-    // local variables introduced by the output specification of a method
-    let outputDecls (o: OutputSpec) : LocalDecl list =
-        match o with
-        | OutputType _ -> []
-        | OutputDecls (ds, _) -> ds
 
     // name of the tester method generator for constructor with name s
     let testerName (s: string) = s + "?"
@@ -537,7 +531,7 @@ module YIL =
         else
             // TODO copy over lookup code from YuccaDafnyCompiler to look up in parent classes
             let parentDecl = lookupByPath (prog, path.parent)
-            let children = declChildren (parentDecl)
+            let children = parentDecl.children
 
             match List.tryFind (fun (x: Decl) -> x.name = path.name) children with
             | Some d -> d
@@ -554,6 +548,9 @@ module YIL =
         | _ -> error $"parent not a datatype: {path}"
 
 
+    /// used in Context to track where we are
+    /// adjust this if we ever need to track if we are in the final position of an expression
+    type ContextPosition = BodyPosition | OtherPosition
     (* ***** contexts: built during traversal and used for lookup of iCodeIdentifiers
 
        A Context stores an entire program plus information about where we are during its traversal:
@@ -563,22 +560,23 @@ module YIL =
          ["m", "d"]: in datatype d in module m
        - tpvars: type parameters of enclosing declarations (inner most last)
        - vars: local variables that have been declared (most recent last)
+       - inBody: defined if we are in the body of a method; true if in a return position
 
-       invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix of openDecls
+       invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
     *)
-    type Context(prog: Program, currentDecl: Path, tpvars: string list, vars: LocalDecl list) =
+    type Context(prog: Program, currentDecl: Path, tpvars: string list, vars: LocalDecl list, pos: ContextPosition) =
         // convenience constructor and accessor methods
-        new(p: Program) = Context(p, Path([]), [], [])
+        new(p: Program) = Context(p, Path([]), [], [], OtherPosition)
         member this.prog = prog
         member this.currentDecl = currentDecl
         member this.tpvars = tpvars
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
+        member this.pos = pos
 
-        (* lookup of a type variable by name
-           precondition: name must exist in the current context
-           (which it always does for names encountered while traversing well-typed programs)
-        *)
+        /// lookup of a type variable by name
+        /// precondition: name must exist in the current context
+        /// (which it always does for names encountered while traversing well-typed programs)
         member this.lookupTpvar(n: string) =
             let dO =
                 List.tryFind (fun x -> x = n) (List.rev tpvars)
@@ -586,10 +584,9 @@ module YIL =
             match dO with
             | None -> error $"type variable {n} not visible {this}"
             | Some t -> t
-        (* lookup of a local variable declaration by name
-           precondition: name must exist in the current context
-           (which it always does for names encountered while traversing well-typed programs)
-        *)
+        /// lookup of a local variable declaration by name
+        /// precondition: name must exist in the current context
+        /// (which it always does for names encountered while traversing well-typed programs)
         member this.lookupLocalDecl(n: string) : LocalDecl =
             match this.lookupLocalDeclO (n) with
             | None ->
@@ -600,7 +597,7 @@ module YIL =
         member this.lookupLocalDeclO(n: string) : LocalDecl option =
             List.tryFind (fun (x: LocalDecl) -> x.name = n) (List.rev vars)
 
-        // short string rendering
+        /// short string rendering
         override this.ToString() =
             "in declaration "
             + currentDecl.ToString()
@@ -612,17 +609,21 @@ module YIL =
             + " and variables "
             + listToString (List.map localDeclName vars, ", ")
 
-        // convenience method for creating a new context when traversing into a child declaration
+        /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
-            Context(prog, currentDecl.child (n), tpvars, vars)
-        // convenience method for adding variable declarations to the context
+            Context(prog, currentDecl.child (n), tpvars, vars, pos)
+        /// convenience method for adding variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars ns, vars)
+            Context(prog, currentDecl, List.append tpvars ns, vars, pos)
 
         member this.add(ds: LocalDecl list) : Context =
-            Context(prog, currentDecl, tpvars, List.append vars ds)
+            Context(prog, currentDecl, tpvars, List.append vars ds, pos)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
+
+        /// remembers where we are
+        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p)
+        member this.enterBody() = this.setPos(BodyPosition)
 
     (* ***** printer for the language above
 
@@ -709,12 +710,13 @@ module YIL =
                 + (if isL then "" else ":" + outsS)
                 + "\n"
                 + Option.fold (fun _ -> this.expr) "{}" (Option.map block b)
-            | ClassConstructor (n, tpvs, ins, b, a) ->
+            | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
                 + n
                 + (this.tpvars tpvs)
-                + (this.localDecls ins)
+                + (this.inputSpec ins)
+                + (this.conditions(false, outs))
                 + "\n"
                 + Option.fold (fun _ -> this.expr) "{}" b
             | Export p -> "export " + p.ToString()

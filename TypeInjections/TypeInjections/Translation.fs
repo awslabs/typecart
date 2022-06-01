@@ -13,55 +13,50 @@ module DafnyFunctions =
     /// maps f over an array a
     let arrayMap a f = EUnimplemented
 
+open DafnyFunctions
+
 // variable naming conventions:
 //  xD: diff between two x's
 //  xT: translation of x
 
 /// takes a diff between two YIL objects and returns the translation declarations/objects for it
 module Translation =
-    open DafnyFunctions
-
-    let unsupported s = "unsupported: " + s
-
-    let rec prog (p: Program, pD: Diff.Program) : Program =
-        let context = Context(p)
-
-        match pD.decls with
-        | Diff.SameList l -> { name = "Combine"; decls = decls context (Diff.SameList l) }
-        | Diff.UpdateList l ->
-            { name = "Combine"
-              decls = List.collect (fun d -> decl context d) l }
-
+  let unsupported s = "unsupported: " + s
+  
+  /// translates a program, encapsulates global data/state for use during translation
+  type Translator(prog: Program, progD: Diff.Program, jointDecls: Path list) =
     /// convenience for iteration over a list of declarations
-    and decls (context: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
-        match dsD with
-        | Diff.SameList l -> List.collect (fun e -> decl context (Diff.Same e)) l
-        | Diff.UpdateList ds -> List.collect (decl context) ds
+    let rec decls (context: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
+        List.collect (decl context) dsD.elements
 
     /// translates one declaration
     and decl (context: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
         match dD with
-        | Diff.Same d -> declSame (context, d)
-        | _ -> failwith (unsupported "change in declaration")
+        | Diff.Same d -> declSame context d
+        | Diff.Add _
+        | Diff.Delete _ -> []  // nothing to generate for added/deleted declarations
+        | Diff.Update(dif) -> declUpdate context dif
 
-    /// convenience for a list of unchanged declarations
-    and declsSame (context: Context) (ds: Decl list) =
-        List.collect (fun e -> decl context (Diff.Same e)) ds
     /// translates an unchanged declaration
-    and declSame (context: Context, d: Decl) : Decl list =
+    and declSame (context: Context)(d: Decl) : Decl list =
         let p = context.currentDecl.child (d.name)
         let pO, pN, pT = path (p)
         let contextInner = context.enter(d.name)
 
         match d with
-        | Module (n, ms, _) ->
-            let msT = declsSame contextInner ms
-            [ Module(n, msT, emptyMeta) ]
+        | Module _
+        | Datatype _ ->
+            // these can be treated as special of changed declarations that happen not to have changes
+            declUpdate context (Diff.idDecl d)
         | Class _
-        | ClassConstructor _ -> failwith (unsupported "classes")
-        | Export _ -> [ d ] // check if this makes sense
-        | DUnimplemented -> [ DUnimplemented ]
+        | ClassConstructor _ ->
+            // these are not supported yet
+            failwith (unsupported "classes")
+        | Export _ -> [d] // TODO check
+        | DUnimplemented -> [DUnimplemented]
+        // the declarations where we actually do something special
         | TypeDef (_, _, super, _, isNew, _) ->
+            // TypeDefs produce methods
             let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, d)
             let xO = localDeclTerm xtO
             let xN = localDeclTerm xtN
@@ -76,47 +71,6 @@ module Translation =
                     superT (xO, xN)
 
             [ Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta) ]
-        | Datatype (_, _, ctrs, ms, _) ->
-            // datatype p.name<u,v> = con1(a,u) | con2(b,v) --->
-            // datatype pO<uO,vO> = con1(aO,uO) | con2(bO,vO)
-            // datatype pN<uN,vN> = con1(aN,uN) | con2(bN,vN)
-            // function pT<uO,uN,vO,vN>(uT:uO*uN->bool, vT:vO*vN->bool, xO:pO(uO,vO), xN:pN(uN,vN)) = match xO,xN
-            //   | con1(x1,x2), con1(y1,y2) => aT(x1,y1) && uT(x2,y2)
-            //   | con2(x1,x2), con2(y1,y2) => bT(x1,y1) && vT(x2,y2)
-            //   | _ -> false
-            // and accordingly for the general case.
-            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, d)
-
-            let mkCase ctr =
-                let insO, insN, insT =
-                    List.unzip3 (List.map localDecl ctr.ins)
-
-                let argsO = List.map localDeclTerm insO
-                let argsN = List.map localDeclTerm insN
-                let cn = ctr.name
-
-                let patO =
-                    EConstructorApply(pO.child (cn), [], argsO) // type parameters do not matter in a pattern
-
-                let patN =
-                    EConstructorApply(pN.child (cn), [], argsN)
-
-                { vars = Utils.listInterleave (insO, insN)
-                  pattern = ETuple([ patO; patN ])
-                  body = EConj(insT) }
-
-            let dflt = EBool false
-            let xO, xN = localDeclTerm xtO, localDeclTerm xtN
-            let tO, tN = localDeclType xtO, localDeclType xtN
-
-            let body =
-                EMatch(ETuple [ xO; xN ], TTuple [ tO; tN ], List.map mkCase ctrs, Some dflt)
-
-            let relation =
-                Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
-
-            let memberLemmas = declsSame contextInner ms
-            relation :: memberLemmas
         // methods produce lemmas; lemmas produce nothing
         | Method(isLemma = true) -> []
         | Method (_, _, tvs, ins, outs, bodyO, _, isStatic, _) ->
@@ -142,7 +96,7 @@ module Translation =
                     List.unzip3 (List.map typearg parentTvs)
 
             let oldInstDecl, newInstDecl, instancesRelated =
-                localDecl (LocalDecl(varname parentDecl, TApply(context.currentDecl, List.map TVar parentTvs), false))
+                localDecl (LocalDecl(varname parentDecl.name, TApply(context.currentDecl, List.map TVar parentTvs), false))
 
             let instanceInputs =
                 if isStatic then
@@ -231,14 +185,83 @@ module Translation =
                   emptyMeta
               ) ]
 
-    /// joint code for type declarations
-    and typeDeclHeader (p: Path, d: Decl) =
-        let pO, pN, pT = path (p)
-        let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg d.tpvars)
+    /// translates a changed declaration
+    and declUpdate (context: Context)(dif: Diff.Decl) : Decl list =
+        let n = match dif.name with
+                | Diff.SameName n -> n
+                | Diff.Rename _ -> failwith (unsupported "renamed declaration")
+        let p = context.currentDecl.child(n)
+        let pO, pN, pT = path p
+        let ctxI = context.enter(n)
+        match dif with
+        | Diff.Class _
+        | Diff.ClassConstructor _ -> failwith (unsupported "change in classes")
+        | Diff.TypeDef _
+        | Diff.Method _
+        | Diff.Field _
+        | Diff.Export _
+        | Diff.DUnimplemented -> failwith(unsupported "change in atomic declaration")
+        | Diff.Module (_, msD) ->
+            [ Module(n, decls ctxI msD, emptyMeta) ]
+        | Diff.Datatype (_, tvsD, ctrsD, msD) ->
+            if not tvsD.isSame then
+                failwith (unsupported "change in type parameters")
+            let tvs = tvsD.getSame
+            // datatype p.name<u,v> = con1(a,u) | con2(b,v) --->
+            // datatype pO<uO,vO> = con1(aO,uO) | con2(bO,vO)
+            // datatype pN<uN,vN> = con1(aN,uN) | con2(bN,vN)
+            // function pT<uO,uN,vO,vN>(uT:uO*uN->bool, vT:vO*vN->bool, xO:pO(uO,vO), xN:pN(uN,vN)) = match xO,xN
+            //   | con1(x1,x2), con1(y1,y2) => aT(x1,y1) && uT(x2,y2)
+            //   | con2(x1,x2), con2(y1,y2) => bT(x1,y1) && vT(x2,y2)
+            //   | _ -> false
+            // and accordingly for the general case.
+            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
+
+            let mkCase ctrD =
+                match ctrD with
+                | Diff.Add _
+                | Diff.Delete _ -> [] // no cases to generate
+                | Diff.Update ctrU -> failwith(unsupported "change in constructor")
+                | Diff.Same ctr ->
+                    let insO, insN, insT =
+                        List.unzip3 (List.map localDecl ctr.ins)
+
+                    let argsO = List.map localDeclTerm insO
+                    let argsN = List.map localDeclTerm insN
+                    let cn = ctr.name
+
+                    let patO =
+                        EConstructorApply(pO.child (cn), [], argsO) // type parameters do not matter in a pattern
+
+                    let patN =
+                        EConstructorApply(pN.child (cn), [], argsN)
+
+                    [{ vars = Utils.listInterleave (insO, insN)
+                       pattern = ETuple([ patO; patN ])
+                       body = EConj(insT) }]
+
+            let dflt = EBool false
+            let xO, xN = localDeclTerm xtO, localDeclTerm xtN
+            let tO, tN = localDeclType xtO, localDeclType xtN
+
+            let body =
+                EMatch(ETuple [ xO; xN ], TTuple [ tO; tN ], List.collect mkCase ctrsD.elements, Some dflt)
+
+            let relation =
+                Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+
+            let memberLemmas = decls ctxI msD
+            relation :: memberLemmas
+
+    // joint code for type declarations
+    and typeDeclHeader(p: Path, d: Decl) = typeDeclHeaderMain(p, d.name, d.tpvars) 
+    and typeDeclHeaderMain(p: Path, n:string, tvs: TypeArg list) =
+        let pO, pN, pT = path p
+        let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg tvs)
         let typeParams = Utils.listInterleave (tvsO, tvsN)
         let oldType = TApply(pO, List.map TVar tvsO)
         let newType = TApply(pN, List.map TVar tvsN)
-        let xO, xN, _ = name (varname d)
+        let xO, xN, _ = name (varname n)
         let xtO = LocalDecl(xO, oldType, false)
         let xtN = LocalDecl(xN, newType, false)
         let inputs = tvsT @ [ xtO; xtN ]
@@ -253,27 +276,33 @@ module Translation =
     /// which cannot alternate in a Dafny context.
     /// Therefore, we translate them at once using multiple outputs.
     and context (tpDs: Diff.TypeArgList, ldDs: Diff.LocalDeclList) : TypeArg list * LocalDecl list * Condition list =
-        match tpDs, ldDs with
-        | Diff.SameList tps, Diff.SameList lds ->
+        if tpDs.isSame && ldDs.isSame then
+            let tps = tpDs.getSame
+            let lds = ldDs.getSame
             let tpsO, tpsN, tpsT = List.unzip3 (List.map typearg tps)
             let ldsO, ldsN, ldsT = List.unzip3 (List.map localDecl lds)
             Utils.listInterleave (tpsO, tpsN), tpsT @ Utils.listInterleave (ldsO, ldsN), ldsT
-        | _ -> failwith (unsupported "change in type/term arguments")
-
-    /// suggests a name for a variable of the type defined by a declaration
-    and varname (d: Decl) = d.name.Chars(0).ToString()
+        else
+            failwith (unsupported "change in type/term arguments")
 
     /// old, new, and combine path for a path
     // This is the only place that uses the literal prefix strings.
     and path (p: Path) : Path * Path * Path =
         let prefixRoot (p: Path) (s: string) =
             Path((s + "." + p.names.Head) :: p.names.Tail)
+        // joint decls are the same in old and new version
+        // the combine declaration is still generated because e.g., a joint type can be called with non-joint type parameters
+        if List.exists (fun (j:Path) -> j.isAncestorOf p) jointDecls then
+           (prefixRoot p "Joint", prefixRoot p "Joint", prefixRoot p "Combine")
+        else
+           (prefixRoot p "Old", prefixRoot p "New", prefixRoot p "Combine")
 
-        (prefixRoot p "Old", prefixRoot p "New", prefixRoot p "Combine")
+    /// suggests a name for a variable of the type defined by a declaration name
+    and varname (n:string) = n.Chars(0).ToString()
 
     /// s ---> s_old, s_new, s
     // This is the only place that uses the literal names.
-    and name (s: string) = s + "_old", s + "_new", s
+    and name (s: string) = "old_" + s, "new_" + s, s
 
     /// a --->  a_old, a_new, a: a_old * a_new -> bool
     and typearg (a: TypeArg) : TypeArg * TypeArg * LocalDecl =
@@ -403,3 +432,27 @@ module Translation =
     /// But we probably have to return the instances of the lemmas generated by the methods used in e.
     /// For now, we return None so that we can call the function already.
     and expr (e: Expr) : Expr * Expr * (Expr option) = EUnimplemented, EUnimplemented, None
+
+    member this.doProg() = decls (Context prog) progD.decls
+    
+  /// entry point to call the translator on a program
+  /// the resulting program consists of 4 parts
+  /// Joint.X ---> Old.X
+  ///  |            |
+  ///  V            V
+  /// New.X  ---> Combine.X
+  /// where X is the name of a module of the original program
+  /// This method generates the Combine-part and returns the set of joint declarations of Old and New.
+  /// A subsequent step is expected to copy the old and new program and prefix the names in all toplevel
+  /// declarations with "Joint.", "New.", resp. "Old.".
+  let prog (p: Program, pD: Diff.Program) : Program * Path list =
+    let ctx = Context(p)
+    let pathOf(d: Decl) = ctx.currentDecl.child(d.name)
+    let childPaths = List.map pathOf p.decls
+    let sameChildren = List.map pathOf pD.decls.getSame
+    let changedChildren = Utils.listDiff(childPaths, sameChildren)
+    let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren)
+    // greatest self-contained set of unchanged declarations
+    let jointPaths = Utils.listDiff(childPaths, changedClosed)
+    let tr = Translator(p,pD,jointPaths)
+    { name = p.name; decls = tr.doProg()}, jointPaths

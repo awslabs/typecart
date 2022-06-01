@@ -85,6 +85,9 @@ module Program =
         log ("***** ... the new one ")
         let newYIL = DafnyToYIL.program newDafny
 
+        // tests the transformation code
+        Traverser.test(oldYIL)
+        
         // diff the programs
         log "***** diffing the two programs"
         let diff = Differ.prog (oldYIL, newYIL)
@@ -93,18 +96,21 @@ module Program =
         
         // generate translation
         log "***** generating compatibility code"
-        let trans = Translation.prog(oldYIL, diff)
-        let transS = YIL.printer().prog(trans)
+        let combine,joint = Translation.prog(oldYIL, diff)
+        let transS = YIL.printer().prog(combine)
         Console.WriteLine transS
 
         // write output files
         log "***** writing output files"
-        let writeOut fileName prog =
+        let writeOut fileName (prog:YIL.Program) (only: string -> bool) =
             let f = IO.Path.Combine(outFolder, fileName)
             IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f)) |> ignore
-            let s = YIL.printer().prog(prog)
+            let progF = {YIL.name = prog.name; YIL.decls = List.filter (fun (d:YIL.Decl) -> only d.name) prog.decls}
+            let s = YIL.printer().prog(progF)
             IO.File.WriteAllText(f, s)
-        writeOut "old.dfy" oldYIL
-        writeOut "new.dfy" newYIL
-        writeOut "compat.dfy" trans
+        let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
+        writeOut "joint.dfy" oldYIL  (fun s -> List.contains s jointNames)
+        writeOut "old.dfy" oldYIL (fun s -> not (List.contains s jointNames))
+        writeOut "new.dfy" newYIL (fun s -> not (List.contains s jointNames))
+        writeOut "combine.dfy" combine (fun s -> true)
         0
