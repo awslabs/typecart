@@ -35,6 +35,9 @@ module Utils =
     /// l without m
     let listDiff<'a when 'a: equality> (l: 'a list, m: 'a list) =
         List.filter (fun x -> not (List.contains x m)) l
+    /// l and m are disjoint
+    let listDisjoint<'a when 'a: equality> (l: 'a list, m: 'a list) =
+        listDiff(l,m) = l
     /// number of occurrences of a value in a list
     let listCount<'a when 'a: equality> (l: 'a list, x: 'a) = (List.filter (fun u -> u = x) l).Length
     /// list as string with given separator

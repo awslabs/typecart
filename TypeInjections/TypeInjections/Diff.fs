@@ -37,11 +37,17 @@ module Diff =
         | Same of 'y
         | Add of 'y
         | Delete of 'y
-        | Update of 'd
+        | Update of 'y * 'd
         member this.isSame =
             match this with
             | Same _ -> true
             | _ -> false
+        member this.yil =
+            match this with
+            | Same y
+            | Add y
+            | Delete y
+            | Update (y,_) -> y
 
     type Name =
         | SameName of string
@@ -100,12 +106,14 @@ module Diff =
     and InputSpec =
         | SameInputSpec of Y.InputSpec
         | InputSpec of LocalDeclList * ConditionList
+        member this.isSame = match this with SameInputSpec _ -> true | _ -> false
 
     // change between output type and output decls is an add-delete
     and OutputSpec =
         | SameOutputSpec of Y.OutputSpec
         | OutputType of Type * ConditionList
         | OutputDecls of LocalDeclList * ConditionList
+        member this.isSame = match this with SameOutputSpec _ -> true | _ -> false
 
     /// change to an optional expression
     and ExprO =
@@ -113,11 +121,13 @@ module Diff =
         | AddExpr of Y.Expr
         | UpdateExpr of Y.Expr
         | DeleteExpr of Y.Expr
+        member this.isSame = match this with SameExprO _ -> true | _ -> false
 
     /// change to a type
     and Type =
         | SameType of Y.Type
         | UpdateType of Y.Type
+        member this.isSame = match this with SameType _ -> true | _ -> false
 
     // the identity diff of an object (occurrences of SameX are pushed one level down)
     let rec idDecl(d: YIL.Decl) =
@@ -191,7 +201,7 @@ module Diff =
             | Same y -> UNC + " " + py y
             | Add y -> ADD + " " + py y
             | Delete y -> DEL + " " + py y
-            | Update y -> UPD + " " + pd y
+            | Update (_,y) -> UPD + " " + pd y
 
         member this.prog(p: Program) = this.decls p.decls
 
@@ -295,10 +305,10 @@ module Diff =
 
         member this.exprO(eO: ExprO) =
             match eO with
-            | SameExprO e -> UNC + (YIL.printer().exprO (e, ""))
-            | UpdateExpr e -> UPD + (YIL.printer().expr e)
+            | SameExprO e -> UNC + (YIL.printer().exprO false (e, ""))
+            | UpdateExpr e -> UPD + (YIL.printer().expr false e)
             | DeleteExpr _ -> DEL
-            | AddExpr e -> ADD + (YIL.printer().expr e)
+            | AddExpr e -> ADD + (YIL.printer().expr false e)
 
         member this.localDecls(lds: LocalDeclList) =
             this.List(lds, P().localDecl, this.localDecl, "(", ", ", ")")

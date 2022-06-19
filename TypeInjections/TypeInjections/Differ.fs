@@ -8,12 +8,7 @@ module Differ =
     /// similar(o,n) = true iff n != o but n is updated version of o
     /// diff(o,n): if similar(o,n) produce Some(diff o n), unspecified otherwise
     let rec complexSet<'y, 'd when 'y: equality>
-        (
-            old: 'y list,
-            nw: 'y list,
-            similar: 'y * 'y -> bool,
-            diff: 'y * 'y -> 'd option
-        ) : Diff.List<'y, 'd> =
+        (old: 'y list, nw: 'y list, similar: 'y * 'y -> bool, diff: 'y * 'y -> 'd option) : Diff.List<'y, 'd> =
         let mutable nwDiffed : 'y list = []
 
         let diffOne o =
@@ -25,13 +20,11 @@ module Differ =
                 | Some n ->
                     nwDiffed <- n :: nwDiffed
                     let d = Option.get (diff (o, n)) // succeeds by precondition
-                    Diff.Update d
+                    Diff.Update (o,d)
                 | None -> Diff.Delete o
-
         let changed = List.map diffOne old
         // append Add for the elements of nw that have not been used by diffOne
-        let diff =
-            changed @ (List.map Diff.Add (Utils.listDiff (nw, nwDiffed)))
+        let diff = changed @ (List.map Diff.Add (Utils.listDiff (nw, nwDiffed)))
         Diff.UpdateList(diff)
         
     /// compares two sets (given as sets)
@@ -68,7 +61,7 @@ module Differ =
                     // the diff between the two similar elements
                     let d = Option.get (diff (o, n)) // succeeds by precondition
                     // now o = n
-                    (List.map Diff.Add added) @ [ Diff.Update d ]
+                    (List.map Diff.Add added) @ [ Diff.Update (o,d) ]
                 | None ->
                     // no similar elements occurs later, assume deleted
                     [ Diff.Delete o ]

@@ -45,6 +45,27 @@ module YIL =
 
         override this.ToString() = listToString (this.names, ".")
 
+    // meta-information
+    type Meta =
+         { comment: string option; position: Position option }
+    // position in a source file, essentially the same as Microsoft.Boogie.IToken
+    and [<CustomEquality;NoComparison>] Position =
+        { filename: String
+          pos: int
+          line: int
+          col: int }
+        override this.ToString() =
+            $"{this.filename}@{this.line.ToString()}:{this.col.ToString()}"
+        override this.GetHashCode() = 0
+        // we make all Position objects equal so that they are ignored during diffing
+        override this.Equals(that: Object) =
+            match that with
+            | :? Position -> true
+            | _ -> false
+
+    // ***** auxiliary methods
+    let emptyMeta = { comment = None; position = None }
+
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
 
@@ -137,7 +158,7 @@ module YIL =
             | Method (_, _, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
             | TypeDef (_, _, _, _, _, meta) -> meta
-            | _ -> { position = None }
+            | _ -> emptyMeta
 
         member this.name =
             match this with
@@ -199,11 +220,10 @@ module YIL =
         // dummy for missing cases
         | TUnimplemented
         override this.ToString() =
-            let tps (ts: Type list) =
-                if ts.IsEmpty then
-                    ""
-                else
-                    "[" + listToString (ts, ",") + "]"
+            let tps(ts: Type list) =
+                if ts.IsEmpty then "" else "<" + listToString (ts, ",") + ">"
+            let product(ts: Type list) =
+                if ts.Length = 1 then ts.Head.ToString() else "(" + listToString (ts, ",") + ")"
 
             match this with
             | TUnit -> "unit"
@@ -216,8 +236,8 @@ module YIL =
             | TBitVector (w) -> "bv" + w.ToString()
             | TVar (n) -> n
             | TApply (op, args) -> op.name + (tps args)
-            | TTuple (ts) -> tps ts
-            | TFun (ins, out) -> (tps ins) + "=>" + (out.ToString())
+            | TTuple (ts) -> product ts
+            | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
             | TSeq (t) -> "seq" + (tps [ t ])
             | TSet (t) -> "set" + (tps [ t ])
             | TMap (d, r) -> "map" + (tps [ d; r ])
@@ -257,10 +277,7 @@ module YIL =
        constructor of the datatype being matched on and the x1 are the local decls.
        But we might generate more general constructors.
      *)
-    and Case =
-        { vars: LocalDecl list
-          pattern: Expr
-          body: Expr }
+    and Case = { vars: LocalDecl list; pattern: Expr; body: Expr }
 
     and InputSpec =
        | InputSpec of LocalDecl list * Condition list
@@ -273,7 +290,7 @@ module YIL =
         // case with multiple named outputs; empty list never seems to occur in Dafny
         | OutputDecls of LocalDecl list * Condition list
         member this.outputDecls : LocalDecl list =
-            match this  with
+            match this with
             | OutputType _ -> []
             | OutputDecls (ds, _) -> ds
 
@@ -375,6 +392,7 @@ module YIL =
         *)
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
+        | ECommented of string * Expr
         // temporary dummy for missing cases
         | EUnimplemented
 
@@ -414,21 +432,8 @@ module YIL =
             | Forall -> "forall"
             | Exists -> "exists"
 
-    // meta-information
-    and Meta = { position: Position option }
-    // position in a source file, essentially the same as Microsoft.Boogie.IToken
-    and Position =
-        { filename: String
-          pos: int
-          line: int
-          col: int }
-        override this.ToString() =
-            $"{this.filename}@{this.line.ToString()}:{this.col.ToString()}"
-
-    // ***** auxiliary methods
-
-    let emptyMeta = { position = None }
-
+    // auxiliary methods
+    
     /// wrapping lists of expressions in a block
     let listToExpr (es: Expr list) : Expr =
         if es.Length = 1 then
@@ -456,7 +461,9 @@ module YIL =
             EBool true
         else
             List.fold (fun sofar next -> EBinOpApply("And", sofar, next)) es.Head es.Tail
-
+    /// the special variable _ (must only be used in patterns)
+    let EWildcard = EVar "_" 
+    
     // True if a datatype is simply an enum, i.e.,
     // it has more than one constructor---all without arguments, and no type parameters
     let isEnum (d: Decl) =
@@ -476,16 +483,14 @@ module YIL =
     /// makes pattern-match case c(x1,...,xn) => bd for a constructor c
     let plainCase (c: Path, lds: LocalDecl list, bd: Expr) : Case =
         /// type arguments are empty because there is no matching on types
-        let pat =
-            EConstructorApply(c, [], List.map localDeclTerm lds)
-
+        let pat = EConstructorApply(c, [], List.map localDeclTerm lds)
         { vars = lds; pattern = pat; body = bd }
-
+   
     // local variables introduced by an expression (relevant when extending the context during traversal)
     // also defines which variables are visible to later statements in the same block
     let exprDecl (e: Expr) : LocalDecl list =
         match e with
-        | EDecls (ds) -> List.map (fun (x, _) -> x) ds
+        | EDecls ds -> List.map (fun (x, _) -> x) ds
         | EDeclChoice (d, _) -> [ d ]
         | _ -> []
 
@@ -507,15 +512,10 @@ module YIL =
     let rec implicitChildren (d: Decl) : Decl list =
         let mkField (ld: LocalDecl) =
             Field(ld.name, ld.tp, None, ld.ghost, isStatic = false, isMutable = false, meta = emptyMeta)
-
         match d with
         | Datatype (_, _, cs, _, _) ->
-            let selectors =
-                List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
-
-            let testers =
-                List.map (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name, TBool, false)) cs
-
+            let selectors = List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
+            let testers = List.map (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name, TBool, false)) cs
             List.map mkField (List.append (List.distinct selectors) testers)
         | _ -> []
 
@@ -645,17 +645,19 @@ module YIL =
             if ns.IsEmpty then
                 ""
             else
-                "[" + listToString (ns, ", ") + "]"
+                "<" + listToString (ns, ", ") + ">"
 
         member this.declsGeneral(ds: Decl list, braced: Boolean) =
-                indented(listToString (List.map (fun d -> (this.decl d) + "\n") ds, ""), braced)
+                indented(listToString (List.map (fun d -> (this.decl d) + "\n\n") ds, ""), braced)
         member this.decls(ds: Decl list) =
                 this.declsGeneral(ds, true) 
         // array dimensions/indices
-        member this.dims(ds: Expr list) = "[" + this.exprsNoBr ds ", " + "]"
+        member this.dims(ds: Expr list) = "[" + this.exprsNoBr false ds ", " + "]"
         member this.meta(_: Meta) = ""
 
         member this.decl(d: Decl) =
+            let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""  
+            comm +
             match d with
             | Module (n, ds, a) ->
                 "module "
@@ -690,7 +692,7 @@ module YIL =
                 + " = "
                 + (this.tp sup)
                 + (match predO with
-                   | Some (x, p) -> " where " + x + "." + (this.expr p)
+                   | Some (x, p) -> " where " + x + "." + (this.expr false p)
                    | None -> "")
             | Field (n, t, e, _, _, _, a) ->
                 "field "
@@ -699,17 +701,21 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + " = "
-                + Option.fold (fun _ -> this.expr) "" e
+                + Option.fold (fun _ -> this.expr false) "" e
             | Method (isL, n, tpvs, ins, outs, b, _, _, _) ->
-                let outsS = this.outputSpec outs
-
+                let outputsS =
+                    match outs with
+                    | OutputDecls(ds,_) -> this.localDecls ds
+                    | OutputType(t,_) -> this.tp t
                 (if isL then "lemma " else "method ")
                 + n
                 + (this.tpvars tpvs)
-                + (this.inputSpec ins)
-                + (if isL then "" else ":" + outsS)
+                + (this.localDecls ins.decls)
+                + (if isL then "" else ":" + outputsS)
+                + (this.conditions(true, ins.conditions))
+                + (this.conditions(false, outs.conditions))
                 + "\n"
-                + Option.fold (fun _ -> this.expr) "{}" (Option.map block b)
+                + Option.fold (fun _ -> this.expr false) "{}" (Option.map block b)
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
@@ -718,7 +724,7 @@ module YIL =
                 + (this.inputSpec ins)
                 + (this.conditions(false, outs))
                 + "\n"
-                + Option.fold (fun _ -> this.expr) "{}" b
+                + Option.fold (fun _ -> this.expr false) "{}" b
             | Export p -> "export " + p.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
@@ -739,13 +745,8 @@ module YIL =
             if cs.IsEmpty then "" else indented(listToString (List.map (fun c -> this.condition (require, c)) cs, "\n"), false)
 
         member this.condition(require: bool, c: Condition) =
-            let kw =
-                if require then
-                    "requires"
-                else
-                    "ensures"
-
-            kw + " " + this.expr c
+            let kw = if require then "requires" else "ensures"
+            kw + " " + this.expr false c
 
         member this.datatypeConstructor(c: DatatypeConstructor) = c.name + (this.localDecls c.ins)
 
@@ -759,18 +760,18 @@ module YIL =
 
         member this.tp(t: Type) = t.ToString()
 
-        member this.exprsNoBr(es: Expr list)(sep: string) =
-            listToString (List.map this.expr es, sep)
+        member this.exprsNoBr(isPattern: bool)(es: Expr list)(sep: string) =
+            listToString (List.map (this.expr isPattern) es, sep)
 
-        member this.exprs(es: Expr list) = "(" + (this.exprsNoBr es ", ") + ")"
+        member this.exprs(isPattern: bool)(es: Expr list) = "(" + (this.exprsNoBr isPattern es ", ") + ")"
 
-        member this.exprO(eO: Expr option, sep: string) =
-            Option.defaultValue ("") (Option.map (fun e -> sep + (this.expr e)) eO)
+        member this.exprO(isPattern: bool)(eO: Expr option, sep: string) =
+            Option.defaultValue ("") (Option.map (fun e -> sep + (this.expr isPattern e)) eO)
 
-        member this.expr(e: Expr) =
-            let expr = this.expr
-            let exprs = this.exprs
-            let exprO = this.exprO
+        member this.expr(isPattern: bool)(e: Expr) =
+            let expr = this.expr(isPattern)
+            let exprs = this.exprs(isPattern)
+            let exprO = this.exprO(isPattern)
             let tp = this.tp
             let tps = this.tps
 
@@ -790,12 +791,12 @@ module YIL =
                 q.ToString()
                 + " "
                 + this.localDecls (lds)
-                + exprO (r, " where ")
-                + "."
+                + exprO (r, " :: ")
+                + (if q = Forall then "==>" else "&&")
                 + (expr b)
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
-            | EFun (vs, _, e) -> "fun " + (this.localDecls vs) + " => " + (expr e)
+            | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
             | ESet (_, es) -> "set" + (exprs es)
             | ECharAt (s, i) -> (expr s) + this.dims ([ i ])
             | EStringRange (s, f, t) ->
@@ -829,8 +830,11 @@ module YIL =
                 + m.name
                 + (tps ts)
                 + (exprs es)
-            | EConstructorApply (c, ts, es) -> c.ToString() + (tps ts) + (exprs es)
-            | EBlock (es) -> indentedBraced(this.exprsNoBr es ";\n")
+            | EConstructorApply (c, ts, es) ->
+                let cS = if isPattern then c.name else c.ToString()
+                cS + (tps ts) + (exprs es)
+            | EBlock es ->
+                indentedBraced(this.exprsNoBr false es ";\n")
             | ELet (n, t, d, e) ->
                 "let "
                 + n
@@ -863,7 +867,7 @@ module YIL =
                     | None -> ""
 
                 sprintf "%swhile (%s)%s" label (expr c) (expr e)
-            | EReturn (es) -> "return " + (this.exprsNoBr es ", ")
+            | EReturn (es) -> "return " + (this.exprsNoBr false es ", ")
             | EBreak l ->
                 let label =
                     match l with
@@ -872,16 +876,15 @@ module YIL =
 
                 sprintf "break%s" label
             | EMatch (e, t, cases, dfltO) ->
-                let csS =
-                    List.map (fun (c: Case) -> this.case c) cases
-                let dS =
+                let defCase =
                     match dfltO with
-                    | Some d -> [ "case _ => " + expr d ]
                     | None -> []
-
+                    | Some e -> [{vars = []; pattern = EWildcard; body = e}] // case _ => e
+                let csS =
+                    List.map (fun (c: Case) -> this.case c) (cases @ defCase)
                 "match "
                 + (expr e)
-                + indentedBraced(listToString(csS @ dS, "\n"))
+                + indentedBraced(listToString(csS, "\n"))
             | EDecls (ds) ->
                 let doOne (ld: LocalDecl, uO: UpdateRHS option) =
                     "var "
@@ -895,9 +898,10 @@ module YIL =
                 + (this.localDecl ld)
                 + " where "
                 + (expr e)
-            | EUnimplemented -> UNIMPLEMENTED
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
+            | ECommented(s,e) -> "/* " + s + " */ " + expr e 
+            | EUnimplemented -> UNIMPLEMENTED
 
         member this.operator(op: string) =
             match op with
@@ -913,7 +917,7 @@ module YIL =
 
         member this.update(u: UpdateRHS) =
             let op = if u.monadic.IsSome then ":-" else ":="
-            " " + op + " " + (this.expr u.df)
+            " " + op + " " + (this.expr false u.df)
 
         member this.localDecl(ld: LocalDecl) = ld.name + ": " + (this.tp ld.tp)
 
@@ -923,12 +927,12 @@ module YIL =
         member this.receiver(rcv: Receiver) =
             match rcv with
             | StaticReceiver (ct) -> this.classType (ct)
-            | ObjectReceiver (e) -> this.expr e
+            | ObjectReceiver (e) -> this.expr false e
 
         member this.case(case: Case) =
-            "case " + this.expr case.pattern
+            "case " + this.expr true case.pattern
             + " => "
-            + indented(this.expr case.body, false)
+            + indented(this.expr false case.body, false)
 
     // shortcut to create a fresh printer
     let printer () = Printer()

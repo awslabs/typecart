@@ -213,6 +213,7 @@ module Traverser =
                     EDeclChoice (this.localDecl (ctx, ld), eT)
                 | ENull(t) -> ENull(rcT t)
                 | EPrint es -> EPrint (rcEs es)
+                | ECommented(s,e) -> ECommented(s, rcE e)
                 | EUnimplemented _ -> expr
 
         // methods for auxiliary types
@@ -335,8 +336,7 @@ module Traverser =
             | _ -> ()
             base.exprDefault (ctx, e)
 
-
-    (* transformation for performing a type substitution; this should only be applied to types *)
+    (* transformation for performing a type substitution; this should only be applied to types or expressions *)
     type SubstituteTypes(subs: (string * Type) list) =
         inherit Identity()
 
@@ -354,7 +354,39 @@ module Traverser =
     let substituteTypes (ctx: Context, subs: (string * Type) list, t: Type) : Type =
         let sub = SubstituteTypes(subs)
         sub.tp (ctx, t)
+    /// substitution for type variables in an expression
+    let substituteTypesInExpr (ctx: Context, subs: (string * Type) list, e: Expr) : Expr =
+        let sub = SubstituteTypes(subs)
+        sub.expr (ctx, e)
 
+    (* transformation for performing an expression substitution; this should only be applied to expressions *)
+    type SubstituteExprs(fromCtx: Context, toCtx: Context, subs: (string * Expr) list) =
+        inherit Identity()
+
+        override this.expr(ctx: Context, e: Expr) =
+            match e with
+            | EVar n ->
+                // the initial context is passed to the traverser, and traversal starts with the empty context
+                // thus, any names in the traversal context were bound during traversal and are not substituted
+                // other names must have been declared in the initial context and are substituted
+                if ctx.lookupLocalDeclO(n).IsSome then
+                    e
+                else
+                    let eO = List.tryFind (fun x -> fst x = n) subs
+                    match eO with
+                    | None -> e // we allow substitutions to be partial
+                    | Some (_, s) ->
+                        if Utils.listDisjoint(List.map localDeclName toCtx.vars, List.map localDeclName ctx.vars) then
+                            s
+                        else
+                            // capture-avoidance should be when/if practical inputs need it
+                            failwith("implementation limitation: possible variable capture")
+            | _ -> this.exprDefault (ctx, e)
+
+    /// substitution for expression variables
+    let substituteExprs (f: Context, t: Context, subs: (string * Expr) list, e: Expr) : Expr =
+        let sub = SubstituteExprs(f,t, subs)
+        sub.expr (Context(f.prog), e)
 
     /// test the traverser class by running a deep identity transformation on a program
     let test(p: Program) =
