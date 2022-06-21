@@ -95,11 +95,10 @@ module Traverser =
                 let insT = this.inputSpec(ctxTps, ins)
                 let ctxIns = ctxTps.add(ins.decls)
                 let outsT =
-                    let csT = this.conditionList(ctxIns, outs.conditions)
                     match outs with
-                    | OutputType(t,_) -> OutputType(this.tp (ctxIns, t), csT)
-                    | OutputDecls(ds,_) -> OutputDecls(this.localDeclList(ctxIns, ds), csT)
-                let bodyCtx = (ctxIns.add outs.outputDecls).enterBody()
+                    | OutputSpec(ds,cs) -> OutputSpec(this.localDeclList(ctxIns, ds),
+                                                      this.conditionList(ctxIns, cs))
+                let bodyCtx = (ctxIns.add outs.namedDecls).enterBody()
                 let bT = Option.map (fun b -> this.expr (bodyCtx, b)) b
                 [ Method(isL, n, tpvs, insT, outsT, bT, isG, isS, m) ]
             | ClassConstructor (n, tpvs, ins, outs, b, m) ->

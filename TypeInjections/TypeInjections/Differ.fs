@@ -127,7 +127,7 @@ module Differ =
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) when gO = gN && sO = sN && mO = mN ->
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
         | Method (lO, nO, tsO, iO, oO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, bN, gN, sN, _) when
-            lO = lN && gO = gN && sO = sN && outputSpecSimilar(oO,oN)->
+            lO = lN && gO = gN && sO = sN ->
             Some(
                 Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec(iO, iN), outputSpec (oO, oN), exprO (bO, bN))
             )
@@ -177,27 +177,16 @@ module Differ =
     /// diffs two input specifications
     and inputSpec (old: InputSpec, nw: InputSpec) =
         match old, nw with
-        | o, n when o = n -> Diff.SameInputSpec o
         | InputSpec (ldsO, reqsO), InputSpec (ldsN, reqsN) ->
             Diff.InputSpec(localDecls (ldsO, ldsN), conditions (reqsO, reqsN))
 
     /// diffs two output specifications
     and outputSpec (old: OutputSpec, nw: OutputSpec) =
-        let cs =
-            conditions (old.conditions, nw.conditions)
-
+        let cs = conditions (old.conditions, nw.conditions)
         match old, nw with
-        | o, n when o = n -> Diff.SameOutputSpec o
-        | OutputType(o,_), OutputType (n, _) -> Diff.OutputType(tp(o,n), cs)
-        | OutputDecls (o, _), OutputDecls (n, _) -> Diff.OutputDecls(localDecls (o, n), cs)
-        | _ -> failwith("unsupported change between method output kinds")
-    and outputSpecSimilar(o,n) =
-        match o,n with
-        | OutputType _, OutputType _ -> true
-        | OutputDecls _, OutputDecls _ -> true
-        | _ -> false
-    
-    
+        | OutputSpec (ldsO, reqsO), OutputSpec (ldsN, reqsN) ->
+            Diff.OutputSpec(localDecls (ldsO, ldsN), conditions (reqsO, reqsN))
+
     /// diffs two optional expressions, no recursion: expressions are either equal or not
     and exprO (old: Expr option, nw: Expr option) =
         match old, nw with

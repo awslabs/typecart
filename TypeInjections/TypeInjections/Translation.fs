@@ -82,75 +82,15 @@ module Translation =
     /// translates one declaration
     and decl (context: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
         match dD with
-        | Diff.Same d -> declSame context d
+        | Diff.Same d -> declSameOrUpdate context d (Diff.idDecl d)
         | Diff.Add _
         | Diff.Delete _ -> []  // nothing to generate for added/deleted declarations
-        | Diff.Update(d,df) -> declUpdate context d df
+        | Diff.Update(d,df) -> declSameOrUpdate context d df
 
-    /// translates an unchanged declaration
-    and declSame (context: Context)(d: Decl) : Decl list =
-        let p = context.currentDecl.child (d.name)
-        let pO, pN, pT = path (p)
-
-        match d with
-        | Module _
-        | Datatype _
-        | Method _ ->
-            // these can be treated as special cases of changed declarations that happen to have no changes
-            declUpdate context d (Diff.idDecl d)
-        | Class _
-        | ClassConstructor _ ->
-            // these are not supported yet
-            failwith (unsupported "classes")
-        | Export _ -> [d] // TODO check
-        | DUnimplemented -> [DUnimplemented]
-        // the declarations where we actually do something special
-        | TypeDef (_, _, super, _, isNew, _) ->
-            // TypeDefs produce methods
-            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, d)
-            let xO = localDeclTerm xtO
-            let xN = localDeclTerm xtN
-
-            let body =
-                if isNew then
-                    // new types are new primitive types, so return diagonal relation
-                    EEqual(xO, xN)
-                else
-                    // otherwise, call relation of supertype
-                    let _, _, superT = tp super
-                    superT (xO, xN)
-
-            [ Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta) ]
-            // immutable fields with initializer yield a lemma, mutable fields yield nothing
-        | Field (_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
-        | Field (_, t, _, _, _, _, _) ->
-            let tO, tN, tT = tp t
-
-            let recO, recN =
-                let parentO, parentN, _ = path (context.currentDecl)
-
-                let sr p =
-                    StaticReceiver({ path = p; tpargs = [] })
-
-                sr parentO, sr parentN
-
-            let fieldsRelated =
-                tT (EMemberRef(recO, pO, []), EMemberRef(recN, pN, []))
-
-            [ Method(
-                  true,
-                  pT.name,
-                  [],
-                  InputSpec([], []),
-                  OutputDecls([], [ fieldsRelated ]),
-                  None,
-                  true,
-                  true,
-                  emptyMeta
-              ) ]
-
-    /// translates a changed declaration
-    and declUpdate (context: Context)(decl: Decl)(dif: Diff.Decl) : Decl list =
+    /// translates a possibly changed declaration
+    // The treatment of unchanged and changed declarations often shares so much code that it is easier
+    // to handle both in the same method.
+    and declSameOrUpdate (context: Context)(decl: Decl)(dif: Diff.Decl) : Decl list =
         let n = match dif.name with
                 | Diff.SameName n -> n
                 | Diff.Rename _ -> failwith (unsupported "renamed declaration")
@@ -159,13 +99,31 @@ module Translation =
         let ctxI = context.enter(n)
         match dif with
         | Diff.Class _
-        | Diff.ClassConstructor _ -> failwith (unsupported "change in classes")
-        | Diff.TypeDef _
-        | Diff.Field _
-        | Diff.Export _
-        | Diff.DUnimplemented -> failwith(unsupported "change in atomic declaration: " + p.ToString())
+        | Diff.ClassConstructor _ -> failwith (unsupported "classes")
+        | Diff.Export _ -> [decl] // TODO check
+        | Diff.DUnimplemented -> [decl]
         | Diff.Module (_, msD) ->
             [ Module(n, decls ctxI msD, emptyMeta) ]
+        | Diff.TypeDef(_, tvsD, superD, exprD) ->
+           if not tvsD.isSame || not superD.isSame || not exprD.isSame then
+               failwith(unsupported "change in type declaration: " + p.ToString())
+           match decl with
+           | TypeDef (_, _, super, _, isNew, _) ->
+            // TypeDefs produce methods
+            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, decl)
+            let xO = localDeclTerm xtO
+            let xN = localDeclTerm xtN
+            let body =
+                if isNew then
+                    // new types are new primitive types, so return diagonal relation
+                    EEqual(xO, xN)
+                else
+                    // otherwise, call relation of supertype
+                    let _, _, superT = tp super
+                    superT (xO, xN)
+            [ Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta) ]
+            | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
+
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
             if not tvsD.isSame then
                 failwith (unsupported "change in type parameters: " + p.ToString() )
@@ -211,6 +169,31 @@ module Translation =
             let relation = Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
             let memberLemmas = decls ctxI msD
             relation :: memberLemmas
+        // immutable fields with initializer yield a lemma, mutable fields yield nothing
+        | Diff.Field (_, tpD, dfD) ->
+           match decl with
+           | Field(_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
+           | Field (_, t, _, _, _, _, _) ->
+            if not tpD.isSame then
+                failwith (unsupported "change in type: " + p.ToString())
+            let tO, tN, tT = tp t
+            let recO, recN =
+                let parentO, parentN, _ = path (context.currentDecl)
+                let sr p = StaticReceiver({ path = p; tpargs = [] })
+                sr parentO, sr parentN
+            let fieldsRelated = tT (EMemberRef(recO, pO, []), EMemberRef(recN, pN, []))
+            [ Method(
+                  true,
+                  pT.name,
+                  [],
+                  InputSpec([], []),
+                  OutputSpec([], [ fieldsRelated ]),
+                  None,
+                  true,
+                  true,
+                  emptyMeta
+              ) ]
+           | _ -> failwith("impossible") // Diff.Field must occur with YIL.Field
         // methods produce lemmas; lemmas produce nothing
         | Diff.Method(_, tvsD, insD, outsD, bdD) ->
            match decl with
@@ -220,9 +203,9 @@ module Translation =
             if not tvsD.isSame then
                 failwith (unsupported "change in type parameters: " + p.ToString())
             if not insD.isSame then
-                failwith (unsupported "change in input spec: " + p.ToString())
+                failwith (unsupported "change in inputs: " + p.ToString())
             if not outsD.isSame then
-                failwith (unsupported "change in output spec: " + p.ToString())
+                failwith (unsupported "change in outputs: " + p.ToString())
             // as "methods", we only consider pure functions here
             // a more general approach might also generate two-state lemmas for method invocations on class instances
             // (i.e., calling corresponding methods with related arguments on related objects yields related values and
@@ -287,15 +270,14 @@ module Translation =
             // the outputs and the condition that they're related
             let _, _, outputTypeT =
                 match outs with
-                | OutputType (t, _) -> tp t
-                | OutputDecls([hd],_) -> tp hd.tp
-                | OutputDecls _ -> failwith (unsupported "multiple output declarations")
+                | OutputSpec([hd],_) -> tp hd.tp
+                | _ -> failwith (unsupported "multiple output declarations")
             let resultO =
                 EMethodApply(receiverO, pO, List.map TVar tvsO, List.map localDeclTerm insO, true)
             let resultN =
                 EMethodApply(receiverN, pN, List.map TVar tvsN, List.map localDeclTerm insN, true)
             let outputsRelated = outputTypeT (resultO, resultN)
-            let outSpec = OutputDecls([], [ outputsRelated ])
+            let outSpec = OutputSpec([], [ outputsRelated ])
             
             // The body yields the proof of the lemma.
             let proof =
@@ -323,7 +305,7 @@ module Translation =
         let xtN = LocalDecl(xN, newType, false)
         let inputs = tvsT @ [ xtO; xtN ]
         let inSpec = InputSpec(inputs, [])
-        let outSpec = OutputType(TBool, [])
+        let outSpec = outputType(TBool, [])
         typeParams, inSpec, outSpec, xtO, xtN
 
     /// translates a context, e.g., the arguments of a polymorphic method
@@ -471,18 +453,22 @@ module Translation =
   ///  |            |
   ///  V            V
   /// New.X  ---> Combine.X
-  /// where X is the name of a module of the original program
-  /// This method generates the Combine-part and returns the set of joint declarations of Old and New.
+  /// where X is the name of a module in the original program.
+  /// Modules Joint.X are shared among old and new program. Modules Old.X and New.X occur
+  /// in only one of the two (add or delete) or both (update).
+  /// This method
+  /// - computes the set of declarations in the Joint part
+  /// - generates the Combine part.
   /// A subsequent step is expected to copy the old and new program and prefix the names in all toplevel
-  /// declarations with "Joint.", "New.", resp. "Old.".
+  /// declarations with either "Joint." or "New.", resp. "Old.".
   let prog (p: Program, pD: Diff.Program) : Program * Path list =
     let ctx = Context(p)
     let pathOf(d: Decl) = ctx.currentDecl.child(d.name)
-    let childPaths = List.map pathOf p.decls
-    let sameChildren = List.map pathOf pD.decls.getSame
-    let changedChildren = Utils.listDiff(childPaths, sameChildren)
-    let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren)
-    // greatest self-contained set of unchanged declarations
-    let jointPaths = Utils.listDiff(childPaths, changedClosed)
+    let childPaths = List.map pathOf p.decls // toplevel paths of p
+    let sameChildren = List.map pathOf pD.decls.getSame  // the unchanged ones among those
+    let changedChildren = Utils.listDiff(childPaths, sameChildren) // the changed ones
+    let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren) // dependency closure of the changed ones
+    let jointPaths = Utils.listDiff(childPaths, changedClosed) // greatest self-contained set of unchanged declarations
     let tr = Translator(p,pD,jointPaths)
-    { name = p.name; decls = tr.doProg()}, jointPaths
+    let combine = {name = p.name; decls = tr.doProg()} // the Combine part
+    combine, jointPaths

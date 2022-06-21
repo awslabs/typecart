@@ -194,7 +194,7 @@ module DafnyToYIL =
             let input =
                 Y.InputSpec(formal @ m.Formals, condition @ m.Req)
             let output =
-                Y.OutputType(tp m.ResultType, condition @ m.Ens)
+                Y.outputType(tp m.ResultType, condition @ m.Ens)
             let body =
                 if (m.Body = null) then
                     None
@@ -220,7 +220,7 @@ module DafnyToYIL =
                         List.forall (fun (d: Y.LocalDecl) -> d.ghost) outs.Tail
                     if not onlyOneNonGhost then
                         unsupported "More than one non-ghost return value in method"
-                Y.OutputDecls(outs, ens)
+                Y.OutputSpec(outs, ens)
 
             let body =
                 if (m.Body = null) then

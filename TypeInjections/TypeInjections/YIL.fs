@@ -66,6 +66,9 @@ module YIL =
     // ***** auxiliary methods
     let emptyMeta = { comment = None; position = None }
 
+    /// name of nonymous variables
+    let anonymous = "_"
+    
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
 
@@ -260,6 +263,7 @@ module YIL =
         member this.ghost =
             match this with
             | LocalDecl (_, _, g) -> g
+        member this.isAnonymous = this.name = anonymous
 
 
     (* pre/postcondition of a method/lemma *)
@@ -279,25 +283,19 @@ module YIL =
      *)
     and Case = { vars: LocalDecl list; pattern: Expr; body: Expr }
 
+    /// input specification: typed variables and preconditions
     and InputSpec =
        | InputSpec of LocalDecl list * Condition list
        member this.decls = match this with InputSpec(ds,_) -> ds
        member this.conditions = match this with InputSpec(_,cs) -> cs
 
+    /// output specification: typed variables and postconditions
+    // to avoid case distinctions, the case of an unnamed output type is represented as a single anonymous variable
     and OutputSpec =
-        // usual case: return type
-        | OutputType of Type * Condition list
-        // case with multiple named outputs; empty list never seems to occur in Dafny
-        | OutputDecls of LocalDecl list * Condition list
-        member this.outputDecls : LocalDecl list =
-            match this with
-            | OutputType _ -> []
-            | OutputDecls (ds, _) -> ds
-
-        member this.conditions =
-            match this with
-            | OutputType (_, cs)
-            | OutputDecls (_, cs) -> cs
+        | OutputSpec of LocalDecl list * Condition list
+        member this.decls = match this with | OutputSpec (ds, _) -> ds
+        member this.namedDecls = this.decls |> List.filter (fun ld -> not ld.isAnonymous) 
+        member this.conditions = match this with | OutputSpec (_, cs) -> cs
 
     (* a reference to a module or class with all its type parameters instantiated
        Since we do not use classes, this barely comes up, but
@@ -461,8 +459,9 @@ module YIL =
             EBool true
         else
             List.fold (fun sofar next -> EBinOpApply("And", sofar, next)) es.Head es.Tail
+    
     /// the special variable _ (must only be used in patterns)
-    let EWildcard = EVar "_" 
+    let EWildcard = EVar anonymous 
     
     // True if a datatype is simply an enum, i.e.,
     // it has more than one constructor---all without arguments, and no type parameters
@@ -471,6 +470,9 @@ module YIL =
         | Datatype (_, [], ctors, _, _) -> List.forall (fun c -> c.ins.IsEmpty) ctors
         | _ -> false
 
+    /// OutputSpec with a plain return type
+    let outputType(t: Type, cs: Condition list) = OutputSpec([LocalDecl(anonymous, t, false)], cs)
+    
     /// name of a local declaration
     let localDeclName (l: LocalDecl) = l.name
     /// type of a local Declaration
@@ -705,8 +707,7 @@ module YIL =
             | Method (isL, n, tpvs, ins, outs, b, _, _, _) ->
                 let outputsS =
                     match outs with
-                    | OutputDecls(ds,_) -> this.localDecls ds
-                    | OutputType(t,_) -> this.tp t
+                    | OutputSpec(ds,_) -> this.localDecls ds
                 (if isL then "lemma " else "method ")
                 + n
                 + (this.tpvars tpvs)
@@ -736,8 +737,7 @@ module YIL =
 
         member this.outputSpec(outs: OutputSpec) =
             match outs with
-            | OutputType (t, es) -> this.tp t + this.conditions (false, es)
-            | OutputDecls (lds, es) ->
+            | OutputSpec (lds, es) ->
                 this.localDecls lds
                 + this.conditions (false, es)
 

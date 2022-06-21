@@ -104,16 +104,17 @@ module Diff =
     and ConditionList = List<Y.Condition, Condition>
 
     and InputSpec =
-        | SameInputSpec of Y.InputSpec
         | InputSpec of LocalDeclList * ConditionList
-        member this.isSame = match this with SameInputSpec _ -> true | _ -> false
+        member this.decls = match this with | InputSpec(lds,_) -> lds
+        member this.conditions = match this with | InputSpec(_,cs) -> cs
+        member this.isSame = this.decls.isSame && this.conditions.isSame
 
     // change between output type and output decls is an add-delete
     and OutputSpec =
-        | SameOutputSpec of Y.OutputSpec
-        | OutputType of Type * ConditionList
-        | OutputDecls of LocalDeclList * ConditionList
-        member this.isSame = match this with SameOutputSpec _ -> true | _ -> false
+        | OutputSpec of LocalDeclList * ConditionList
+        member this.decls = match this with | OutputSpec(lds,_) -> lds
+        member this.conditions = match this with | OutputSpec(_,cs) -> cs
+        member this.isSame = this.decls.isSame && this.conditions.isSame
 
     /// change to an optional expression
     and ExprO =
@@ -140,17 +141,14 @@ module Diff =
         | YIL.Module _ -> Module(nD, msD)
         | YIL.Datatype(_,_,ctrs,_,_) -> Datatype(nD,tvsD, idList ctrs, msD)
         | YIL.Class(_,_,_,ps,_,_) -> Class(nD, tvsD, idList ps, msD)
-        | YIL.ClassConstructor(_,_,ins,outs,bd,_) -> ClassConstructor(nD,tvsD, SameInputSpec ins, idList outs, SameExprO bd)
+        | YIL.ClassConstructor(_,_,ins,outs,bd,_) -> ClassConstructor(nD,tvsD, idInputSpec ins, idList outs, SameExprO bd)
         | YIL.TypeDef(_,_,sp,pr,_,_) -> TypeDef(nD, tvsD, SameType sp, SameExprO (Option.map snd pr))
         | YIL.Field(_,t,d,_,_,_,_) -> Field(nD, SameType t, SameExprO d)
-        | YIL.Method(_,_,_,ins,outs,bd,_,_,_) -> Method(nD, tvsD, SameInputSpec ins, SameOutputSpec outs, SameExprO bd)
+        | YIL.Method(_,_,_,ins,outs,bd,_,_,_) -> Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
     and idList<'y,'d>(ys: 'y list): List<'y,'d> = UpdateList(List.map Same ys)
     and idConstructor(ctr: YIL.DatatypeConstructor) = DatatypeConstructor(SameName ctr.name, idList ctr.ins)
     and idInputSpec(ins: YIL.InputSpec) = InputSpec(idList ins.decls, idList ins.conditions)
-    and idOutputSpec(outs: YIL.OutputSpec) =
-       match outs with
-       | YIL.OutputType(t,cs) -> OutputType(SameType t, idList cs)
-       | YIL.OutputDecls(ds,cs) -> OutputDecls(idList ds, idList cs)
+    and idOutputSpec(outs: YIL.OutputSpec) = OutputSpec(idList outs.decls, idList outs.conditions)
     and idLocalDecl(ld: YIL.LocalDecl) = LocalDecl(SameName ld.name, SameType ld.tp)
 
     type Printer() =
@@ -274,17 +272,13 @@ module Diff =
 
         member this.inputSpec(i: InputSpec) =
             match i with
-            | SameInputSpec i -> UNC + (YIL.printer().inputSpec i)
             | InputSpec (lds, cs) ->
                 this.localDecls lds
                 + " "
                 + this.conditions (true, cs)
 
         member this.outputSpec(s: OutputSpec) =
-            match s with
-            | SameOutputSpec os -> UNC + (YIL.printer().outputSpec os)
-            | OutputType (t, cs) -> (this.tp t) + " " + (this.conditions(false,cs))
-            | OutputDecls (ds, cs) -> this.localDecls ds + " " + (this.conditions(false,cs))
+            match s with | OutputSpec (ds, cs) -> this.localDecls ds + " " + (this.conditions(false,cs))
 
         member this.conditions(require: bool, cDs: ConditionList) =
             let p = (fun c -> P().condition (require, c))

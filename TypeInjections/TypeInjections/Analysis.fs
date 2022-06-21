@@ -31,8 +31,8 @@ module Analysis =
       c.decl(ctx, d) |> ignore
       c.getDep()
   
-  /// for a list of declarations making up the body of the current delcaration,
-  /// return the dependency closure of a subset those declarations (reflexive, transitive) 
+  /// for a list 'ds' of declarations making up the body of the current declaration,
+  /// return the dependency closure of a subset 'start' of those declarations (reflexive, transitive) 
   let dependencyClosure(ctx: Context, ds: Decl list, start: Path list) =
       let mutable closure: Path list = []
       let rec add(p: Path) =
