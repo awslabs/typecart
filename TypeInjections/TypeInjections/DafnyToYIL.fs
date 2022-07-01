@@ -527,10 +527,10 @@ module DafnyToYIL =
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
         | :? QuantifierExpr as e ->
             // mostly in logic parts; but can only be computational if domain is finite (occurs once in Yucca)
-            if e.TypeArgs.Count > 0 then
+            // if e.TypeArgs > 0 then
                 // Dafny quantifiers can only have type args when using the attribute `{:typeQuantifier}`,
                 // https://github.com/dafny-lang/dafny/blob/288cab1c53eefbddaf13e2f8fb60eda394f87aa8/Source/Dafny/AST/DafnyAst.cs#L11481
-                unsupported "quantifier with type arguments"
+            //    unsupported "quantifier with type arguments"
 
             let q =
                 match e with
@@ -726,7 +726,7 @@ module DafnyToYIL =
         | :? WhileStmt as s -> Y.EWhile(expr s.Guard, statement s.Body, None)
         | :? ForLoopStmt as s -> Y.EFor(boundVar s.LoopIndex, expr s.Start, expr s.End, s.GoingUp, statement s.Body)
         | :? BreakStmt as s ->
-            if s.TargetLabel <> null || s.BreakCount > 1 then
+            if s.TargetLabel <> null then // this used to check for s.BreakCount > 1
                 unsupported "Non-trivial break statement"
 
             Y.EBreak None

@@ -31,6 +31,9 @@
         <Reference Include="Boogie.BaseTypes, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
           <HintPath>..\..\dafny\Boogie.BaseTypes.dll</HintPath>
         </Reference>
+        <Reference Include="Boogie.ExecutionEngine, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Boogie.ExecutionEngine.dll</HintPath>
+        </Reference>      
         <Reference Include="Boogie.CodeContractsExtender, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
           <HintPath>..\..\dafny\Boogie.CodeContractsExtender.dll</HintPath>
         </Reference>

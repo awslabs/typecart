@@ -13,8 +13,7 @@ module Program =
 
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
-        let reporter = ConsoleErrorReporter()
-        let options = DafnyOptions(reporter)
+        let options = DafnyOptions()
         log "***** searching for DafnyPrelude.bpl"
         (* Dafny initialization always call Boogie initialization, which depends on loading DafnyPrelude.bpl, a Boogie file
                implementing the Dafny built-ins. Even though we will not run Boogie, we need to go through this step.
