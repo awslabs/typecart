@@ -8,9 +8,6 @@
 
     <ItemGroup>
         <Compile Include="Utils.fs" />
-        <Compile Include="NameUtils.fs" />
-        <Compile Include="TypeEquality.fs" />
-        <Compile Include="TypeInjections.fs" />
         <Compile Include="InjectionIO.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
