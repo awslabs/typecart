@@ -31,6 +31,9 @@ module InjectionIO =
             | _ -> []
 
         List.collect <| getTypeList
+        
+        
+
 
     // Find all equal types and populate the maps "same" and "diff" appropriately
     let typeDecls (prog: Program inref) : TopLevelDecl list =
@@ -42,8 +45,14 @@ module InjectionIO =
     // Generate the injection functions and write the result, as (syntactically) valid Dafny, to outputFile
     let printDeclarations (decls:TopLevelDecl list) (outputFilePath: string) : unit =
         let output = new StreamWriter(outputFilePath)
-
+        
         let printer = Printer(output)
 
         printer.PrintTopLevelDecls(decls |> List<TopLevelDecl>, 2, List<IToken>(), outputFilePath)
         output.Close()
+        
+        
+    let getEverything (prog: Program inref) : TopLevelDecl list =
+        fromList prog.DefaultModuleDef.TopLevelDecls
+        
+        

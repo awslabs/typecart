@@ -4,11 +4,24 @@
 namespace TypeInjections
 
 open Microsoft.Dafny
+open System.IO
+open System
 
 module Program =
 
     let log (s: string) = System.Console.WriteLine(s)
     let logObject (s: string) (arg: obj) = System.Console.WriteLine(s, arg)
+    
+    // parseAST now takes a file list
+    let parseAST (files: FileInfo list) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+        let dafnyFiles = List.map (fun (x : FileInfo) -> DafnyFile x.FullName) files
+        let mutable dafnyProgram = Unchecked.defaultof<Program>
+        log "***** calling dafny parser for multiple files"
+        let err =
+            Main.ParseCheck(Utils.toIList dafnyFiles, programName, reporter, &dafnyProgram)
+        if err <> null && err <> "" then
+            failwith ("Dafny error: " + err)
+        dafnyProgram
 
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
@@ -44,66 +57,95 @@ module Program =
         log "***** Dafny initialised"
 
         reporter
-
-    let parseAST
-        (dafnyFile: DafnyFile)
-        (programName: string)
-        (reporter: ConsoleErrorReporter)
-        (dafnyProgram: outref<Program>)
-        : unit =
-        logObject "***** calling Dafny parser and checker for {0}" dafnyFile.SourceFileName
-        let dafnyFiles = [ dafnyFile ]
-
-        let err =
-            Main.ParseCheck(Utils.toIList dafnyFiles, programName, reporter, &dafnyProgram)
-
-        if err <> null && err <> "" then
-            failwith ("Dafny errors: " + err)
+ 
+    // get relative path of file
+    let getRelative (oldFolder : string) (fileFull: string) : string =
+        let len = oldFolder.Length
+        fileFull[len..]
+        
+        
+        
+    
 
     [<EntryPoint>]
-    let main argv =
-        // TODO: this whole part will be changed once this runs on folders rather than individual files
-        // check the arguments
+    let main (argv: string array) =
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
-        if argv.Length <> 2 then
-            failwith "Need to include 2 .dfy files"
+        
+        // ------------------- adding my part ---------------------
+        
+        // need: Old folder, New folder, Output folder
+        if argv.Length < 3 then
+            failwith "usage: program OLD NEW OUTPUTFOLDER"
 
-        // make sure all files exist
-        for a in argv do
-            if not (System.IO.File.Exists(a)) then
-                failwith ("file not found: " + a)
-
-        // argv has type string array [| |], convert argv to string list []
+        // get path to old and new folders
         let argvList = argv |> Array.toList
-
-        //we expect only two input files at the moment
-        let file1 = argvList.Head
-        let file2 = argvList.[1]
-
-        let root = System.IO.Path.GetDirectoryName(file1)
+        let oldFolderPath = argvList.Item(0)
+        let newFolderPath = argvList.Item(1)
+        let outputFolder = argvList.Item(2)
         
+        // ensure folders exist in system
+        for a in [oldFolderPath;newFolderPath] do
+            if not (System.IO.Directory.Exists(a)) then
+                failwith("folder not found:" + a)
+                
+        // grab folder objects given path
+        let oldFolder = DirectoryInfo(oldFolderPath)
+        let newFolder = DirectoryInfo(newFolderPath)
+        
+        // get all files in old and new folder
+        let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.AllDirectories) |> Seq.toList
+        let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.AllDirectories) |> Seq.toList
+
+        //initialise Dafny
         let reporter = initDafny
-
-        // the main call to dafny, adapted from DafnyDriver.ProcessFiles
-        let dafnyFile1 = DafnyFile(file1)
-        let programName1 = "old"
-        let mutable dafnyProgram1 = Unchecked.defaultof<Program>
-        parseAST dafnyFile1 programName1 reporter &dafnyProgram1
-
-        let dafnyFile2 = DafnyFile(file2)
-        let programName2 = "new"
-        let mutable dafnyProgram2 = Unchecked.defaultof<Program>
-        parseAST dafnyFile2 programName2 reporter &dafnyProgram2
+      
+        // get list of dafny programs from input files
+        let oldDafny = List.map (fun (x : FileInfo) -> parseAST [x] ("Old" + x.Name) reporter) oldFiles
+        let newDafny = List.map (fun (x : FileInfo) -> parseAST [x] "New" reporter) newFiles
+          
+        // printing out renamed module files
+        let printWithDaf (prog: Program) (fileName: string) =
+            
+            //TODO print in correct structure
+            let path = outputFolder + "/"  + prog.Name
+            
+            // building printer obj
+            let output = new StreamWriter(path )
+            let printer = Printer(output)
+            // getting all modules, functions, and objects
+            let decls = prog.DefaultModuleDef.TopLevelDecls
+         
+           
+            // iterate through decls => string print modules, else use dafny printer
+            let rec printLine (vals : TopLevelDecl list) (prefix : string): unit =
+                for (a:TopLevelDecl) in vals do
+                    match a with
+                    | :? LiteralModuleDecl as d ->   output.WriteLine("module " + prefix + "." + d.Name + "{"); printLine (d.ModuleDef.TopLevelDecls |> Seq.toList) prefix; output.WriteLine("}")
+                    | :? _ ->  printer.PrintTopLevelDecls(Collections.Generic.List([a]), 2, Collections.Generic.List<Microsoft.Boogie.IToken>(), path)
+            // call printLine function with given modules and other declarations, prefix will be "old"
+            printLine (decls |> Seq.toList) "Old"
+            // need to flush (program breaks if left out)
+            output.Flush()
+              
+        // call printDaf function
+        List.iter2 (fun (x: Program) (y: FileInfo) -> printWithDaf x y.FullName) oldDafny oldFiles
         
-        let typesDeclsOld = InjectionIO.typeDecls &dafnyProgram1
-        let typesDeclsNew = InjectionIO.typeDecls &dafnyProgram2
-        
-        let outputFile1 =
-            System.IO.Path.Combine([| root; "Out1.dfy" |])
-        
-        let outputFile2 =
-            System.IO.Path.Combine([| root; "Out2.dfy" |])
+        //NOTE onto step 2: Read all files again and parse (now we read from output file)
+        // read in files now that modules have New. and Old.
+        // let rewrittenOldFiles = getAllFiles (IO.DirectoryInfo(argvList.Item(0)))
+        // let rewrittenNewFiles = getAllFiles (IO.DirectoryInfo(argvList.Item(1)))
 
-        InjectionIO.printDeclarations typesDeclsOld (outputFile1: string)
-        InjectionIO.printDeclarations typesDeclsNew (outputFile2: string) 
+        
+        //QUESTION do we parse Old and New files together since they have different module names?
+        // let rewrittenOldDafny = parseAST oldFiles "Old" reporter 
+        // let rewrittenNewDafny = parseAST newFiles "New" reporter
+        
+        //NOTE onto step 3, strip Old/New from module names
+        
+
+        0
+        // -------------------ending my part ----------------------------------
+        
+        
+
         0

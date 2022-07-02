@@ -3,7 +3,7 @@
 
 namespace TypeInjections.Test
 
-module ClassGenTests =
+module IOTests =
     open NUnit.Framework
 
     type internal Marker =
@@ -14,8 +14,8 @@ module ClassGenTests =
     // set the module name, alternatively we could look into determining
     // the calling module via reflection in TestUtils
     let testRunner =
-        TestUtils.testRunnerClass TestUtils.fileCompare moduleName
+        TestUtils.testRunnerGen TestUtils.folderCompare moduleName
 
     [<Test>]
-    let ClassTest () =
-        testRunner "Test.dfy" "Output.txt" "Expect.txt"
+    let SimpleFolderTest () =
+        testRunner "InputDirectory" "OutputDirectory" "ExpectedDirectory" 
