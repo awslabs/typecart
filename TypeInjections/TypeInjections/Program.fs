@@ -52,6 +52,15 @@ module Program =
             failwith ("Dafny errors: " + err)
         dafnyProgram
 
+    /// prefixes the names of all toplevel modules
+    let prefixTopDecls(prog: YIL.Program)(pref: string): YIL.Program =
+        let prN (n: string) = pref + "." + n
+        let prD (d: YIL.Decl) =
+            match d with
+            | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
+            | d -> d
+        {name=prog.name; decls=List.map prD prog.decls}
+    
     [<EntryPoint>]
     let main (argv: string array) =
         // for now, typeCart requires fully qualified paths of files
@@ -102,15 +111,16 @@ module Program =
 
         // write output files
         log "***** writing output files"
-        let writeOut fileName (prog:YIL.Program) (only: string -> bool) =
+        let writeOut fileName prefix (prog:YIL.Program) (only: string -> bool) =
             let f = IO.Path.Combine(outFolder, fileName)
             IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f)) |> ignore
             let progF = {YIL.name = prog.name; YIL.decls = List.filter (fun (d:YIL.Decl) -> only d.name) prog.decls}
-            let s = YIL.printer().prog(progF)
+            let progP = prefixTopDecls progF prefix
+            let s = YIL.printer().prog(progP)
             IO.File.WriteAllText(f, s)
         let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
-        writeOut "joint.dfy" oldYIL  (fun s -> List.contains s jointNames)
-        writeOut "old.dfy" oldYIL (fun s -> not (List.contains s jointNames))
-        writeOut "new.dfy" newYIL (fun s -> not (List.contains s jointNames))
-        writeOut "combine.dfy" combine (fun s -> true)
+        writeOut "joint.dfy" "Joint" oldYIL (fun s -> List.contains s jointNames)
+        writeOut "old.dfy" "Old" oldYIL (fun s -> not (List.contains s jointNames))
+        writeOut "new.dfy" "New" newYIL (fun s -> not (List.contains s jointNames))
+        writeOut "combine.dfy" "Combine" combine (fun s -> true)
         0
