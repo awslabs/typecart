@@ -1,4 +1,4 @@
-module New.Lists {
+module Lists {
   datatype Nat = Zero | Succ(n: Nat) {
       function plus(m: Nat): Nat {
           match m {

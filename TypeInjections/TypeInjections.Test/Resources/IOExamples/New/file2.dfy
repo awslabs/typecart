@@ -1,4 +1,4 @@
-module New.ExprEval {
+module ExprEval {
   datatype expr = Const(x: int) | Add(e1: expr, e2: expr) | Sub(e1: expr, e2: expr)
 
   function eval(e: expr): int {
