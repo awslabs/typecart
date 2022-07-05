@@ -104,8 +104,13 @@ module DafnyToYIL =
             [ Y.TypeDef(d.Name, tpvars, super, pred, false, namedMeta d) ]
         | :? NewtypeDecl as d ->
             // like SubsetTypeDecl but only for a numeric supertype and new type is not a subtype of the old type
-            let bv = boundVar d.Var
-            [ Y.TypeDef(d.Name, [], bv.tp, Some(bv.name, expr d.Constraint), true, namedMeta d) ]
+            let predO =
+                if d.Var = null then
+                    None
+                else
+                  let bv = boundVar d.Var
+                  Some(bv.name, expr d.Constraint)
+            [ Y.TypeDef(d.Name, [], tp d.BaseType, predO, true, namedMeta d) ]
         | :? IteratorDecl ->
             unsupported
                 "Dafny iterators are too idiosyncratic to be compiled easily to other languages and are therefore not supported"
@@ -239,7 +244,8 @@ module DafnyToYIL =
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m
-            Y.Field(mName, tp m.Type, Some(expr m.Rhs), m.IsGhost, m.IsStatic, isMutable = false, meta = meta)
+            let dfO = if m.Rhs = null then None else Some(expr m.Rhs)
+            Y.Field(mName, tp m.Type, dfO, m.IsGhost, m.IsStatic, isMutable = false, meta = meta)
         | :? Field as m ->
             let mName = m.Name
             let meta = namedMeta m
@@ -251,12 +257,14 @@ module DafnyToYIL =
     and formal (f: Formal) : Y.LocalDecl =
         Y.LocalDecl(f.Name, tp f.Type, f.IsGhost)
 
-    and typeParameter (t: TypeParameter) : string =
-        if t.Variance <> TypeParameter.TPVariance.Non
-           || (not t.StrictVariance) then
-            unsupported "Type parameter with variance"
-
-        t.Name
+    and typeParameter (t: TypeParameter) : Y.TypeArg =
+        let v =
+           match t.Variance with
+           | TypeParameter.TPVariance.Non -> None
+           | TypeParameter.TPVariance.Co -> Some true
+           | TypeParameter.TPVariance.Contra -> Some false
+           | _ -> unsupported ("variance: " + t.ToString())
+        (t.Name, v)
 
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
 
@@ -272,14 +280,13 @@ module DafnyToYIL =
                 // Dafny puts a few built-in types into the DafnySystem namespace instead of making them primitive
                 if p.names.Head = DafnySystem then
                     let n = p.names.Item(1)
-
                     if n = "string" then
-                        Y.TString
+                        Y.TString Y.NoBound
                     elif n = "nat" then
-                        Y.TNat
+                        Y.TNat Y.NoBound
                     elif n = "array" then
                         if args.Length = 1 then
-                            Y.TArray(args.Head)
+                            Y.TArray(Y.NoBound, args.Head)
                         else
                             error $"array {p.name} must have exactly one type argument"
                     elif
@@ -300,21 +307,44 @@ module DafnyToYIL =
                         Y.TObject
                     else
                         unsupported $"built-in type {n}"
+                elif p.names.Head = "TypeUtil" then
+                    // types defined by Yucca in TypeUtil.dfy
+                    let n = p.names.Item(1)
+                    match n with
+                    | "string32" -> Y.TString Y.Bound32
+                    | "seq32" when args.Length = 1 -> Y.TSeq(Y.Bound32, args.Head)
+                    | "set32" when args.Length = 1 -> Y.TSet(Y.Bound32, args.Head)
+                    | "map32" when args.Length = 2 -> Y.TMap (Y.Bound32, args.Head, args.Tail.Head)
+                    | "arr32" when args.Length = 1 -> Y.TArray(Y.Bound32, args.Head)
+                    | "byteArray" -> Y.TArray(Y.NoBound, Y.TInt Y.Bound8)
+                    | "int8" -> Y.TInt Y.Bound8
+                    | "int16" -> Y.TInt Y.Bound16
+                    | "int32" -> Y.TInt Y.Bound32
+                    | "int64" -> Y.TInt Y.Bound64
+                    | "nat32" -> Y.TNat Y.Bound32
+                    | "nat64" -> Y.TNat Y.Bound64
+                    | "float" -> Y.TReal Y.Bound32
+                    | "double" -> Y.TReal Y.Bound64
+                    | _ -> unsupported ("unknown type in TypeUtil")
                 else
-                    Y.TApply(p, args)
+                    let tT = Y.TApply(p, args)
+                    if t.IsRefType && not t.IsNonNullRefType then
+                      Y.TNullable tT
+                    else
+                      tT
         | :? BoolType -> Y.TBool
         | :? CharType -> Y.TChar
-        | :? IntType -> Y.TInt
-        | :? RealType -> Y.TReal
-        | :? SetType as t -> Y.TSet(tp t.Arg)
+        | :? IntType -> Y.TInt Y.NoBound
+        | :? RealType -> Y.TReal Y.NoBound
+        | :? SetType as t -> Y.TSet(Y.NoBound, tp t.Arg)
         | :? SeqType as t ->
             let aT = tp t.Arg
             // Dafny treats string as seq<char> and sometimes expands it
             if aT = Y.TChar then
-                Y.TString
+                Y.TString Y.NoBound
             else
-                Y.TSeq(tp t.Arg)
-        | :? MapType as t -> Y.TMap(tp t.Domain, tp t.Range)
+                Y.TSeq(Y.NoBound, tp t.Arg)
+        | :? MapType as t -> Y.TMap(Y.NoBound, tp t.Domain, tp t.Range)
         | :? TypeProxy as t -> tp t.T // e.g., wrapper for inferred types
         | :? BitvectorType as t -> Y.TBitVector(t.Width)
         | _ -> unsupported $"Type {t.ToString()}"
@@ -409,8 +439,8 @@ module DafnyToYIL =
             match (t, e.SelectOne) with
             | (Y.TSeq _, true) -> Y.ESeqAt(s, Option.get e0)
             | (Y.TSeq _, false) -> Y.ESeqRange(s, e0, e1)
-            | (Y.TString, true) -> Y.ECharAt(s, Option.get e0) // Dafny strings are character arrays
-            | (Y.TString, false) -> Y.EStringRange(s, e0, e1)
+            | (Y.TString _, true) -> Y.ECharAt(s, Option.get e0) // Dafny strings are character arrays
+            | (Y.TString _, false) -> Y.EStringRange(s, e0, e1)
             | (Y.TArray _, true) -> Y.EArrayAt(s, [ Option.get e0 ])
             | (Y.TMap _, true) -> Y.EMapAt(s, Option.get e0)
             // User-defined type alias
@@ -431,23 +461,19 @@ module DafnyToYIL =
         | :? SetDisplayExpr as e ->
             if not (e.Finite) then
                 unsupported "Infinite set definition"
-
             let elems = expr @ e.Elements
-
             let t =
                 match (tp e.Type) with
-                | Y.TSet (a) -> a
+                | Y.TSet (_,a) -> a
                 | _ -> error "Unexpected set type"
-
             Y.ESet(t, elems)
         | :? SeqDisplayExpr as e ->
             let elems = expr @ e.Elements
-
             match tp e.Type with
             // empty string literal sometimes presents as empty char sequence
-            | Y.TString when List.isEmpty elems -> Y.EString ""
-            | Y.TString -> Y.EToString elems
-            | Y.TSeq (a) -> Y.ESeq(a, elems)
+            | Y.TString _ when List.isEmpty elems -> Y.EString ""
+            | Y.TString _ -> Y.EToString elems
+            | Y.TSeq(_,a) -> Y.ESeq(a, elems)
             | _ -> unsupported (sprintf "unexpected sequence type: %s" ((tp e.Type).ToString()))
         | :? SeqUpdateExpr as e -> Y.ESeqUpdate(expr e.Seq, expr e.Index, expr e.Value)
         // applications
@@ -455,10 +481,8 @@ module DafnyToYIL =
             let r = e.Receiver
             let recv = receiver (r.Resolved)
             let args = expr @ e.Args
-
             let tpargs =
                 List.append (tp @ e.TypeApplication_AtEnclosingClass) (tp @ e.TypeApplication_JustFunction)
-
             Y.EMethodApply(recv, pathOfMemberDecl (e.Function), tpargs, args, false)
         | :? ApplyExpr as e -> Y.EAnonApply(expr e.Function, expr @ e.Args)
         | :? UnaryOpExpr as e ->
@@ -466,21 +490,21 @@ module DafnyToYIL =
             // disambiguate Dafny's ad-hoc polymorphism
             let oT =
                 match o, tp e.E.Type with
-                | "Cardinality", Y.TString -> "Cardinality-String"
+                | "Cardinality", Y.TString _ -> "Cardinality-String"
                 | "Cardinality", Y.TSeq _ -> "Cardinality-Seq"
                 | "Cardinality", Y.TSet _ -> "Cardinality-Set"
+                | "Cardinality", Y.TMap _ -> "Cardinality-Map"
                 | "Cardinality", Y.TArray _ -> "Cardinality-Array"
                 | "Cardinality", _ -> unsupported (sprintf "cardinality %s" ((tp e.E.Type).ToString()))
                 | o, _ -> o
-
             Y.EUnOpApply(oT, expr e.E)
         | :? BinaryExpr as e ->
             let o = e.ResolvedOp.ToString()
             // disambiguate Dafny's ad-hoc polymorphism and the string = Seq<char> merger
             let oT =
                 match o, tp e.E0.Type, tp e.E1.Type with
-                | "InSeq", _, Y.TString -> o + "-String"
-                | "NotInSeq", _, Y.TString -> o + "-String"
+                | "InSeq", _, Y.TString _ -> o + "-String"
+                | "NotInSeq", _, Y.TString _ -> o + "-String"
                 | _ -> o
 
             Y.EBinOpApply(oT, expr e.E0, expr e.E1)
@@ -539,6 +563,8 @@ module DafnyToYIL =
                 | _ -> error "unknown quantifier"
 
             Y.EQuant(q, boundVar @ e.BoundVars, exprO e.Range, expr e.Term)
+        | :? OldExpr as e ->
+            Y.EOld (expr e.E)
         | :? MapComprehension as e -> unsupported "missing case: map comprehension"
         | :? MapDisplayExpr -> unsupported "missing case: map display"
         | :? SetComprehension -> unsupported "missing case: set comprehension"

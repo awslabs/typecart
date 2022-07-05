@@ -6,6 +6,7 @@ open System.Numerics
 open Microsoft.BaseTypes
 
 // Yucca
+open Microsoft.Dafny
 open Utils
 
 (* AST for the relevant fragment of Dafny
@@ -102,7 +103,7 @@ module YIL =
         *)
         | Datatype of
             name: string *
-            tpvars: string list *
+            tpvars: TypeArg list *
             constructors: DatatypeConstructor list *
             members: Decl list *
             meta: Meta
@@ -115,7 +116,7 @@ module YIL =
             members: Decl list *
             meta: Meta
         (* Class constructor as opposed to the default constructor in Datatype *)
-        | ClassConstructor of name: string * tpvars: string list * ins: InputSpec * outs: Condition list * body: Expr option * meta: Meta
+        | ClassConstructor of name: string * tpvars: TypeArg list * ins: InputSpec * outs: Condition list * body: Expr option * meta: Meta
         (* Type definitions
            if predicate is given: HOL-style subtype definitions (omitting the witness here)
              else: type synonym
@@ -184,16 +185,15 @@ module YIL =
             | Field _ -> []
             | Method (_, _, tpvs, _, _, _, _, _, _) -> tpvs
             | ClassConstructor (_, tpvs, _, _, _, _) -> tpvs
-            | Export _ -> error "export does not have type arguments"
-            | DUnimplemented -> error "skipped declaration has no name"
+            | Export _ -> []
+            | DUnimplemented -> []
         member this.children =
             match this with
             | Module (_, ds, _) -> ds
             | Datatype (_, _, _, ds, _) -> ds
             | Class (_, _, _, _, ds, _) -> ds
             | _ -> []
-
-    and TypeArg = string
+    and TypeArg = string * (bool option)  // true/false for co/contravariant
 
     (* types
        We do not allow module inheritance or Dafny classes.
@@ -204,19 +204,20 @@ module YIL =
         | TUnit
         | TBool
         | TChar
-        | TString
-        | TNat
-        | TInt
-        | TReal
+        | TString of Bound
+        | TNat of Bound
+        | TInt of Bound
+        | TReal of Bound
         | TBitVector of int
         // built-in type operators
         | TTuple of Type list
         | TFun of Type list * Type
-        | TSeq of Type
-        | TSet of Type
-        | TMap of Type * Type
-        | TArray of Type // array of any dimensions
+        | TSeq of Bound * Type
+        | TSet of Bound * Type
+        | TMap of Bound * Type * Type
+        | TArray of Bound * Type // array of any dimensions
         | TObject // supertype of all classes
+        | TNullable of Type
         // identifiers
         | TApply of op: Path * args: Type list
         | TVar of string
@@ -231,23 +232,30 @@ module YIL =
             match this with
             | TUnit -> "unit"
             | TBool -> "bool"
-            | TInt -> "int"
-            | TNat -> "nat"
+            | TInt b -> "int" + b.ToString()
+            | TNat b -> "nat" + b.ToString()
             | TChar -> "char"
-            | TString -> "string"
-            | TReal -> "real"
+            | TString b -> "string" + b.ToString()
+            | TReal b -> match b with | Bound (Some 32) -> "float" | Bound (Some 64) -> "double" | _ -> "real"
             | TBitVector (w) -> "bv" + w.ToString()
             | TVar (n) -> n
             | TApply (op, args) -> op.name + (tps args)
             | TTuple (ts) -> product ts
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
-            | TSeq (t) -> "seq" + (tps [ t ])
-            | TSet (t) -> "set" + (tps [ t ])
-            | TMap (d, r) -> "map" + (tps [ d; r ])
-            | TArray (a) -> a.ToString() + "[]"
+            | TSeq (b,t) -> "seq" + b.ToString() + (tps [ t ])
+            | TSet (b,t) -> "set" + b.ToString() + (tps [ t ])
+            | TMap (b, d, r) -> "map" + b.ToString() + (tps [ d; r ])
+            | TArray (b,a) -> "Array" + b.ToString() + (a.ToString())
             | TObject -> "object"
+            | TNullable t -> t.ToString() + "?"
             | TUnimplemented -> "UNIMPLEMENTED"
 
+    // for size-limited version of types defined in Yucca's TypeUtil, gives the size in bits
+    // See DafnyToYIL for the possibly bound values, usually 32 or 64
+    and Bound =
+      | Bound of int option
+      override this.ToString() = match this with | Bound (Some i) -> i.ToString() | Bound None -> ""
+    
     (* typed variable declaration used in method input/output, binders, and local variables declararations
        All of those can be ghosts, i.e., only needed for specifications and proofs.
        Those can be removed when compiling for computation.
@@ -329,6 +337,7 @@ module YIL =
         | EReal of BigDec * tp: Type
         // Dafny allows quantifiers in computations if the domain is finite; cond is a prediate that restricts the domain of the bound variables
         | EQuant of quant: Quantifier * ld: LocalDecl list * cond: Expr option * body: Expr
+        | EOld of Expr // used in ensures conditions of methods in classes to refer to previous state
         | ETuple of elems: Expr list
         | EProj of tuple: Expr * index: int
         | EFun of vars: LocalDecl list * out: Type * body: Expr
@@ -451,6 +460,18 @@ module YIL =
         | EBlock _ -> b
         | _ -> EBlock [b]
     
+    /// invariant type argument given by name
+    let plainTypeArg n = (n,None)
+    
+    /// the corresponding list of TVars
+    let typeargsToTVars (tvs: TypeArg list) = List.map (fun (n,_) -> TVar n) tvs
+    
+    let NoBound = Bound None
+    let Bound8 = Bound (Some 8)
+    let Bound16 = Bound (Some 16)
+    let Bound32 = Bound (Some 32)
+    let Bound64 = Bound (Some 64)
+    
     /// s = t
     let EEqual (s: Expr, t: Expr) = EBinOpApply("Eq", s, t)
     /// conjunction of some expressions
@@ -459,6 +480,11 @@ module YIL =
             EBool true
         else
             List.fold (fun sofar next -> EBinOpApply("And", sofar, next)) es.Head es.Tail
+    let EDisj (es: Expr list) =
+        if es.IsEmpty then
+            EBool false
+        else
+            List.fold (fun sofar next -> EBinOpApply("Or", sofar, next)) es.Head es.Tail
     
     /// the special variable _ (must only be used in patterns)
     let EWildcard = EVar anonymous 
@@ -566,7 +592,7 @@ module YIL =
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
     *)
-    type Context(prog: Program, currentDecl: Path, tpvars: string list, vars: LocalDecl list, pos: ContextPosition) =
+    type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition) =
         // convenience constructor and accessor methods
         new(p: Program) = Context(p, Path([]), [], [], OtherPosition)
         member this.prog = prog
@@ -581,7 +607,7 @@ module YIL =
         /// (which it always does for names encountered while traversing well-typed programs)
         member this.lookupTpvar(n: string) =
             let dO =
-                List.tryFind (fun x -> x = n) (List.rev tpvars)
+                List.tryFind (fun x -> fst x = n) (List.rev tpvars)
 
             match dO with
             | None -> error $"type variable {n} not visible {this}"
@@ -614,9 +640,12 @@ module YIL =
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
             Context(prog, currentDecl.child (n), tpvars, vars, pos)
-        /// convenience method for adding variable declarations to the context
+        /// convenience method for adding type variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars ns, vars, pos)
+            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos)
+        /// convenience method for adding type variable declarations to the context
+        member this.addTpvars(tvs: TypeArg list) : Context =
+            Context(prog, currentDecl, List.append tpvars tvs, vars, pos)
 
         member this.add(ds: LocalDecl list) : Context =
             Context(prog, currentDecl, tpvars, List.append vars ds, pos)
@@ -643,11 +672,16 @@ module YIL =
 
         member this.prog(p: Program) = this.declsGeneral(p.decls, false)
 
-        member this.tpvars(ns: string list) =
+        member this.tpvar(a: TypeArg) =
+            match a with
+            | (n,None) -> n
+            | (n,Some true) -> "+" + n
+            | (n,Some false) -> "-" + n
+        member this.tpvars(ns: TypeArg list) =
             if ns.IsEmpty then
                 ""
             else
-                "<" + listToString (ns, ", ") + ">"
+                "<" + listToString (List.map this.tpvar ns, ", ") + ">"
 
         member this.declsGeneral(ds: Decl list, braced: Boolean) =
                 indented(listToString (List.map (fun d -> (this.decl d) + "\n\n") ds, ""), braced)
@@ -794,6 +828,7 @@ module YIL =
                 + exprO (r, " :: ")
                 + (if q = Forall then "==>" else "&&")
                 + (expr b)
+            | EOld e -> "old(" + (expr e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)

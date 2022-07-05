@@ -208,7 +208,7 @@ module Diff =
             | SameName o -> o
             | Rename (o, n) -> "(" + o + " -> " + n + ")"
 
-        member this.typeargs(ts: TypeArgList) = this.List(ts, id, id, "<", ", ", ">")
+        member this.typeargs(ts: TypeArgList) = this.List(ts, fst, fst, "<", ", ", ">")
 
         member this.decls(ds: DeclList) =
             this.List(ds, P().decl, this.decl, "{\n", "\n", "\n}")

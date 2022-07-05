@@ -119,20 +119,21 @@ module Traverser =
             | TUnit
             | TBool
             | TChar
-            | TString
-            | TNat
-            | TInt
-            | TReal
-            | TObject
+            | TString _
+            | TNat _
+            | TInt _
+            | TReal _
+            | TObject 
             | TBitVector _
             | TVar _ -> tp
             | TApply (op, args) -> TApply(this.path(ctx,op), rcL args)
             | TTuple ts -> TTuple (rcL ts)
-            | TSeq t -> TSeq (rc t)
-            | TSet t -> TSet (rc t)
-            | TMap (d, r) -> TMap (rc d, rc r)
-            | TArray t -> TArray (rc t)
+            | TSeq(b,t) -> TSeq (b, rc t)
+            | TSet(b,t) -> TSet (b, rc t)
+            | TMap (b, d, r) -> TMap (b,rc d, rc r)
+            | TArray(b,t) -> TArray (b,rc t)
             | TFun (ins,out) -> TFun (rcL ins, rc out)
+            | TNullable t -> TNullable (rc t)
             | TUnimplemented -> TUnimplemented
 
         // transforms an expression
@@ -162,6 +163,7 @@ module Traverser =
                     let rT = this.exprO(ctxE, r)
                     let bT = this.expr(ctxE, b)
                     EQuant(q, this.localDeclList (ctx, lds), rT, bT)
+                | EOld e -> EOld (rcE e)
                 | ETuple es -> ETuple (rcEs es)
                 | EProj (e, i) -> EProj (rcE e, i)
                 | ESet (t, es) -> ESet (rcT t, rcEs es)
@@ -305,7 +307,7 @@ module Traverser =
         override this.tp(ctx: Context, t: Type) =
             match t with
             | TVar n ->
-                let c = Utils.listCount (ctx.tpvars, n)
+                let c = (List.filter (fun (a,_) -> a = n) ctx.tpvars).Length
                 if c > 1 then
                     // We are prescriptive here and treat shadowing as an error
                     this.error($"shadowing of type variable {n} at {ctx}")

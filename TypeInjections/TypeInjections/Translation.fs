@@ -3,16 +3,18 @@ namespace TypeInjections
 open TypeInjections.Traverser
 open YIL
 
-/// Defines wrappers for standard Dafny functions
+/// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =
-    /// maps f over sequence f
-    let seqMap s f = EUnimplemented
-    /// maps f over sequence s
-    let setMap s f = EUnimplemented
-    /// maps f over keys and g over values in map m
-    let mapMap m f g = EUnimplemented
+    let rb = Path ["util"; "RelateBuiltinTypes"]
+    let rbRec = StaticReceiver {path=rb; tpargs=[]}
+    /// relates two sequences
+    let seqRel o n t (e,f) = EMethodApply(rbRec, rb.child("seq"), [o;n], [e;f], false)
+    /// relates two sets
+    let setRel o n t (e,f) = EMethodApply(rbRec, rb.child("set"), [o;n], [e;f], false)
+    /// relates two maps
+    let mapRel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
     /// maps f over an array a
-    let arrayMap a f = EUnimplemented
+    let arrayRel o n t (e,f) = EMethodApply(rbRec, rb.child("array"), [o;n], [t;e;f], false)
 
 open DafnyFunctions
 
@@ -45,8 +47,9 @@ module Translation =
 
     /// a --->  a_old, a_new, a: a_old * a_new -> bool
     and typearg (a: TypeArg) : TypeArg * TypeArg * LocalDecl =
-        let aO, aN, aT = name a
-        aO, aN, LocalDecl(aT, TFun([ TVar aO ], TVar aN), false)
+        let v = snd a
+        let aO, aN, aT = name (fst a)
+        (aO,v), (aN,v), LocalDecl(aT, TFun([ TVar aO ], TVar aN), false)
 
     /// suggests a name for a variable of the type defined by a declaration name
     and varname (n:string) = n.Chars(0).ToString()
@@ -70,8 +73,8 @@ module Translation =
             override this.tp(ctx: Context, t: Type) =
                 match t with
                 | TVar n ->
-                    let nO,nN,_ = typearg n
-                    TVar(if old then nO else nN)
+                    let nO,nN,_ = typearg (n,None)
+                    TVar(if old then fst nO else fst nN)
                 | _ -> this.tpDefault(ctx, t)
         }
     
@@ -228,7 +231,8 @@ module Translation =
                     List.unzip3 (List.map typearg parentTvs)
                     
             let oldInstDecl, newInstDecl, instancesRelated =
-                localDecl (LocalDecl(varname parentDecl.name, TApply(context.currentDecl, List.map TVar parentTvs), false))
+                let t = TApply(context.currentDecl, typeargsToTVars parentTvs)
+                localDecl (LocalDecl(varname parentDecl.name, t, false))
             let instanceInputs =
                 if isStatic then
                     []
@@ -273,9 +277,9 @@ module Translation =
                 | OutputSpec([hd],_) -> tp hd.tp
                 | _ -> failwith (unsupported "multiple output declarations")
             let resultO =
-                EMethodApply(receiverO, pO, List.map TVar tvsO, List.map localDeclTerm insO, true)
+                EMethodApply(receiverO, pO, typeargsToTVars tvsO, List.map localDeclTerm insO, true)
             let resultN =
-                EMethodApply(receiverN, pN, List.map TVar tvsN, List.map localDeclTerm insN, true)
+                EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
             let outputsRelated = outputTypeT (resultO, resultN)
             let outSpec = OutputSpec([], [ outputsRelated ])
             
@@ -298,8 +302,8 @@ module Translation =
         let pO, pN, pT = path p
         let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg tvs)
         let typeParams = Utils.listInterleave (tvsO, tvsN)
-        let oldType = TApply(pO, List.map TVar tvsO)
-        let newType = TApply(pN, List.map TVar tvsN)
+        let oldType = TApply(pO, typeargsToTVars tvsO)
+        let newType = TApply(pN, typeargsToTVars tvsN)
         let xO, xN, _ = name (varname n)
         let xtO = LocalDecl(xO, oldType, false)
         let xtN = LocalDecl(xN, newType, false)
@@ -355,11 +359,11 @@ module Translation =
         match t with
         | TUnit
         | TBool
-        | TInt
-        | TNat
-        | TChar
-        | TString
-        | TReal
+        | TInt _
+        | TNat _
+        | TChar 
+        | TString _
+        | TReal _
         | TBitVector _ -> t, t, diag
         | TVar a ->
             let aO, aN, aT = name a
@@ -417,20 +421,28 @@ module Translation =
             // TODO: check if t,t,diag is sound here
             // alternatively, check if bisimulation works
             failwith (unsupported "object type")
-        | TSeq t ->
+        | TNullable t ->
             let tO, tN, tT = tp t
-            TSeq tO, TSeq tN, (fun e -> seqMap e tT)
-        | TSet t ->
-            let tO, tN, tT = tp t
-            TSet tO, TSet tN, (fun e -> setMap e tT)
-        | TMap (s, t) ->
-            let sO, sN, sT = tp s
-            let tO, tN, tT = tp t
-            TMap(sO, tO), TMap(sN, tN), (fun e -> mapMap e sT tT)
-        | TArray t ->
-            let tO, tN, tT = tp t
-            TArray tO, TArray tN, (fun e -> arrayMap e tT)
+            TNullable tO, TNullable tN, (fun e -> EDisj [EEqual(ETuple[fst e;snd e], ETuple([ENull tO; ENull tN])); tT e])
+        | TSeq(b,t) ->
+            let tO, tN, tT = tpAbstracted("sq", t)
+            TSeq(b,tO), TSeq(b,tN), seqRel tO tN tT
+        | TSet(b,t) ->
+            let tO, tN, tT = tpAbstracted("st", t)
+            TSet(b,tO), TSet(b,tN), setRel tO tN tT
+        | TMap(b,s, t) ->
+            let sO, sN, sT = tpAbstracted("mp", s)
+            let tO, tN, tT = tpAbstracted("mp", t)
+            TMap(b, sO, tO), TMap(b, sN, tN), mapRel sO sN sT tO tN tT
+        | TArray(b,t) ->
+            let tO, tN, tT = tpAbstracted("ar", t)
+            TArray(b,tO), TArray(b,tN), arrayRel tO tN tT
         | TUnimplemented -> TUnimplemented, TUnimplemented, (fun _ -> EUnimplemented)
+    /// same as tp but with the relation lambda-abstracted
+    and tpAbstracted(x: string, t: Type) =
+        let tO, tN, tT = tp t
+        tO, tN, abstractRel(x, tO, tN, tT)
+        
 
     /// translates expression e:t to the proof that it is in the t-relation
     ///
