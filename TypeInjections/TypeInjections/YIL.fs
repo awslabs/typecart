@@ -344,6 +344,7 @@ module YIL =
         // *** introduction/elimination forms for built-in type operators
         | ESet of tp: Type * elems: Expr list
         | ESeq of tp: Type * elems: Expr list
+        | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
         | EMapAt of mp: Expr * arg: Expr
         | EMapKeys of map: Expr
         | ESeqAt of seq: Expr * index: Expr
@@ -842,6 +843,7 @@ module YIL =
                 + exprO (t, "")
                 + "]"
             | ESeq (_, es) -> "seq" + (exprs es)
+            | ESeqConstr(_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
             | ESeqAt (s, i) -> (expr s) + "[" + (expr i) + "]"
             | ESeqRange (s, f, t) ->
                 (expr s)

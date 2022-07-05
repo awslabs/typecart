@@ -568,6 +568,10 @@ module DafnyToYIL =
         | :? MapComprehension as e -> unsupported "missing case: map comprehension"
         | :? MapDisplayExpr -> unsupported "missing case: map display"
         | :? SetComprehension -> unsupported "missing case: set comprehension"
+        | :? SeqConstructionExpr as e ->
+            let seqtp = tp e.Type
+            let elemtp = match seqtp with | Y.TSeq(_,a) -> a | a -> unsupported("unexpected sequence type: " + a.ToString())
+            Y.ESeqConstr(elemtp, expr e.N, expr e.Initializer)
         | null -> error "expression is null"
         | _ -> unsupported ("expression " + e.ToString())
 
@@ -758,7 +762,7 @@ module DafnyToYIL =
             Y.EBreak None
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
-        // | :? AssertStmt as s ->
+        | :? AssertStmt as s -> Y.EBlock[] // skipping assertion, TODO check if we need to preserve assertions
         // | :? AssumeStmt ->
         // | :? ForallStmt ->
         // | :? AssumeStmt as s when expr s.Expr = Y.EBool true -> Y.EUnimplemented

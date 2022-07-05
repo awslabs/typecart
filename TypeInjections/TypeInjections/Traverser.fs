@@ -168,6 +168,7 @@ module Traverser =
                 | EProj (e, i) -> EProj (rcE e, i)
                 | ESet (t, es) -> ESet (rcT t, rcEs es)
                 | ESeq (t, es) -> ESeq (rcT t, rcEs es)
+                | ESeqConstr(t, l, i) -> ESeqConstr(rcT t, rcE l, rcE i)
                 | ESeqAt (s, i) -> ESeqAt (rcE s, rcE i)
                 | ESeqRange (s, f, t) -> ESeqRange (rcE s, rcEo f, rcEo t)
                 | ESeqUpdate (s, i, e) -> ESeqUpdate (rcE s, rcE i, rcE e)
