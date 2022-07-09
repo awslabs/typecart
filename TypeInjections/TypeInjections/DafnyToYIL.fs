@@ -458,15 +458,6 @@ module DafnyToYIL =
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays
             Y.EArrayAt(expr e.Array, expr @ e.Indices)
-        | :? SetDisplayExpr as e ->
-            if not (e.Finite) then
-                unsupported "Infinite set definition"
-            let elems = expr @ e.Elements
-            let t =
-                match (tp e.Type) with
-                | Y.TSet (_,a) -> a
-                | _ -> error "Unexpected set type"
-            Y.ESet(t, elems)
         | :? SeqDisplayExpr as e ->
             let elems = expr @ e.Elements
             match tp e.Type with
@@ -565,9 +556,38 @@ module DafnyToYIL =
             Y.EQuant(q, boundVar @ e.BoundVars, exprO e.Range, expr e.Term)
         | :? OldExpr as e ->
             Y.EOld (expr e.E)
-        | :? MapComprehension as e -> unsupported "missing case: map comprehension"
-        | :? MapDisplayExpr -> unsupported "missing case: map display"
-        | :? SetComprehension -> unsupported "missing case: set comprehension"
+        | :? MapComprehension as e ->
+            if not e.Finite then
+                unsupported "map type must be finite"
+            let tL = match e.TermLeft with null -> None | exprL -> Some (expr exprL)
+            let tR = expr e.Term
+            let lds = e.BoundVars |> List.ofSeq |> List.map boundVar
+            let rangePredicate = expr e.Range
+            Y.EMapComp (lds, rangePredicate, tL, tR)
+        | :? MapDisplayExpr as e ->
+            if not e.Finite then
+                unsupported "map type must be finite"
+            let mapElts = e.Elements |> List.ofSeq  
+            let mapDisplay = List.fold (fun l (p : ExpressionPair) ->
+                let keyTrans = expr p.A
+                let valTrans = expr p.B
+                (keyTrans, valTrans) :: l) [] mapElts
+            Y.EMapDisplay mapDisplay
+        | :? SetComprehension as e ->
+            if not e.Finite then
+                unsupported "set comprehension must be finite"
+            let lds = e.BoundVars |> List.ofSeq |> List.map boundVar
+            let rangePredicate = expr e.Range
+            Y.ESetComp (lds, rangePredicate)
+        | :? SetDisplayExpr as e ->
+            if not (e.Finite) then
+                unsupported "Infinite set definition"
+            let elems = expr @ e.Elements
+            let t =
+                match (tp e.Type) with
+                | Y.TSet (_,a) -> a
+                | _ -> error "Unexpected set type"
+            Y.ESet(t, elems)
         | :? SeqConstructionExpr as e ->
             let seqtp = tp e.Type
             let elemtp = match seqtp with | Y.TSeq(_,a) -> a | a -> unsupported("unexpected sequence type: " + a.ToString())

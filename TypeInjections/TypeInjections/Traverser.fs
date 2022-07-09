@@ -167,6 +167,10 @@ module Traverser =
                 | ETuple es -> ETuple (rcEs es)
                 | EProj (e, i) -> EProj (rcE e, i)
                 | ESet (t, es) -> ESet (rcT t, rcEs es)
+                | ESetComp (lds, p) ->
+                    let ctxE = ctx.add lds
+                    let pT = this.expr(ctxE, p)
+                    ESetComp (this.localDeclList (ctx, lds), pT)
                 | ESeq (t, es) -> ESeq (rcT t, rcEs es)
                 | ESeqConstr(t, l, i) -> ESeqConstr(rcT t, rcE l, rcE i)
                 | ESeqAt (s, i) -> ESeqAt (rcE s, rcE i)
@@ -180,6 +184,13 @@ module Traverser =
                 | EArrayUpdate (a, i, e) -> EArrayUpdate (rcE a, i ,rcE e)
                 | EMapAt (m, a) -> EMapAt (rcE m, a)
                 | EMapKeys m -> EMapKeys (rcE m)
+                | EMapDisplay kvs -> (List.fold (fun l (eKey, eVal) -> (rcE eKey, rcE eVal) :: l) [] kvs) |> List.rev |> EMapDisplay
+                | EMapComp (lds, p, tL, tR) ->
+                    let ctxE = ctx.add lds
+                    let pT = this.expr(ctxE, p)
+                    let pTL = match tL with None -> tL | Some tL -> Some (this.expr(ctxE, tL))
+                    let pTR = this.expr(ctxE, tR)
+                    EMapComp (this.localDeclList (ctx, lds), pT, pTL, pTR)
                 | EFun(ins, out, bd) -> EFun(this.localDeclList(ctx,ins), rcT out, this.expr(ctx.add ins, bd))
                 | EAnonApply (f, es) -> EAnonApply(rcE f, rcEs es)
                 | EUnOpApply (op, e) -> EUnOpApply(op, rcE e)

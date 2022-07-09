@@ -343,10 +343,17 @@ module YIL =
         | EFun of vars: LocalDecl list * out: Type * body: Expr
         // *** introduction/elimination forms for built-in type operators
         | ESet of tp: Type * elems: Expr list
+        | ESetComp of lds : LocalDecl list * p : Expr // set comprehension. {x in lds | p(lds)}
         | ESeq of tp: Type * elems: Expr list
         | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
         | EMapAt of mp: Expr * arg: Expr
         | EMapKeys of map: Expr
+        | EMapDisplay of map : (Expr * Expr) list // explicit map represented as a list
+        | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr // map comprehension where tL is an expression over the preimage
+                                                                                     // and tR is an expression mapping preimage to postimage.
+                                                                                     // If tL = Some tLF,
+                                                                                     // generates the map tLF(p(lds)) -> tR(p(lds)).
+                                                                                     // Otherwise, generates the map p(lds) -> tR(p(lds)).
         | ESeqAt of seq: Expr * index: Expr
         | ESeqRange of seq: Expr * beginIndex: Expr option * endIndex: Expr option
         | ESeqUpdate of seq: Expr * index: Expr * df: Expr
@@ -834,6 +841,9 @@ module YIL =
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
             | ESet (_, es) -> "set" + (exprs es)
+            | ESetComp (lds, predicate) ->
+                let ldsStr = List.map this.localDecl lds |> String.concat ", "
+                "set (" + ldsStr + ") | " + (expr predicate)
             | ECharAt (s, i) -> (expr s) + this.dims ([ i ])
             | EStringRange (s, f, t) ->
                 (expr s)
@@ -858,6 +868,16 @@ module YIL =
             | EArrayUpdate (a, i, e) -> (expr a) + this.dims (i) + " := " + (expr e)
             | EMapAt (m, e) -> (expr m) + (this.dims [ e ])
             | EMapKeys (e) -> (expr e) + ".Keys"
+            | EMapDisplay (elts) ->
+                let str = List.fold (fun l (k, v) -> (String.concat " := " [expr k; expr v]) :: l) [] elts
+                let str = String.concat " , " str
+                "map [" + str + "]"
+            | EMapComp (lds, p, tL, tR) ->
+                let ldsStr = List.map this.localDecl lds |> String.concat ", "
+                "map " + ldsStr + " | " + (expr p) + " :: " +
+                match tL with
+                | None -> expr tR
+                | Some tL -> (expr tL) + " := " + (expr tR)
             | EUnOpApply (op, e) -> (this.operator op) + (expr e)
             | EBinOpApply (op, e1, e2) -> "(" + (expr e1) + (this.operator op) + (expr e2) + ")"
             | EAnonApply (f, es) -> (expr f) + (exprs es)

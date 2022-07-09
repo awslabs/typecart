@@ -34,8 +34,4 @@
       </Reference>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Resources\Examples" />
-    </ItemGroup>
-
 </Project>
