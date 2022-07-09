@@ -884,11 +884,8 @@ module YIL =
                 match tL with
                 | None -> expr tR
                 | Some tL -> (expr tL) + " := " + (expr tR)
-            | EUnOpApply (op, e) ->
-                if op.StartsWith("Cardinality") then // cardinality expressions.
-                    "|" + (expr e) + "|"
-                else (this.operator op) + (expr e)
-            | EBinOpApply (op, e1, e2) -> "(" + (expr e1) + (this.operator op) + (expr e2) + ")"
+            | EUnOpApply (op, e) -> this.unaryOperator op (expr e)
+            | EBinOpApply (op, e1, e2) -> this.binaryOperator op (expr e1) (expr e2)
             | EAnonApply (f, es) -> (expr f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) ->
                 this.receiver (r)
@@ -969,27 +966,29 @@ module YIL =
             | ECommented(s,e) -> "/* " + s + " */ " + expr e 
             | EUnimplemented -> UNIMPLEMENTED
 
-        // Useful reference for dafny operator AST names to source string:
-        // https://github.com/dafny-lang/dafny/blob/743d145eed4bd316b469a240831d3540fcdacdd8/Source/Dafny/Compilers/Compiler-python.cs#L1172
-        member this.operator(op: string) =
-            match op with
-            | "Concat" | "Add" -> " + "
-            | "Sub" -> " - "
-            | "Eq" -> " = "
-            | "And" -> " && "
-            | "Or" -> " || "
-            | "Le" | "LeChar" -> " <= "
-            | "Lt" -> " < "
-            | "Not-Bool" -> "!"
-            | "EqCommon" | "SeqEq" | "SetEq" | "MapEq" -> " == "
-            | "NeqCommon" | "SeqNeq" | "SetNeq" | "MapNeq" -> " != "
-            | "Union" -> "|"
-            | "InSet" | "InSeq" -> " in "
-            | "NotInSet" | "NotInSeq" -> " not in "
-            | "Imp" -> " ==> " // binary implication
-            | "Exp" -> " <== " // reverse binary implication (dafny explication).
-            | s -> " " + s + " "
+        member this.binaryOperator(opS: string) (eSL : string) (eSR : string) : string =
+            // TODO: handle operator precedence? See dafny Printer.cs for precedence.
+            let op = opS.Split [|'-'|]
+            // reconstruct dafny Opcode by converting string back to enum.
+            let mutable eOp = BinaryExpr.ResolvedOpcode.YetUndetermined
+            if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op[0], &eOp) then
+                "(" + eSL + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + eSR + ")"
+            else
+                failwith $"unsupported binary operator %s{op[0]}"
+            
 
+        // For reference, see unary expression handling in dafny Printer.cs file.
+        member this.unaryOperator(opS : string) (eS : string) =
+            let op = opS.Split [|'-'|] // handle polymorphic unary operators like Not-Bool, Cardinality-Seq, etc.
+            match op[0] with
+            | "Not" -> "!" + eS
+            | "Cardinality" -> "|" + eS + "|"
+            | "Fresh" -> "fresh(" + eS + ")"
+            | "Allocated" -> "allocated(" + eS + ")"
+            | "Lit" -> "Lit(" + eS + ")"
+            | _ -> failwith $"unsupported unary operator %s{op[0]}"
+            
+        
         member this.localDecls(lds: LocalDecl list) =
             "("
             + listToString (List.map this.localDecl lds, ", ")
