@@ -884,7 +884,10 @@ module YIL =
                 match tL with
                 | None -> expr tR
                 | Some tL -> (expr tL) + " := " + (expr tR)
-            | EUnOpApply (op, e) -> (this.operator op) + (expr e)
+            | EUnOpApply (op, e) ->
+                if op.StartsWith("Cardinality") then // cardinality expressions.
+                    "|" + (expr e) + "|"
+                else (this.operator op) + (expr e)
             | EBinOpApply (op, e1, e2) -> "(" + (expr e1) + (this.operator op) + (expr e2) + ")"
             | EAnonApply (f, es) -> (expr f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) ->
@@ -966,11 +969,25 @@ module YIL =
             | ECommented(s,e) -> "/* " + s + " */ " + expr e 
             | EUnimplemented -> UNIMPLEMENTED
 
+        // Useful reference for dafny operator AST names to source string:
+        // https://github.com/dafny-lang/dafny/blob/743d145eed4bd316b469a240831d3540fcdacdd8/Source/Dafny/Compilers/Compiler-python.cs#L1172
         member this.operator(op: string) =
             match op with
+            | "Concat" | "Add" -> " + "
+            | "Sub" -> " - "
             | "Eq" -> " = "
             | "And" -> " && "
             | "Or" -> " || "
+            | "Le" | "LeChar" -> " <= "
+            | "Lt" -> " < "
+            | "Not-Bool" -> "!"
+            | "EqCommon" | "SeqEq" | "SetEq" | "MapEq" -> " == "
+            | "NeqCommon" | "SeqNeq" | "SetNeq" | "MapNeq" -> " != "
+            | "Union" -> "|"
+            | "InSet" | "InSeq" -> " in "
+            | "NotInSet" | "NotInSeq" -> " not in "
+            | "Imp" -> " ==> " // binary implication
+            | "Exp" -> " <== " // reverse binary implication (dafny explication).
             | s -> " " + s + " "
 
         member this.localDecls(lds: LocalDecl list) =

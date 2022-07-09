@@ -525,6 +525,7 @@ module DafnyToYIL =
                 | "Cardinality", Y.TSet _ -> "Cardinality-Set"
                 | "Cardinality", Y.TMap _ -> "Cardinality-Map"
                 | "Cardinality", Y.TArray _ -> "Cardinality-Array"
+                | "Not", Y.TBool -> "Not-Bool"
                 | _  -> unsupported (sprintf "Cardinality %s" ((tp e.E.Type).ToString()))
             Y.EUnOpApply(oT, expr e.E)
         | :? BinaryExpr as e ->
