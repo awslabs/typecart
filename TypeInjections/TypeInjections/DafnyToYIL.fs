@@ -269,12 +269,26 @@ module DafnyToYIL =
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
 
     and tp (t: Type) : Y.Type =
+        // translate common types in CommonTypes.dfy.
+        // This is included both in JavaLib and RustLib.
+        let tpCommon (t : UserDefinedType) n (args : YIL.Type list) err =
+            match n with
+            | "int8" -> Y.TInt Y.Bound8
+            | "int16" -> Y.TInt Y.Bound16 
+            | "int32" -> Y.TInt Y.Bound32 
+            | "int64" -> Y.TInt Y.Bound64
+            | "float" -> Y.TReal Y.Bound32
+            | "double" -> Y.TReal Y.Bound64
+            | "Option" when args.Length = 1 -> Y.TOption args[0]
+            | _ -> unsupported err
         match t with
         | :? UserDefinedType as t ->
             // Detection of type parameters: https://github.com/dafny-lang/dafny/pull/1188
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
             | _ ->
+                // TODO: find a less hacky way of handling all the user-defined types?
+                // ^ currently we need to look at the path to determine Java/Rust/common types, this isn't too ideal.
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
                 // Dafny puts a few built-in types into the DafnySystem namespace instead of making them primitive
@@ -317,15 +331,40 @@ module DafnyToYIL =
                     | "map32" when args.Length = 2 -> Y.TMap (Y.Bound32, args.Head, args.Tail.Head)
                     | "arr32" when args.Length = 1 -> Y.TArray(Y.Bound32, args.Head)
                     | "byteArray" -> Y.TArray(Y.NoBound, Y.TInt Y.Bound8)
-                    | "int8" -> Y.TInt Y.Bound8
-                    | "int16" -> Y.TInt Y.Bound16
-                    | "int32" -> Y.TInt Y.Bound32
-                    | "int64" -> Y.TInt Y.Bound64
                     | "nat32" -> Y.TNat Y.Bound32
                     | "nat64" -> Y.TNat Y.Bound64
-                    | "float" -> Y.TReal Y.Bound32
-                    | "double" -> Y.TReal Y.Bound64
-                    | _ -> unsupported ("unknown type in TypeUtil")
+                    | _ -> tpCommon t n args ("unknown type in TypeUtil")
+                elif p.names.Head = "JavaLib" then
+                    // types defined by Yucca in JavaLib.dfy.
+                    let n = p.names.Item(1)
+                    match n with
+                    | "nat31" -> Y.TNat Y.Bound31
+                    | "nat63" -> Y.TNat Y.Bound63
+                    | "string31" -> Y.TString Y.Bound31
+                    | "seq31" when args.Length = 1 -> Y.TSeq(Y.Bound31, args.Head)
+                    | "arr31" when args.Length = 1 -> Y.TArray(Y.Bound31, args.Head)
+                    | "map31" when args.Length = 2 -> Y.TMap (Y.Bound31, args.Head, args.Tail.Head)
+                    | "set31" when args.Length = 1 -> Y.TSet (Y.Bound31, args.Head)
+                    // types in CommonTypes.dfy are included in JavaLib.dfy.
+                    | _ -> tpCommon t n args ("unknown type in JavaLib")
+                else if p.names.Head = "rust_lib" then
+                    // types defined by Yucca in rust_lib.dfy.
+                    let n = p.names.Item(1)
+                    match n with
+                    | "nat32" -> Y.TNat Y.Bound32
+                    | "nat64" -> Y.TNat Y.Bound64
+                    | "isize" -> Y.TInt Y.Bound64 // isize = int64
+                    | "usize" -> Y.TNat Y.Bound64 // usize = nat64
+                    | "string64" -> Y.TString Y.Bound64
+                    | "seq64" when args.Length = 1 -> Y.TSeq(Y.Bound64, args.Head)
+                    | "arr64" when args.Length = 1 -> Y.TArray(Y.Bound64, args.Head)
+                    | "map64" when args.Length = 2 -> Y.TMap(Y.Bound64, args.Head, args.Tail.Head)
+                    | "set64" when args.Length = 1 -> Y.TSet (Y.Bound64, args.Head)
+                    // Recursive translation of RefL<T, L> = T, Ref<T> = T, Box<T> = T.
+                    | "RefL" | "Ref" | "Box"  ->
+                        assert ((not(n.Equals("RefL")) && args.Length = 1) || args.Length = 2)
+                        args[0]
+                    | _ -> tpCommon t n args ("unknown type in rust_lib")
                 else
                     let tT = Y.TApply(p, args)
                     if t.IsRefType && not t.IsNonNullRefType then
@@ -486,12 +525,12 @@ module DafnyToYIL =
                 | "Cardinality", Y.TSet _ -> "Cardinality-Set"
                 | "Cardinality", Y.TMap _ -> "Cardinality-Map"
                 | "Cardinality", Y.TArray _ -> "Cardinality-Array"
-                | "Cardinality", _ -> unsupported (sprintf "cardinality %s" ((tp e.E.Type).ToString()))
-                | o, _ -> o
+                | _  -> unsupported (sprintf "Cardinality %s" ((tp e.E.Type).ToString()))
             Y.EUnOpApply(oT, expr e.E)
         | :? BinaryExpr as e ->
             let o = e.ResolvedOp.ToString()
-            // disambiguate Dafny's ad-hoc polymorphism and the string = Seq<char> merger
+            // disambiguate Dafny's 
+            // ad-hoc polymorphism and the string = Seq<char> merger
             let oT =
                 match o, tp e.E0.Type, tp e.E1.Type with
                 | "InSeq", _, Y.TString _ -> o + "-String"

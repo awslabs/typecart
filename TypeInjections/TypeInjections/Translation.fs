@@ -441,6 +441,7 @@ module Translation =
         | TArray(b,t) ->
             let tO, tN, tT = tpAbstracted("ar", t)
             TArray(b,tO), TArray(b,tN), arrayRel tO tN tT
+        | TOption _ -> failwith "cannot support translation of Option types yet."
         | TUnimplemented -> TUnimplemented, TUnimplemented, (fun _ -> EUnimplemented)
     /// same as tp but with the relation lambda-abstracted
     and tpAbstracted(x: string, t: Type) =

@@ -221,6 +221,8 @@ module YIL =
         // identifiers
         | TApply of op: Path * args: Type list
         | TVar of string
+        // Option<T> type.
+        | TOption of Type
         // dummy for missing cases
         | TUnimplemented
         override this.ToString() =
@@ -248,6 +250,7 @@ module YIL =
             | TArray (b,a) -> "Array" + b.ToString() + (a.ToString())
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"
+            | TOption t -> "Option<" + t.ToString() + ">"
             | TUnimplemented -> "UNIMPLEMENTED"
 
     // for size-limited version of types defined in Yucca's TypeUtil, gives the size in bits
@@ -479,6 +482,9 @@ module YIL =
     let Bound16 = Bound (Some 16)
     let Bound32 = Bound (Some 32)
     let Bound64 = Bound (Some 64)
+    /// Some Java-specific types.
+    let Bound31 = Bound (Some 31)
+    let Bound63 = Bound (Some 63)
     
     /// s = t
     let EEqual (s: Expr, t: Expr) = EBinOpApply("Eq", s, t)
