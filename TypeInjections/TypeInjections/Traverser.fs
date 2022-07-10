@@ -185,7 +185,10 @@ module Traverser =
                 | EArrayUpdate (a, i, e) -> EArrayUpdate (rcE a, i ,rcE e)
                 | EMapAt (m, a) -> EMapAt (rcE m, a)
                 | EMapKeys m -> EMapKeys (rcE m)
-                | EMapDisplay kvs -> (List.fold (fun l (eKey, eVal) -> (rcE eKey, rcE eVal) :: l) [] kvs) |> List.rev |> EMapDisplay
+                | EMapDisplay kvs ->
+                    (List.fold (fun l (eKey, eVal) -> (rcE eKey, rcE eVal) :: l) [] kvs)
+                    |> List.rev
+                    |> EMapDisplay
                 | EMapComp (lds, p, tL, tR) ->
                     let ctxE = ctx.add lds
                     let pT = this.expr(ctxE, p)

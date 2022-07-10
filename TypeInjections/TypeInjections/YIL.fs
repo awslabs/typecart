@@ -346,17 +346,16 @@ module YIL =
         | EFun of vars: LocalDecl list * out: Type * body: Expr
         // *** introduction/elimination forms for built-in type operators
         | ESet of tp: Type * elems: Expr list
-        | ESetComp of lds : LocalDecl list * p : Expr // set comprehension. {x in lds | p(lds)}
+        | ESetComp of lds: LocalDecl list * p: Expr // set comprehension. {x in lds | p(lds)}
         | ESeq of tp: Type * elems: Expr list
         | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
         | EMapAt of mp: Expr * arg: Expr
         | EMapKeys of map: Expr
         | EMapDisplay of map : (Expr * Expr) list // explicit map represented as a list
-        | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr // map comprehension where tL is an expression over the preimage
-                                                                                     // and tR is an expression mapping preimage to postimage.
-                                                                                     // If tL = Some tLF,
-                                                                                     // generates the map tLF(p(lds)) -> tR(p(lds)).
-                                                                                     // Otherwise, generates the map p(lds) -> tR(p(lds)).
+        // map comprehension where tL is an expression over the preimage and tR is an expression mapping preimage to
+        // postimage. If tL = Some tLF, generates the map tLF(p(lds)) -> tR(p(lds)). Otherwise, generates the map
+        // p(lds) -> tR(p(lds)).
+        | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr
         | ESeqAt of seq: Expr * index: Expr
         | ESeqRange of seq: Expr * beginIndex: Expr option * endIndex: Expr option
         | ESeqUpdate of seq: Expr * index: Expr * df: Expr
