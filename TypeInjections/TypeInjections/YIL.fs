@@ -974,7 +974,12 @@ module YIL =
             if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op[0], &eOp) then
                 "(" + eSL + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + eSR + ")"
             else
-                failwith $"unsupported binary operator %s{op[0]}"
+                // EEqual boils down to "Eq", but we don't type equality operators yet.
+                // So to temporarily solve this issue, match if op[0] == "Eq".
+                if op[0].Equals("Eq") then
+                    "(" + eSL + " = " + eSR + ")"
+                else
+                    failwith $"unsupported binary operator %s{op[0]}"
             
 
         // For reference, see unary expression handling in dafny Printer.cs file.
