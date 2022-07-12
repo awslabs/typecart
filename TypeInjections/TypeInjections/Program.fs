@@ -108,7 +108,7 @@ module Program =
         let combine,joint = Translation.prog(oldYIL, diff)
         let transS = YIL.printer().prog(combine)
         Console.WriteLine transS
-
+        
         // write output files
         log "***** writing output files"
         let writeOut fileName prefix (prog:YIL.Program) (only: string -> bool) =

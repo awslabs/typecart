@@ -195,7 +195,7 @@ module Traverser =
                 | EMapComp (lds, p, tL, tR) ->
                     let ctxE = ctx.add lds
                     let pT = this.expr(ctxE, p)
-                    let pTL = match tL with None -> tL | Some tL -> Some (this.expr(ctxE, tL))
+                    let pTL = Option.map (fun e -> this.expr(ctxE, e)) tL 
                     let pTR = this.expr(ctxE, tR)
                     EMapComp (this.localDeclList (ctx, lds), pT, pTL, pTR)
                 | EFun(ins, out, bd) -> EFun(this.localDeclList(ctx,ins), rcT out, this.expr(ctx.add ins, bd))

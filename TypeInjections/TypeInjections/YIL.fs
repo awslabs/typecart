@@ -383,7 +383,7 @@ module YIL =
         | EMapKeys of map: Expr
         | EMapDisplay of map : (Expr * Expr) list // explicit map represented as a list
         // map comprehension where tL is an expression over the preimage and tR is an expression mapping preimage to
-        // postimage. If tL = Some tLF, generates the map tLF(p(lds)) -> tR(p(lds)). Otherwise, generates the map
+        // image. If tL = Some tLF, generates the map tLF(p(lds)) -> tR(p(lds)). Otherwise, generates the map
         // p(lds) -> tR(p(lds)).
         | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr
         | ESeqAt of seq: Expr * index: Expr
