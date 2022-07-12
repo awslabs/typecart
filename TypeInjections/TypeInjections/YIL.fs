@@ -198,34 +198,6 @@ module YIL =
        We do not allow module inheritance or Dafny classes.
        Therefore, there is no subtyping except for numbers.
     *)
-    and 'a Platform =
-        | TypeUtil of 'a
-        | Common of 'a
-        | Java of 'a
-        | Rust of 'a
-            member this.p = 
-                match this with
-                | TypeUtil _ -> Path ["TypeUtil"]
-                | Common _ -> Path ["CommonTypes"]
-                | Java _ -> Path ["JavaLib"]
-                | Rust _ -> Path ["std_lib"]
-            
-            member this.t =
-                match this with
-                | TypeUtil t | Common t | Java t | Rust t -> t
-            
-            member this.c (t: 'b) =
-                match this with
-                | TypeUtil _ -> TypeUtil t
-                | Common _ -> Common t
-                | Java _ -> Java t
-                | Rust _ -> Rust t
-            
-            member this.rc (f: 'a -> 'a) =
-                this.t |> f |> this.c
-            
-            member this.rcb (f : 'a -> 'b) =
-                this.t |> f
     and Type =
         // built-in base types
         | TUnit
@@ -250,8 +222,6 @@ module YIL =
         | TVar of string
         // Option<T> type.
         | TOption of Type
-        // Yucca DafnyLiteLib-specific type
-        | TYucca of Type Platform
         // dummy for missing cases
         | TUnimplemented
         override this.ToString() =
@@ -280,7 +250,6 @@ module YIL =
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"
             | TOption t -> "Option<" + t.ToString() + ">"
-            | TYucca _ -> failwith "TODO implement TYucca" // TODO: implement TYucca _
             | TUnimplemented -> "UNIMPLEMENTED"
 
     // for size-limited version of types defined in Yucca's TypeUtil, gives the size in bits
@@ -441,7 +410,6 @@ module YIL =
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
         | ECommented of string * Expr
-        | EYucca of Expr Platform
         // temporary dummy for missing cases
         | EUnimplemented
 
@@ -1002,7 +970,6 @@ module YIL =
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
-            | EYucca pexp -> pexp.rcb expr // TODO: see if expression printing needs to be platform-dependent.
             | EUnimplemented -> UNIMPLEMENTED
 
         member this.binaryOperator(opS: string) (eSL : string) (eSR : string) : string =

@@ -447,7 +447,6 @@ module Translation =
         | TOption t ->
             let tO, tN, tT = tpAbstracted("opt", t)
             TOption tO, TOption tN, optionRel tO tN tT
-        | TYucca _ -> failwith "TODO implement TYucca _" /// TODO implement
         | TUnimplemented -> TUnimplemented, TUnimplemented, (fun _ -> EUnimplemented)
     /// same as tp but with the relation lambda-abstracted
     and tpAbstracted(x: string, t: Type) =

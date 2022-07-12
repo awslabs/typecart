@@ -267,14 +267,6 @@ module DafnyToYIL =
         (t.Name, v)
 
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
-    // unwrap TYucca _ types
-    and utp (tf : Y.Type Y.Platform -> 'a) (tb : Y.Type -> 'a) = function
-        | Y.TYucca ty -> tf ty
-        | _ as t -> tb t
-    and tps (t: Type) (tf: Y.Type -> Y.Type) : Y.Type =
-        match tp t with
-        | Y.TYucca ct as yt -> Y.TYucca (ct.rc tf)
-        | _ as t' -> tf t'
     and tp (t: Type) : Y.Type =
         // translate common types in CommonTypes.dfy.
         // This is included both in JavaLib and RustLib.
@@ -289,7 +281,6 @@ module DafnyToYIL =
             | "Option" when args.Length = 1 -> Y.TOption args[0]
             | _ -> unsupported err
             end
-            |> Y.Common
         match t with
         | :? UserDefinedType as t ->
             // Detection of type parameters: https://github.com/dafny-lang/dafny/pull/1188
@@ -334,49 +325,49 @@ module DafnyToYIL =
                     // types defined by Yucca in TypeUtil.dfy
                     let n = p.names.Item(1)
                     begin match n with
-                    | "string32" -> Y.TString Y.Bound32 |> Y.TypeUtil
-                    | "seq32" when args.Length = 1 -> Y.TSeq(Y.Bound32, args.Head) |> Y.TypeUtil
-                    | "set32" when args.Length = 1 -> Y.TSet(Y.Bound32, args.Head) |> Y.TypeUtil
-                    | "map32" when args.Length = 2 -> Y.TMap (Y.Bound32, args.Head, args.Tail.Head) |> Y.TypeUtil
-                    | "arr32" when args.Length = 1 -> Y.TArray(Y.Bound32, args.Head) |> Y.TypeUtil
-                    | "byteArray" -> Y.TArray(Y.NoBound, Y.TInt Y.Bound8) |> Y.TypeUtil
-                    | "nat32" -> Y.TNat Y.Bound32 |> Y.TypeUtil
-                    | "nat64" -> Y.TNat Y.Bound64 |> Y.TypeUtil
+                    | "string32" -> Y.TString Y.Bound32 
+                    | "seq32" when args.Length = 1 -> Y.TSeq(Y.Bound32, args.Head) 
+                    | "set32" when args.Length = 1 -> Y.TSet(Y.Bound32, args.Head)
+                    | "map32" when args.Length = 2 -> Y.TMap (Y.Bound32, args.Head, args.Tail.Head) 
+                    | "arr32" when args.Length = 1 -> Y.TArray(Y.Bound32, args.Head) 
+                    | "byteArray" -> Y.TArray(Y.NoBound, Y.TInt Y.Bound8) 
+                    | "nat32" -> Y.TNat Y.Bound32 
+                    | "nat64" -> Y.TNat Y.Bound64 
                     | _ -> tpCommon t n args ("unknown type in TypeUtil")
-                    end |> Y.TYucca
+                    end 
                 elif p.names.Head = "JavaLib" then
                     // types defined by Yucca in JavaLib.dfy.
                     let n = p.names.Item(1)
                     begin match n with
-                    | "nat31" -> Y.TNat Y.Bound31 |> Y.Java
-                    | "nat63" -> Y.TNat Y.Bound63 |> Y.Java
-                    | "string31" -> Y.TString Y.Bound31 |> Y.Java
-                    | "seq31" when args.Length = 1 -> Y.TSeq(Y.Bound31, args.Head) |> Y.Java
-                    | "arr31" when args.Length = 1 -> Y.TArray(Y.Bound31, args.Head) |> Y.Java
-                    | "map31" when args.Length = 2 -> Y.TMap (Y.Bound31, args.Head, args.Tail.Head) |> Y.Java
-                    | "set31" when args.Length = 1 -> Y.TSet (Y.Bound31, args.Head) |> Y.Java
+                    | "nat31" -> Y.TNat Y.Bound31
+                    | "nat63" -> Y.TNat Y.Bound63 
+                    | "string31" -> Y.TString Y.Bound31 
+                    | "seq31" when args.Length = 1 -> Y.TSeq(Y.Bound31, args.Head) 
+                    | "arr31" when args.Length = 1 -> Y.TArray(Y.Bound31, args.Head) 
+                    | "map31" when args.Length = 2 -> Y.TMap (Y.Bound31, args.Head, args.Tail.Head)
+                    | "set31" when args.Length = 1 -> Y.TSet (Y.Bound31, args.Head)
                     // types in CommonTypes.dfy are included in JavaLib.dfy.
                     | _ -> tpCommon t n args ("unknown type in JavaLib")
-                    end |> Y.TYucca
+                    end
                 else if p.names.Head = "rust_lib" then
                     // types defined by Yucca in rust_lib.dfy.
                     let n = p.names.Item(1)
                     begin match n with
-                    | "nat32" -> Y.TNat Y.Bound32 |> Y.Rust
-                    | "nat64" -> Y.TNat Y.Bound64 |> Y.Rust 
-                    | "isize" -> Y.TInt Y.Bound64 |> Y.Rust // isize = int64
-                    | "usize" -> Y.TNat Y.Bound64 |> Y.Rust // usize = nat64
-                    | "string64" -> Y.TString Y.Bound64 |> Y.Rust
-                    | "seq64" when args.Length = 1 -> Y.TSeq(Y.Bound64, args.Head) |> Y.Rust
-                    | "arr64" when args.Length = 1 -> Y.TArray(Y.Bound64, args.Head) |> Y.Rust
-                    | "map64" when args.Length = 2 -> Y.TMap(Y.Bound64, args.Head, args.Tail.Head) |> Y.Rust
-                    | "set64" when args.Length = 1 -> Y.TSet (Y.Bound64, args.Head) |> Y.Rust
+                    | "nat32" -> Y.TNat Y.Bound32 
+                    | "nat64" -> Y.TNat Y.Bound64 
+                    | "isize" -> Y.TInt Y.Bound64 // isize = int64
+                    | "usize" -> Y.TNat Y.Bound64 // usize = nat64
+                    | "string64" -> Y.TString Y.Bound64
+                    | "seq64" when args.Length = 1 -> Y.TSeq(Y.Bound64, args.Head) 
+                    | "arr64" when args.Length = 1 -> Y.TArray(Y.Bound64, args.Head) 
+                    | "map64" when args.Length = 2 -> Y.TMap(Y.Bound64, args.Head, args.Tail.Head) 
+                    | "set64" when args.Length = 1 -> Y.TSet (Y.Bound64, args.Head)
                     // Recursive translation of RefL<T, L> = T, Ref<T> = T, Box<T> = T.
                     | "RefL" | "Ref" | "Box"  ->
                         assert ((not(n.Equals("RefL")) && args.Length = 1) || args.Length = 2)
-                        args[0] |> Y.Rust
+                        args[0]
                     | _ -> tpCommon t n args ("unknown type in rust_lib")
-                    end |> Y.TYucca
+                    end
                 else
                     let tT = Y.TApply(p, args)
                     if t.IsRefType && not t.IsNonNullRefType then
@@ -389,13 +380,12 @@ module DafnyToYIL =
         | :? RealType -> Y.TReal Y.NoBound
         | :? SetType as t -> Y.TSet(Y.NoBound, tp t.Arg)
         | :? SeqType as t ->
-            (fun aT ->
-                // Dafny treats string as seq<char> and sometimes expands it
-                if aT = Y.TChar then
-                    Y.TString Y.NoBound
-                else
-                    Y.TSeq(Y.NoBound, tp t.Arg))
-            |> tps t.Arg
+            let aT = tp t.Arg
+            // Dafny treats string as seq<char> and sometimes expands it
+            if aT = Y.TChar then
+                Y.TString Y.NoBound
+            else
+                Y.TSeq(Y.NoBound, tp t.Arg)
         | :? MapType as t -> Y.TMap(Y.NoBound, tp t.Domain, tp t.Range)
         | :? TypeProxy as t -> tp t.T // e.g., wrapper for inferred types
         | :? BitvectorType as t -> Y.TBitVector(t.Width)
@@ -510,7 +500,6 @@ module DafnyToYIL =
                         )
                 | _ -> unsupported (sprintf "Type of sequence in sequence access: %s" (t.ToString()))
             match t with
-            | Y.TYucca pt -> pt.rcb handler |> pt.c |> Y.EYucca
             | _ as t -> handler t
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays

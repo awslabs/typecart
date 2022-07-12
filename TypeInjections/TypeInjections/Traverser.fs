@@ -136,7 +136,6 @@ module Traverser =
             | TFun (ins,out) -> TFun (rcL ins, rc out)
             | TNullable t -> TNullable (rc t)
             | TOption t -> TOption (rc t)
-            | TYucca clt -> TYucca (clt.rc rc)
             | TUnimplemented -> TUnimplemented
 
         // transforms an expression
@@ -234,7 +233,6 @@ module Traverser =
                 | ENull(t) -> ENull(rcT t)
                 | EPrint es -> EPrint (rcEs es)
                 | ECommented(s,e) -> ECommented(s, rcE e)
-                | EYucca pe -> pe.rc rcE |> EYucca
                 | EUnimplemented _ -> expr
 
         // methods for auxiliary types
