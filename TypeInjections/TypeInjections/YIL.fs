@@ -972,12 +972,11 @@ module YIL =
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 
-        member this.binaryOperator(opS: string) (eSL : string) (eSR : string) : string =
+        member this.binaryOperator(op: string) (eSL : string) (eSR : string) : string =
             // TODO: handle operator precedence? See dafny Printer.cs for precedence.
-            let op = opS.Split [|'-'|]
             // reconstruct dafny Opcode by converting string back to enum.
             let mutable eOp = BinaryExpr.ResolvedOpcode.YetUndetermined
-            if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op[0], &eOp) then
+            if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op, &eOp) then
                 "(" + eSL + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + eSR + ")"
             else
                 // EEqual boils down to "Eq", but we don't type equality operators yet.
@@ -985,19 +984,18 @@ module YIL =
                 if op[0].Equals("Eq") then
                     "(" + eSL + " = " + eSR + ")"
                 else
-                    failwith $"unsupported binary operator %s{op[0]}"
+                    failwith $"unsupported binary operator %s{op}"
             
 
         // For reference, see unary expression handling in dafny Printer.cs file.
-        member this.unaryOperator(opS : string) (eS : string) =
-            let op = opS.Split [|'-'|] // handle polymorphic unary operators like Not-Bool, Cardinality-Seq, etc.
-            match op[0] with
+        member this.unaryOperator(op : string) (eS : string) =
+            match op with
             | "Not" -> "!" + eS
             | "Cardinality" -> "|" + eS + "|"
             | "Fresh" -> "fresh(" + eS + ")"
             | "Allocated" -> "allocated(" + eS + ")"
             | "Lit" -> "Lit(" + eS + ")"
-            | _ -> failwith $"unsupported unary operator %s{op[0]}"
+            | _ -> failwith $"unsupported unary operator %s{op}"
             
         
         member this.localDecls(lds: LocalDecl list) =

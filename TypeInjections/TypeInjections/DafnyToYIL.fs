@@ -527,12 +527,14 @@ module DafnyToYIL =
             // disambiguate Dafny's ad-hoc polymorphism
             let oT =
                 match o, tp e.E.Type with
-                | "Cardinality", Y.TString _ -> "Cardinality-String"
-                | "Cardinality", Y.TSeq _ -> "Cardinality-Seq"
-                | "Cardinality", Y.TSet _ -> "Cardinality-Set"
-                | "Cardinality", Y.TMap _ -> "Cardinality-Map"
-                | "Cardinality", Y.TArray _ -> "Cardinality-Array"
-                | "Not", Y.TBool -> "Not-Bool"
+                // TODO: remove this case match and just translate them using original Dafny
+                // names. But for now, we retain this case match to help keep track of what unops we use.
+                | "Cardinality", Y.TString _ -> "Cardinality"
+                | "Cardinality", Y.TSeq _ -> "Cardinality"
+                | "Cardinality", Y.TSet _ -> "Cardinality"
+                | "Cardinality", Y.TMap _ -> "Cardinality"
+                | "Cardinality", Y.TArray _ -> "Cardinality"
+                | "Not", Y.TBool -> "Not"
                 | "Fresh", Y.TApply _ -> "fresh"
                 | _  -> unsupported (sprintf "%s %s" o ((tp e.E.Type).ToString()))
             Y.EUnOpApply(oT, expr e.E)
