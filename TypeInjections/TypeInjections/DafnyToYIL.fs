@@ -198,8 +198,13 @@ module DafnyToYIL =
             let tpvars = typeParameter @ m.TypeArgs
             let input =
                 Y.InputSpec(formal @ m.Formals, condition @ m.Req)
+            let ensures = condition @ m.Ens
             let output =
-                Y.outputType(tp m.ResultType, condition @ m.Ens)
+                // always a single output; m.Result is null if that output is unnamed
+                if m.Result <> null then 
+                   Y.OutputSpec([formal m.Result], ensures)
+                else
+                   Y.outputType(tp m.ResultType, ensures)
             let body =
                 if (m.Body = null) then
                     None
@@ -216,17 +221,7 @@ module DafnyToYIL =
             let input = Y.InputSpec(ins, reqs)
             let outs = formal @ m.Outs
             let ens = condition @ m.Ens
-            (* Dafny allows multiple outputs, which are named to allow mentioning them in the post-conditions.
-               We only allow one computational output followed by some ghost outputs (which can be dropped for computation).
-           *)
-            let output =
-                if not outs.IsEmpty then
-                    let onlyOneNonGhost =
-                        List.forall (fun (d: Y.LocalDecl) -> d.ghost) outs.Tail
-                    if not onlyOneNonGhost then
-                        unsupported "More than one non-ghost return value in method"
-                Y.OutputSpec(outs, ens)
-
+            let output = Y.OutputSpec(outs, ens)
             let body =
                 if (m.Body = null) then
                     None
@@ -278,7 +273,6 @@ module DafnyToYIL =
             | "int64" -> Y.TInt Y.Bound64
             | "float" -> Y.TReal Y.Bound32
             | "double" -> Y.TReal Y.Bound64
-            | "Option" when args.Length = 1 -> Y.TOption args[0]
             | _ -> unsupported err
             end
         match t with
@@ -519,7 +513,8 @@ module DafnyToYIL =
             let recv = receiver (r.Resolved)
             let args = expr @ e.Args
             let tpargs =
-                List.append (tp @ e.TypeApplication_AtEnclosingClass) (tp @ e.TypeApplication_JustFunction)
+                // e.TypeApplication_AtEnclosingClass: type arguments for the datatype, not part of concrete syntax
+                tp @ e.TypeApplication_JustFunction
             Y.EMethodApply(recv, pathOfMemberDecl (e.Function), tpargs, args, false)
         | :? ApplyExpr as e -> Y.EAnonApply(expr e.Function, expr @ e.Args)
         | :? UnaryOpExpr as e ->

@@ -224,8 +224,6 @@ module YIL =
         // identifiers
         | TApply of op: Path * args: Type list
         | TVar of string
-        // Option<T> type.
-        | TOption of Type
         // dummy for missing cases
         | TUnimplemented
         override this.ToString() =
@@ -253,7 +251,6 @@ module YIL =
             | TArray (b,a) -> "Array" + b.ToString() + (a.ToString())
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"
-            | TOption t -> "Option<" + t.ToString() + ">"
             | TUnimplemented -> "UNIMPLEMENTED"
 
     // for size-limited version of types defined in Yucca's TypeUtil, gives the size in bits
@@ -719,7 +716,7 @@ module YIL =
 
         member this.decl(d: Decl) =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""  
-            comm +
+            // comm +
             match d with
             | Module (n, ds, a) ->
                 "module "

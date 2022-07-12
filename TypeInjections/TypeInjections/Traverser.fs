@@ -136,7 +136,6 @@ module Traverser =
             | TArray(b,t) -> TArray (b,rc t)
             | TFun (ins,out) -> TFun (rcL ins, rc out)
             | TNullable t -> TNullable (rc t)
-            | TOption t -> TOption (rc t)
             | TUnimplemented -> TUnimplemented
 
         // transforms an expression

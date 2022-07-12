@@ -57,7 +57,7 @@ module Translation =
     and typearg (a: TypeArg) : TypeArg * TypeArg * LocalDecl =
         let v = snd a
         let aO, aN, aT = name (fst a)
-        (aO,v), (aN,v), LocalDecl(aT, TFun([ TVar aO ], TVar aN), false)
+        (aO,v), (aN,v), LocalDecl(aT, TFun([TVar aO;TVar aN], TBool), false)
 
     /// suggests a name for a variable of the type defined by a declaration name
     and varname (n:string) = n.Chars(0).ToString()
