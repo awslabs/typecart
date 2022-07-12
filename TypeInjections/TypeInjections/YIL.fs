@@ -47,22 +47,23 @@ module YIL =
         override this.ToString() = listToString (this.names, ".")
 
     // meta-information
+    [<CustomEquality;NoComparison>]
     type Meta =
-         { comment: string option; position: Position option }
+        { comment: string option; position: Position option }
+        override this.GetHashCode() = 0
+        // we make all Meta objects equal so that they are ignored during diffing
+        override this.Equals(that: Object) =
+            match that with
+            | :? Meta -> true
+            | _ -> false
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
-    and [<CustomEquality;NoComparison>] Position =
+    and Position =
         { filename: String
           pos: int
           line: int
           col: int }
         override this.ToString() =
             $"{this.filename}@{this.line.ToString()}:{this.col.ToString()}"
-        override this.GetHashCode() = 0
-        // we make all Position objects equal so that they are ignored during diffing
-        override this.Equals(that: Object) =
-            match that with
-            | :? Position -> true
-            | _ -> false
 
     // ***** auxiliary methods
     let emptyMeta = { comment = None; position = None }
@@ -304,6 +305,12 @@ module YIL =
     and OutputSpec =
         | OutputSpec of LocalDecl list * Condition list
         member this.decls = match this with | OutputSpec (ds, _) -> ds
+        /// the unnamed output type if any
+        member this.outputType =
+            match this.decls with
+            | [ld] when ld.isAnonymous -> Some ld.tp
+            | _ -> None
+        /// the output declarations (i.e., without the dummy declaration for an output type)
         member this.namedDecls = this.decls |> List.filter (fun ld -> not ld.isAnonymous) 
         member this.conditions = match this with | OutputSpec (_, cs) -> cs
 
@@ -785,10 +792,10 @@ module YIL =
                 + this.conditions (true, rs)
 
         member this.outputSpec(outs: OutputSpec) =
-            match outs with
-            | OutputSpec (lds, es) ->
-                this.localDecls lds
-                + this.conditions (false, es)
+          let r = match outs.outputType with
+                  | Some t -> this.tp t
+                  | None -> this.localDecls outs.decls
+          r + this.conditions (false, outs.conditions)
 
         member this.conditions(require: bool, cs: Condition list) =
             if cs.IsEmpty then "" else indented(listToString (List.map (fun c -> this.condition (require, c)) cs, "\n"), false)
