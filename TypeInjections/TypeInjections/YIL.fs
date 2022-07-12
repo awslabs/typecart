@@ -981,8 +981,8 @@ module YIL =
             else
                 // EEqual boils down to "Eq", but we don't type equality operators yet.
                 // So to temporarily solve this issue, match if op[0] == "Eq".
-                if op[0].Equals("Eq") then
-                    "(" + eSL + " = " + eSR + ")"
+                if op.Equals("Eq") then
+                    "(" + eSL + " == " + eSR + ")"
                 else
                     failwith $"unsupported binary operator %s{op}"
             

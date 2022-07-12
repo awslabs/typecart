@@ -543,9 +543,10 @@ module DafnyToYIL =
             // disambiguate Dafny's 
             // ad-hoc polymorphism and the string = Seq<char> merger
             let oT =
+                // TODO: Get rid of this case match as well.
                 match o, tp e.E0.Type, tp e.E1.Type with
-                | "InSeq", _, Y.TString _ -> o + "-String"
-                | "NotInSeq", _, Y.TString _ -> o + "-String"
+                | "InSeq", _, Y.TString _ -> o
+                | "NotInSeq", _, Y.TString _ -> o
                 | _ -> o
 
             Y.EBinOpApply(oT, expr e.E0, expr e.E1)
