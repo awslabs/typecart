@@ -1,5 +1,6 @@
 namespace TypeInjections
 
+open System
 open TypeInjections.Traverser
 open YIL
 
@@ -9,16 +10,16 @@ module DafnyFunctions =
     let rbRec = StaticReceiver {path=rb; tpargs=[]}
     /// given relation t on o*n, the sequences e: seq<n> and f:seq<n> are related
     /// if they have the same length and are related element-wise
-    let seqRel o n t (e,f) = EMethodApply(rbRec, rb.child("seq"), [o;n], [t;e;f], false)
+    let seqRel o n t (e,f) = EBool true // EMethodApply(rbRec, rb.child("seq"), [o;n], [t;e;f], false)
     /// given relation t on o*n, the array e: arr<n> and f:arr<n> are related
     /// if they have the same length and are related element-wise
-    let arrayRel o n t (e,f) = EMethodApply(rbRec, rb.child("array"), [o;n], [t;e;f], false)
+    let arrayRel o n t (e,f) = EBool true // EMethodApply(rbRec, rb.child("array"), [o;n], [t;e;f], false)
     /// given relation t on o*n, the sets e: set<n> and f:set<n> are related
     /// if every element of e is related to an element of f and vice versa
-    let setRel o n t (e,f) = EMethodApply(rbRec, rb.child("set"), [o;n], [t;e;f], false)
+    let setRel o n t (e,f) = EBool true // EMethodApply(rbRec, rb.child("set"), [o;n], [t;e;f], false)
     /// given relations, sT,tT on so*sn and tO*tN, the maps e: map<sO,tO> and f:map<sN,tN> are related
     /// if every pair in e is related a pair in f and vice versa
-    let mapRel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
+    let mapRel sO sN sT tO tN tT (e,f) = EBool true // EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
     /// option types.
     /// Option<T> and Option<U> are related if T and U are related and both are Some _ or both are None.
     let optionRel o n t (e, f) = EMethodApply(rbRec, rb.child("option"), [o;n], [t;e;f], false)
@@ -110,6 +111,7 @@ module Translation =
         match dif with
         | Diff.Class _
         | Diff.ClassConstructor _ -> failwith (unsupported "classes")
+        | Diff.Import _
         | Diff.Export _ -> [decl] // TODO check
         | Diff.DUnimplemented -> [decl]
         | Diff.Module (_, msD) ->

@@ -109,6 +109,7 @@ module Traverser =
                 let bodyCtx = (headerCtx.add ins.decls).enterBody()
                 let bT = this.exprO(bodyCtx, b)
                 [ ClassConstructor(n, tpvs, insT, outsT, bT, m) ]
+            | Import(o, p) -> [Import (o, this.path(ctx,p))]
             | Export ps -> [Export (List.map (fun p -> this.path(ctx, p)) ps)]
             | DUnimplemented -> [ d ]
 
@@ -232,6 +233,7 @@ module Traverser =
                     EDeclChoice (this.localDecl (ctx, ld), eT)
                 | ENull(t) -> ENull(rcT t)
                 | EPrint es -> EPrint (rcEs es)
+                | EAssert e -> EAssert (rcE e)
                 | ECommented(s,e) -> ECommented(s, rcE e)
                 | EUnimplemented _ -> expr
 

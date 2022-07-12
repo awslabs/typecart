@@ -152,6 +152,7 @@ module YIL =
             ghost: bool *
             isStatic: bool *
             meta: Meta
+        | Import of opened: bool * modPath: Path
         | Export of Path list
         // dummy for missing cases
         | DUnimplemented
@@ -174,6 +175,7 @@ module YIL =
             | Method (_, n, _, _, _, _, _, _, _) -> n
             | Field (n, _, _, _, _, _, _) -> n
             | TypeDef (n, _, _, _, _, _) -> n
+            | Import _ 
             | Export _
             | DUnimplemented -> "" // check if this causes problems
         // type arguments of a declaration
@@ -186,6 +188,7 @@ module YIL =
             | Field _ -> []
             | Method (_, _, tpvs, _, _, _, _, _, _) -> tpvs
             | ClassConstructor (_, tpvs, _, _, _, _) -> tpvs
+            | Import _ -> []
             | Export _ -> []
             | DUnimplemented -> []
         member this.children =
@@ -274,7 +277,7 @@ module YIL =
         member this.ghost =
             match this with
             | LocalDecl (_, _, g) -> g
-        member this.isAnonymous = this.name = anonymous
+        member this.isAnonymous() = this.name = anonymous
 
 
     (* pre/postcondition of a method/lemma *)
@@ -308,10 +311,10 @@ module YIL =
         /// the unnamed output type if any
         member this.outputType =
             match this.decls with
-            | [ld] when ld.isAnonymous -> Some ld.tp
+            | [ld] when ld.isAnonymous() -> Some ld.tp
             | _ -> None
         /// the output declarations (i.e., without the dummy declaration for an output type)
-        member this.namedDecls = this.decls |> List.filter (fun ld -> not ld.isAnonymous) 
+        member this.namedDecls = this.decls |> List.filter (fun ld -> not (ld.isAnonymous())) 
         member this.conditions = match this with | OutputSpec (_, cs) -> cs
 
     (* a reference to a module or class with all its type parameters instantiated
@@ -416,6 +419,7 @@ module YIL =
         *)
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
+        | EAssert of Expr
         | ECommented of string * Expr
         // temporary dummy for missing cases
         | EUnimplemented
@@ -748,17 +752,16 @@ module YIL =
                 + n
                 + (this.tpvars tpvs)
                 + " = "
-                + (this.tp sup)
                 + (match predO with
-                   | Some (x, p) -> " where " + x + "." + (this.expr false p)
-                   | None -> "")
+                   | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr false p)
+                   | None -> this.tp sup)
             | Field (n, t, e, _, _, _, a) ->
-                "field "
+                "const "
                 + (this.meta a)
                 + n
                 + ": "
                 + (this.tp t)
-                + " = "
+                + " := "
                 + Option.fold (fun _ -> this.expr false) "" e
             | Method (isL, n, tpvs, ins, outs, b, _, _, _) ->
                 let outputsS =
@@ -773,7 +776,7 @@ module YIL =
                 + (this.conditions(true, ins.conditions))
                 + (this.conditions(false, outs.conditions))
                 + "\n"
-                + Option.fold (fun _ -> this.expr false) "{}" (Option.map block b)
+                + Option.fold (fun _ -> this.expr false) "" (Option.map block b)
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
@@ -783,7 +786,8 @@ module YIL =
                 + (this.conditions(false, outs))
                 + "\n"
                 + Option.fold (fun _ -> this.expr false) "{}" b
-            | Export p -> "export " + p.ToString()
+            | Import(o,p) -> "import " + (if o then "opened " else "") + p.ToString() 
+            | Export ps -> "export provides " + (listToString(ps |> List.map (fun p -> p.name), ", "))
             | DUnimplemented -> UNIMPLEMENTED
 
         member this.inputSpec(ins: InputSpec) =
@@ -833,7 +837,9 @@ module YIL =
             let tps = this.tps
 
             match e with
-            | EVar n -> n
+            | EVar n ->
+                let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
+                nF
             | EThis -> "this"
             | ENew (ct, _) -> "new " + this.classType (ct)
             | ENull _ -> "null"
@@ -847,10 +853,12 @@ module YIL =
             | EQuant (q, lds, r, b) ->
                 q.ToString()
                 + " "
-                + this.localDecls (lds)
-                + exprO (r, " :: ")
-                + (if q = Forall then "==>" else "&&")
-                + (expr b)
+                + this.localDeclsBr (lds,false)
+                + " :: "
+                + (match r with
+                   | Some e -> expr e + (if q = Forall then " ==> " else " && ")
+                   | None -> ""
+                ) + (expr b)
             | EOld e -> "old(" + (expr e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
@@ -867,7 +875,7 @@ module YIL =
                 + ".."
                 + exprO (t, "")
                 + "]"
-            | ESeq (_, es) -> "seq" + (exprs es)
+            | ESeq (_, es) -> "[" + (this.exprsNoBr isPattern es ", ") + "]"
             | ESeqConstr(_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
             | ESeqAt (s, i) -> (expr s) + "[" + (expr i) + "]"
             | ESeqRange (s, f, t) ->
@@ -915,18 +923,18 @@ module YIL =
             | EBlock es ->
                 indentedBraced(this.exprsNoBr false es ";\n")
             | ELet (n, t, d, e) ->
-                "let "
+                "var "
                 + n
                 + ":"
                 + (tp t)
-                + "="
+                + ":="
                 + (expr d)
-                + " in "
+                + "; "
                 + (expr e)
             | EIf (c, t, e) ->
-                "if ("
+                "if "
                 + (expr c)
-                + ") "
+                + " then "
                 + (expr t)
                 + exprO (e, " else ")
             | EFor (index, init, last, up, body) ->
@@ -979,6 +987,7 @@ module YIL =
                 + (expr e)
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
+            | EAssert e -> "assert " + (expr e)
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 
@@ -987,7 +996,7 @@ module YIL =
             // reconstruct dafny Opcode by converting string back to enum.
             let mutable eOp = BinaryExpr.ResolvedOpcode.YetUndetermined
             if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op, &eOp) then
-                "(" + eSL + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + eSR + ")"
+                "(" + eSL + " " + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + " " + eSR + ")"
             else
                 failwith $"unsupported binary operator %s{op}"
             
@@ -1003,10 +1012,11 @@ module YIL =
             | _ -> failwith $"unsupported unary operator %s{op}"
             
         
-        member this.localDecls(lds: LocalDecl list) =
-            "("
+        member this.localDeclsBr(lds: LocalDecl list, brackets: bool) =
+            (if brackets then "(" else "")
             + listToString (List.map this.localDecl lds, ", ")
-            + ")"
+            + (if brackets then ")" else "")
+        member this.localDecls(lds: LocalDecl list) = this.localDeclsBr(lds,true)
 
         member this.update(u: UpdateRHS) =
             let op = if u.monadic.IsSome then ":-" else ":="

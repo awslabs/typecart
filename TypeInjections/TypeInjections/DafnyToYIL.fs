@@ -81,7 +81,6 @@ module DafnyToYIL =
             // TODO check inheritance etc.
             if d.TypeArgs.Count <> 0 then
                 unsupported "module with type parameters"
-
             let ms = d.ModuleDef.TopLevelDecls
             let dName = d.Name
             let meta = namedMetaModDef d.ModuleDef
@@ -89,18 +88,21 @@ module DafnyToYIL =
         | :? AliasModuleDecl as d ->
             (* Dafny allows "import M", "import m = M" or "import opened M" where M is a module name.
                Either way, the names of M later appear with fully qualified paths. *)
-            []
+            // we ignore qualifiers, hoping there won't be a name clash when printing
+            // if d.Name <> null then
+            //    unsupported "import with qualifier"
+            if not (fromIList(d.Exports).IsEmpty) then
+                unsupported "import with exports"
+            [Y.Import(d.Opened, pathOfModule(d.Signature.ModuleDef))]
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs
-
             let super, pred =
                 match d with
                 | :? SubsetTypeDecl as d ->
                     let bv = boundVar d.Var
                     bv.tp, Some(bv.name, expr d.Constraint)
                 | _ -> tp d.Rhs, None
-
             [ Y.TypeDef(d.Name, tpvars, super, pred, false, namedMeta d) ]
         | :? NewtypeDecl as d ->
             // like SubsetTypeDecl but only for a numeric supertype and new type is not a subtype of the old type
@@ -135,10 +137,8 @@ module DafnyToYIL =
                 | :? NonNullTypeDecl as td -> Some(pathOfTopLevelDecl td)
                 | :? IndDatatypeDecl as dd -> Some(pathOfTopLevelDecl dd)
                 | _ -> None
-
             let exportPaths : YIL.Path list =
                 d.Exports |> List.ofSeq |> List.choose exportPath
-
             [ Y.Export exportPaths ]
         | _ ->
             // default module contains a default class, which contains non-nesting declarations
@@ -833,7 +833,7 @@ module DafnyToYIL =
             Y.EBreak None
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
-        | :? AssertStmt as s -> Y.EBlock[] // skipping assertion, TODO check if we need to preserve assertions
+        | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
         // | :? AssumeStmt ->
         // | :? ForallStmt ->
         // | :? AssumeStmt as s when expr s.Expr = Y.EBool true -> Y.EUnimplemented

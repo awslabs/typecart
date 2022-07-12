@@ -65,6 +65,7 @@ module Diff =
         | TypeDef of Name * TypeArgList * Type * ExprO
         | Field of Name * Type * ExprO
         | Method of Name * TypeArgList * InputSpec * OutputSpec * ExprO
+        | Import of bool * YIL.Path
         | Export of YIL.Path list
         | DUnimplemented
         member this.name =
@@ -78,6 +79,7 @@ module Diff =
             | Method(n,_,_,_,_) -> n
             // these should be impossible but it's more convenient to make the function total
             | DUnimplemented -> SameName "DUnimplemented"
+            | Import _ -> SameName "IMPORT"
             | Export _ -> SameName "EXPORT"
             
 
@@ -138,6 +140,7 @@ module Diff =
         match d with
         | YIL.DUnimplemented -> DUnimplemented
         | YIL.Export ps -> Export ps
+        | YIL.Import(o, p) -> Import (o,p)
         | YIL.Module _ -> Module(nD, msD)
         | YIL.Datatype(_,_,ctrs,_,_) -> Datatype(nD,tvsD, idList ctrs, msD)
         | YIL.Class(_,_,_,ps,_,_) -> Class(nD, tvsD, idList ps, msD)
@@ -260,6 +263,7 @@ module Diff =
                 + (this.outputSpec outs)
                 + " = \n"
                 + this.exprO b
+             | Import(o,p) -> P().decl(YIL.Import(o,p))
              | Export ps -> P().decl(YIL.Export ps)
              | DUnimplemented -> "Unimplemented"
 
