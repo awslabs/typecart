@@ -69,7 +69,7 @@ module YIL =
     let emptyMeta = { comment = None; position = None }
 
     /// name of nonymous variables
-    let anonymous = "typecart_anon__"
+    let anonymous = "_"
     
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
@@ -762,8 +762,9 @@ module YIL =
                 + Option.fold (fun _ -> this.expr false) "" e
             | Method (isL, n, tpvs, ins, outs, b, _, _, _) ->
                 let outputsS =
-                    match outs with
-                    | OutputSpec(ds,_) -> this.localDecls ds
+                    match outs.outputType with
+                    | Some t -> this.tp t
+                    | None -> this.localDecls outs.decls
                 (if isL then "lemma " else "function ")
                 + n
                 + (this.tpvars tpvs)
