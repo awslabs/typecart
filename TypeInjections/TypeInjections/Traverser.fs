@@ -1,5 +1,6 @@
 namespace TypeInjections
 
+open TypeInjections.YIL
 open YIL
 
 module Traverser =
@@ -135,6 +136,7 @@ module Traverser =
             | TFun (ins,out) -> TFun (rcL ins, rc out)
             | TNullable t -> TNullable (rc t)
             | TOption t -> TOption (rc t)
+            | TYucca clt -> TYucca (clt.rc rc)
             | TUnimplemented -> TUnimplemented
 
         // transforms an expression
@@ -182,6 +184,7 @@ module Traverser =
                 | EToString es -> EToString (rcEs es)
                 | EArray (t, dim) -> EArray (rcT t, dim)
                 | EArrayAt (a, i) -> EArrayAt (rcE a, i)
+                | EArrayRange (a, f, t) -> EArrayRange (rcE a, rcEo f, rcEo t)
                 | EArrayUpdate (a, i, e) -> EArrayUpdate (rcE a, i ,rcE e)
                 | EMapAt (m, a) -> EMapAt (rcE m, a)
                 | EMapKeys m -> EMapKeys (rcE m)
@@ -231,6 +234,7 @@ module Traverser =
                 | ENull(t) -> ENull(rcT t)
                 | EPrint es -> EPrint (rcEs es)
                 | ECommented(s,e) -> ECommented(s, rcE e)
+                | EYucca pe -> pe.rc rcE |> EYucca
                 | EUnimplemented _ -> expr
 
         // methods for auxiliary types

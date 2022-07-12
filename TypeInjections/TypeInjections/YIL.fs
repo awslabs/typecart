@@ -194,11 +194,38 @@ module YIL =
             | Class (_, _, _, _, ds, _) -> ds
             | _ -> []
     and TypeArg = string * (bool option)  // true/false for co/contravariant
-
     (* types
        We do not allow module inheritance or Dafny classes.
        Therefore, there is no subtyping except for numbers.
     *)
+    and 'a Platform =
+        | TypeUtil of 'a
+        | Common of 'a
+        | Java of 'a
+        | Rust of 'a
+            member this.p = 
+                match this with
+                | TypeUtil _ -> Path ["TypeUtil"]
+                | Common _ -> Path ["CommonTypes"]
+                | Java _ -> Path ["JavaLib"]
+                | Rust _ -> Path ["std_lib"]
+            
+            member this.t =
+                match this with
+                | TypeUtil t | Common t | Java t | Rust t -> t
+            
+            member this.c (t: 'b) =
+                match this with
+                | TypeUtil _ -> TypeUtil t
+                | Common _ -> Common t
+                | Java _ -> Java t
+                | Rust _ -> Rust t
+            
+            member this.rc (f: 'a -> 'a) =
+                this.t |> f |> this.c
+            
+            member this.rcb (f : 'a -> 'b) =
+                this.t |> f
     and Type =
         // built-in base types
         | TUnit
@@ -223,6 +250,8 @@ module YIL =
         | TVar of string
         // Option<T> type.
         | TOption of Type
+        // Yucca DafnyLiteLib-specific type
+        | TYucca of Type Platform
         // dummy for missing cases
         | TUnimplemented
         override this.ToString() =
@@ -251,6 +280,7 @@ module YIL =
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"
             | TOption t -> "Option<" + t.ToString() + ">"
+            | TYucca _ -> failwith "TODO implement TYucca" // TODO: implement TYucca _
             | TUnimplemented -> "UNIMPLEMENTED"
 
     // for size-limited version of types defined in Yucca's TypeUtil, gives the size in bits
@@ -360,6 +390,7 @@ module YIL =
         | ESeqRange of seq: Expr * beginIndex: Expr option * endIndex: Expr option
         | ESeqUpdate of seq: Expr * index: Expr * df: Expr
         | EArrayAt of array: Expr * index: Expr list
+        | EArrayRange of array: Expr * beginIndex : Expr option * endIndex: Expr option
         | EArrayUpdate of array: Expr * index: Expr list * value: Expr // in-place array update
         | ECharAt of str: Expr * index: Expr
         | EStringRange of str: Expr * beginIndex: Expr option * endIndex: Expr option
@@ -410,6 +441,7 @@ module YIL =
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
         | ECommented of string * Expr
+        | EYucca of Expr Platform
         // temporary dummy for missing cases
         | EUnimplemented
 
@@ -870,6 +902,13 @@ module YIL =
             | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] := " + (expr e)
             | EArray (t, d) -> "new " + t.ToString() + this.dims (d)
             | EArrayAt (a, i) -> (expr a) + this.dims (i)
+            | EArrayRange (a, f, t) ->
+                (expr a)
+                + "["
+                + exprO (f, "")
+                + ".."
+                + exprO (t, "")
+                + "]"
             | EArrayUpdate (a, i, e) -> (expr a) + this.dims (i) + " := " + (expr e)
             | EMapAt (m, e) -> (expr m) + (this.dims [ e ])
             | EMapKeys (e) -> (expr e) + ".Keys"
@@ -962,7 +1001,8 @@ module YIL =
                 + (expr e)
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
-            | ECommented(s,e) -> "/* " + s + " */ " + expr e 
+            | ECommented(s,e) -> "/* " + s + " */ " + expr e
+            | EYucca pexp -> pexp.rcb expr // TODO: see if expression printing needs to be platform-dependent.
             | EUnimplemented -> UNIMPLEMENTED
 
         member this.binaryOperator(opS: string) (eSL : string) (eSR : string) : string =
