@@ -686,10 +686,12 @@ module YIL =
         member this.prog(p: Program) = this.declsGeneral(p.decls, false)
 
         member this.tpvar(a: TypeArg) =
+            // Not print out variance types for now. Before we prefix "+" for (n, Some true)
+            // and prefix "-" for (n, Some false).
             match a with
-            | (n,None) -> n
-            | (n,Some true) -> "+" + n
-            | (n,Some false) -> "-" + n
+            | (n,None) 
+            | (n,Some true) 
+            | (n,Some false) -> n
         member this.tpvars(ns: TypeArg list) =
             if ns.IsEmpty then
                 ""
