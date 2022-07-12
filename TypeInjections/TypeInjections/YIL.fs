@@ -755,7 +755,7 @@ module YIL =
                 let outputsS =
                     match outs with
                     | OutputSpec(ds,_) -> this.localDecls ds
-                (if isL then "lemma " else "method ")
+                (if isL then "lemma " else "function ")
                 + n
                 + (this.tpvars tpvs)
                 + (this.localDecls ins.decls)
