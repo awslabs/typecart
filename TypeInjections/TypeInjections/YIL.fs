@@ -68,7 +68,7 @@ module YIL =
     let emptyMeta = { comment = None; position = None }
 
     /// name of nonymous variables
-    let anonymous = "_"
+    let anonymous = "typecart_anon__"
     
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
