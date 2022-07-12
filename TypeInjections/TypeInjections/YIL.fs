@@ -486,7 +486,7 @@ module YIL =
     let Bound63 = Bound (Some 63)
     
     /// s = t
-    let EEqual (s: Expr, t: Expr) = EBinOpApply("Eq", s, t)
+    let EEqual (s: Expr, t: Expr) = EBinOpApply("EqCommon", s, t)
     /// conjunction of some expressions
     let EConj (es: Expr list) =
         if es.IsEmpty then
@@ -981,12 +981,7 @@ module YIL =
             if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op, &eOp) then
                 "(" + eSL + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + eSR + ")"
             else
-                // EEqual boils down to "Eq", but we don't type equality operators yet.
-                // So to temporarily solve this issue, match if op[0] == "Eq".
-                if op.Equals("Eq") then
-                    "(" + eSL + " == " + eSR + ")"
-                else
-                    failwith $"unsupported binary operator %s{op}"
+                failwith $"unsupported binary operator %s{op}"
             
 
         // For reference, see unary expression handling in dafny Printer.cs file.
