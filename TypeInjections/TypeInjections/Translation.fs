@@ -19,6 +19,9 @@ module DafnyFunctions =
     /// given relations, sT,tT on so*sn and tO*tN, the maps e: map<sO,tO> and f:map<sN,tN> are related
     /// if every pair in e is related a pair in f and vice versa
     let mapRel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
+    /// option types.
+    /// Option<T> and Option<U> are related if T and U are related and both are Some _ or both are None.
+    let optionRel o n t (e, f) = EMethodApply(rbRec, rb.child("option"), [o;n], [t;e;f], false)
 
 open DafnyFunctions
 
@@ -442,8 +445,8 @@ module Translation =
             let tO, tN, tT = tpAbstracted("ar", t)
             TArray(b,tO), TArray(b,tN), arrayRel tO tN tT
         | TOption t ->
-            let tO, tN, tT = tp t
-            TOption tO, TOption tN, (EEqual) // TODO: figure out if diagonal relation suffices for TOption.
+            let tO, tN, tT = tpAbstracted("opt", t)
+            TOption tO, TOption tN, optionRel tO tN tT
         | TUnimplemented -> TUnimplemented, TUnimplemented, (fun _ -> EUnimplemented)
     /// same as tp but with the relation lambda-abstracted
     and tpAbstracted(x: string, t: Type) =

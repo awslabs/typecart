@@ -526,7 +526,8 @@ module DafnyToYIL =
                 | "Cardinality", Y.TMap _ -> "Cardinality-Map"
                 | "Cardinality", Y.TArray _ -> "Cardinality-Array"
                 | "Not", Y.TBool -> "Not-Bool"
-                | _  -> unsupported (sprintf "Cardinality %s" ((tp e.E.Type).ToString()))
+                | "Fresh", Y.TApply _ -> "fresh"
+                | _  -> unsupported (sprintf "%s %s" o ((tp e.E.Type).ToString()))
             Y.EUnOpApply(oT, expr e.E)
         | :? BinaryExpr as e ->
             let o = e.ResolvedOp.ToString()
