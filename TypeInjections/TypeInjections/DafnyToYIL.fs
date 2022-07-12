@@ -285,6 +285,13 @@ module DafnyToYIL =
                 // ^ currently we need to look at the path to determine Java/Rust/common types, this isn't too ideal.
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
+                // the default treatment
+                let makeTApply() =
+                    let tT = Y.TApply(p, args)
+                    if t.IsRefType && not t.IsNonNullRefType then
+                      Y.TNullable tT
+                    else
+                      tT
                 // Dafny puts a few built-in types into the DafnySystem namespace instead of making them primitive
                 if p.names.Head = DafnySystem then
                     let n = p.names.Item(1)
@@ -340,6 +347,7 @@ module DafnyToYIL =
                     | "arr31" when args.Length = 1 -> Y.TArray(Y.Bound31, args.Head) 
                     | "map31" when args.Length = 2 -> Y.TMap (Y.Bound31, args.Head, args.Tail.Head)
                     | "set31" when args.Length = 1 -> Y.TSet (Y.Bound31, args.Head)
+                    | "Option" when args.Length = 1 -> makeTApply()
                     // types in CommonTypes.dfy are included in JavaLib.dfy.
                     | _ -> tpCommon t n args ("unknown type in JavaLib")
                     end
@@ -357,17 +365,11 @@ module DafnyToYIL =
                     | "map64" when args.Length = 2 -> Y.TMap(Y.Bound64, args.Head, args.Tail.Head) 
                     | "set64" when args.Length = 1 -> Y.TSet (Y.Bound64, args.Head)
                     // Recursive translation of RefL<T, L> = T, Ref<T> = T, Box<T> = T.
-                    | "RefL" | "Ref" | "Box"  ->
-                        assert ((not(n.Equals("RefL")) && args.Length = 1) || args.Length = 2)
-                        args[0]
+                    | "RefL" | "Ref" | "Box" -> makeTApply()
                     | _ -> tpCommon t n args ("unknown type in rust_lib")
                     end
                 else
-                    let tT = Y.TApply(p, args)
-                    if t.IsRefType && not t.IsNonNullRefType then
-                      Y.TNullable tT
-                    else
-                      tT
+                    makeTApply()
         | :? BoolType -> Y.TBool
         | :? CharType -> Y.TChar
         | :? IntType -> Y.TInt Y.NoBound
