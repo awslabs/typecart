@@ -7,7 +7,6 @@ open System.IO
 open System.Reflection
 
 module TestUtils =
-    open Microsoft.Dafny
     open NUnit.Framework
     open System
 
@@ -63,7 +62,6 @@ module TestUtils =
 
         compare actual expected
         
-
     let folderCompare(actualFolder: string) (expectedFolder: string) =
         
         
@@ -76,8 +74,6 @@ module TestUtils =
         let expectedSubsName = Collections.Generic.List(List.map (fun (x : DirectoryInfo) -> x.Name) (expectedSubs |> Seq.toList))
         let eSubs = expectedSubsName |> Seq.toList
         
-        
-        
         // check subdirectory and file names
         if eSubs <> aSubs then
             Console.WriteLine("directory error")
@@ -87,7 +83,6 @@ module TestUtils =
             Console.WriteLine(aSubs)
             Assert.Fail()
             
-            
         // get fileInfo dafny files from parent folder and all subdirectories
         let actualFiles = DirectoryInfo(actualFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
         let expectedFiles = DirectoryInfo(expectedFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
@@ -96,6 +91,7 @@ module TestUtils =
         // take sorted list of 'FileInfo' and compare the content of each file with 'fileCompare'
         List.iter2 (fun (x : FileInfo) (y : FileInfo) -> fileCompare x.FullName y .FullName) (expectedFiles |> Seq.toList) (actualFiles |> Seq.toList)
         
+
     // Run the tests for generated functions
     // FilePath is synonym for string list
     // the test generator expects multiple output and expected files,
@@ -121,7 +117,7 @@ module TestUtils =
         //TypeInjections.Program.foo inputDirectory outputDirectory
         //TypeInjections.Program.main [|"/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Old"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/New"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Output"|]
         //|> ignore
-
+        
         testToRun outputDirectory expectedDirectory
 
-    
+
