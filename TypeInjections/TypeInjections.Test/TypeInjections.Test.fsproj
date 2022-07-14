@@ -32,6 +32,9 @@
       <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
         <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
       </Reference>
+      <Reference Include="Boogie.Core, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+        <HintPath>..\..\dafny\Boogie.Core.dll</HintPath>
+      </Reference>
     </ItemGroup>
 
     <ItemGroup>
