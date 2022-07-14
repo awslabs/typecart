@@ -247,8 +247,8 @@ module YIL =
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
             | TSeq (b,t) -> "seq" + b.ToString() + (tps [ t ])
             | TSet (b,t) -> "set" + b.ToString() + (tps [ t ])
+            | TArray (b,t) -> "arr" + b.ToString() + (tps [ t ])
             | TMap (b, d, r) -> "map" + b.ToString() + (tps [ d; r ])
-            | TArray (b,a) -> "Array" + b.ToString() + (a.ToString())
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"
             | TUnimplemented -> "UNIMPLEMENTED"
