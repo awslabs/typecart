@@ -841,7 +841,7 @@ module YIL =
             | ENew (ct, _) -> "new " + this.classType (ct)
             | ENull _ -> "null"
             | EMemberRef (r, m, ts) -> this.receiver (r) + "." + m.name + (tps ts)
-            | EBool (v) -> v.ToString()
+            | EBool (v) -> match v with true -> "true" | false -> "false"
             | EChar (v) -> "'" + v.ToString() + "'"
             | EString (v) -> "\"" + v.ToString() + "\""
             | EToString (es) -> "\"" + (exprs es) + "\""
@@ -916,7 +916,8 @@ module YIL =
                 + (exprs es)
             | EConstructorApply (c, ts, es) ->
                 let cS = if isPattern then c.name else c.ToString()
-                cS + (tps ts) + (exprs es)
+                // cS + (tps ts) + (exprs es)
+                cS + (exprs es)
             | EBlock es ->
                 indentedBraced(this.exprsNoBr false es ";\n")
             | ELet (n, t, d, e) ->
