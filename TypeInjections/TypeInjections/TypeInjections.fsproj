@@ -17,7 +17,6 @@
         <Compile Include="Differ.fs" />
         <Compile Include="Translation.fs" />
         <Compile Include="Program.fs" />
-        <Compile Include="ProgramTest.fs" />
     </ItemGroup>
 
     <ItemGroup>
