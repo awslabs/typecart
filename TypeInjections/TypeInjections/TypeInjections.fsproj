@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <Compile Include="Utils.fs" />
+        <Compile Include="InjectionIO.fs" />
         <Compile Include="YIL.fs" />
         <Compile Include="Traverser.fs" />
         <Compile Include="Analysis.fs" />
