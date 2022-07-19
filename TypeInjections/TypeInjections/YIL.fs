@@ -934,8 +934,8 @@ module YIL =
                 + m.name
                 + (exprs es)
             | EConstructorApply (c, ts, es) ->
-                let cS = if isPattern then c.name else c.ToString()
-                cS + (exprs es)
+                // let cS = if isPattern then c.name else c.ToString()
+                c.name + (exprs es)
             | EBlock es ->
                 indentedBraced(this.exprsNoBr false es ";\n")
             | ELet (n, t, d, e) ->
