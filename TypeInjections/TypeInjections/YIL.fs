@@ -672,6 +672,9 @@ module YIL =
             + " and variables "
             + listToString (List.map localDeclName vars, ", ")
 
+        member this.currentMeta() =
+            this.lookupCurrent().meta
+        
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
             Context(prog, currentDecl.child (n), tpvars, vars, pos, modulePath, importPaths)

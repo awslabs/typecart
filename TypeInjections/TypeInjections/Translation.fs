@@ -112,7 +112,7 @@ module Translation =
         | Diff.Export _ -> [decl] // TODO check
         | Diff.DUnimplemented -> [decl]
         | Diff.Module (_, msD) ->
-            [ Module(n, decls ctxI msD, emptyMeta) ]
+            [ Module(n, decls ctxI msD, context.currentMeta()) ]
         | Diff.TypeDef(_, tvsD, superD, exprD) ->
            if not tvsD.isSame || not superD.isSame || not exprD.isSame then
                failwith(unsupported "change in type declaration: " + p.ToString())
@@ -130,7 +130,7 @@ module Translation =
                     // otherwise, call relation of supertype
                     let _, _, superT = tp super
                     superT (xO, xN)
-            [ Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta) ]
+            [ Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
             | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
 
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
