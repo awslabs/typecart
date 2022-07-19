@@ -861,7 +861,7 @@ module YIL =
             | EThis -> "this"
             | ENew (ct, _) -> "new " + this.classType (ct)
             | ENull _ -> "null"
-            | EMemberRef (r, m, _) -> this.receiver (r) + "." + m.name
+            | EMemberRef (r, m, _) -> this.receiver (r) + m.name
             | EBool (v) -> match v with true -> "true" | false -> "false"
             | EChar (v) -> "'" + v.ToString() + "'"
             | EString (v) -> "\"" + v.ToString() + "\""
@@ -931,7 +931,6 @@ module YIL =
             | EAnonApply (f, es) -> (expr f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) ->
                 this.receiver (r)
-                + "."
                 + m.name
                 + (exprs es)
             | EConstructorApply (c, ts, es) ->
@@ -1043,11 +1042,16 @@ module YIL =
 
         member this.classType(ct: ClassType) =
             ct.path.ToString() + (this.tps ct.tpargs)
-
+        
         member this.receiver(rcv: Receiver) =
+            // do not print out the "." separator if receiver is empty.
+            let dot s =
+                match s with
+                | "" -> ""
+                | _ -> s + "."
             match rcv with
-            | StaticReceiver (ct) -> this.classType (ct) // ClassType --> path, tpargs
-            | ObjectReceiver (e) -> this.expr false e // ruijief: do not touch this. e.g. res.answer
+            | StaticReceiver (ct) -> this.classType (ct) |> dot // ClassType --> path, tpargs
+            | ObjectReceiver (e) -> this.expr false e |> dot
 
         member this.case(case: Case) =
             "case " + this.expr true case.pattern
