@@ -504,6 +504,9 @@ module YIL =
     let Bound31 = Bound (Some 31)
     let Bound63 = Bound (Some 63)
     
+    /// empty command
+    let ESKip = EBlock []
+    
     /// s = t
     let EEqual (s: Expr, t: Expr) = EBinOpApply("EqCommon", s, t)
     /// conjunction of some expressions
@@ -620,7 +623,9 @@ module YIL =
          ["m", "d"]: in datatype d in module m
        - tpvars: type parameters of enclosing declarations (inner most last)
        - vars: local variables that have been declared (most recent last)
-       - inBody: defined if we are in the body of a method; true if in a return position
+       - pos: tracks if we are in the body of a method
+       - modulePath: the path of the current module
+       - 
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
     *)
@@ -694,7 +699,7 @@ module YIL =
         member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, modulePath, importPaths)
         member this.enterBody() = this.setPos(BodyPosition)
         
-        /// modules and imports
+        /// enter a new module
         member this.enterModuleScope(newModulePath: Path)  =
             Context(prog, currentDecl, tpvars, vars, pos, modulePath.append(newModulePath), importPaths)
         
@@ -776,14 +781,13 @@ module YIL =
                 + (match predO with
                    | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr false p)
                    | None -> this.tp sup)
-            | Field (n, t, e, _, _, _, a) ->
+            | Field (n, t, eO, _, _, _, a) ->
                 "const "
                 + (this.meta a)
                 + n
                 + ": "
                 + (this.tp t)
-                + " := "
-                + Option.fold (fun _ -> this.expr false) "" e
+                + this.exprO(false)(eO, " := ")
             | Method (isL, n, tpvs, ins, outs, b, _, _, _) ->
                 let outputsS =
                     match outs.outputType with
@@ -940,7 +944,9 @@ module YIL =
                 // let cS = if isPattern then c.name else c.ToString()
                 c.name + (exprs es)
             | EBlock es ->
-                indentedBraced(this.exprsNoBr false es ";\n")
+                // throw out empty blocks; these are usually artifacts of the processing
+                let notEmptyBlock e = match e with | EBlock [] | ECommented(_,EBlock[]) -> false | _ -> true
+                indentedBraced(this.exprsNoBr false (List.filter notEmptyBlock es) ";\n")
             | ELet (n, t, d, e) ->
                 "var "
                 + n

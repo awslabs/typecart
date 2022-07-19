@@ -106,8 +106,21 @@ module Translation =
         let pO, pN, pT = path p
         let ctxI = context.enter(n)
         match dif with
-        | Diff.Class _
-        | Diff.ClassConstructor _ -> failwith (unsupported "classes")
+        | Diff.Class(_,_,_,msD) ->
+            let tvs = decl.tpvars
+            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
+            let xO, xN = localDeclTerm xtO, localDeclTerm xtN
+            // We use the strictest possible relation here: only identical objects are related.
+            // That is very simple and sufficient for now. 
+            // A more general treatment might use some kind of observational equality, possibly using coalgebraic methods.
+            let body = EEqual(xO,xN)
+            let relation = Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            let memberLemmas = decls ctxI msD
+            relation :: memberLemmas
+        | Diff.ClassConstructor _ ->
+            // Depending on how we treat classes, we could generate a lemma here.
+            // With the current minimal treatment of classes, nothing is needed.
+            []
         | Diff.Import _
         | Diff.Export _ -> [decl] // TODO check
         | Diff.DUnimplemented -> [decl]
@@ -278,15 +291,23 @@ module Translation =
             // but we might add them if that helps
             
             // the outputs and the condition that they're related
-            let _, _, outputTypeT =
+            let outputTypeT =
                 match outs with
-                | OutputSpec([hd],_) -> tp hd.tp
+                | OutputSpec([],_) -> None
+                | OutputSpec([hd],_) ->
+                    let _,_,ot = tp hd.tp
+                    Some ot
                 | _ -> failwith (unsupported "multiple output declarations")
             let resultO =
                 EMethodApply(receiverO, pO, typeargsToTVars tvsO, List.map localDeclTerm insO, true)
             let resultN =
                 EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
-            let outputsRelated = outputTypeT (resultO, resultN)
+            let outputsRelated =
+                match outputTypeT with
+                | Some ot -> ot (resultO, resultN)
+                | None -> EBool true
+            // in general for mutable classes, we'd also have to return that the receivers remain related
+            // but that is redundant due to our highly restricted treatment of classes
             let outSpec = OutputSpec([], [ outputsRelated ])
             
             // The body yields the proof of the lemma.
@@ -424,10 +445,7 @@ module Translation =
 
             TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), funsRelated
         | TObject ->
-            // TODO: check if t,t,diag is sound here
-            // alternatively, check if bisimulation works
-            // failwith (unsupported "object type")
-            // TODO: add placeholder here.
+            // see the treatment of class declarations
             TObject, TObject, EEqual
         | TNullable t ->
             let tO, tN, tT = tp t

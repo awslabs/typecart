@@ -522,31 +522,10 @@ module DafnyToYIL =
         | :? UnaryOpExpr as e ->
             let o = e.Op.ToString()
             // disambiguate Dafny's ad-hoc polymorphism
-            let oT =
-                match o, tp e.E.Type with
-                // TODO: remove this case match and just translate them using original Dafny
-                // names. But for now, we retain this case match to help keep track of what unops we use.
-                | "Cardinality", Y.TString _ -> "Cardinality"
-                | "Cardinality", Y.TSeq _ -> "Cardinality"
-                | "Cardinality", Y.TSet _ -> "Cardinality"
-                | "Cardinality", Y.TMap _ -> "Cardinality"
-                | "Cardinality", Y.TArray _ -> "Cardinality"
-                | "Not", Y.TBool -> "Not"
-                | "Fresh", Y.TApply _ -> "fresh"
-                | _  -> unsupported (sprintf "%s %s" o ((tp e.E.Type).ToString()))
-            Y.EUnOpApply(oT, expr e.E)
+            Y.EUnOpApply(o, expr e.E)
         | :? BinaryExpr as e ->
             let o = e.ResolvedOp.ToString()
-            // disambiguate Dafny's 
-            // ad-hoc polymorphism and the string = Seq<char> merger
-            let oT =
-                // TODO: Get rid of this case match as well.
-                match o, tp e.E0.Type, tp e.E1.Type with
-                | "InSeq", _, Y.TString _ -> o
-                | "NotInSeq", _, Y.TString _ -> o
-                | _ -> o
-
-            Y.EBinOpApply(oT, expr e.E0, expr e.E1)
+            Y.EBinOpApply(o, expr e.E0, expr e.E1)
         | :? DatatypeValue as e ->
             let ctor = e.Ctor
             let n = ctor.Name
@@ -831,10 +810,9 @@ module DafnyToYIL =
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
         | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
-        // | :? AssumeStmt ->
+        | :? AssumeStmt -> Y.ECommented("assume statement omitted", Y.ESKip)
+        | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
         // | :? ForallStmt ->
-        // | :? AssumeStmt as s when expr s.Expr = Y.EBool true -> Y.EUnimplemented
-        // | :? CalcStmt -> Y.EUnimplemented
         | _ -> unsupported $"statement {s.ToString()}"
     // ***** qualified names; Dafny has methods for this, but they are a bit confusing and work with .-separated strings
     and pathOfModule (d: ModuleDefinition) : Y.Path =
