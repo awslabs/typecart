@@ -403,6 +403,73 @@ module Traverser =
                             failwith("implementation limitation: possible variable capture")
             | _ -> this.exprDefault (ctx, e)
 
+    type AnalyzeModuleImports(prog : Program) =
+        inherit Identity()
+        
+        // consume common prefix of current module path with current path.
+        member this.consumeModulePath(p: Path, modulePath: Path) =
+            match p, modulePath with
+            // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
+            // We don't do the same for combine, since it is produced from scratch and the fully-qualified
+            // names should include "Combine.".
+            | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))
+            // remove common prefix of current module scope and the fully qualified path "p".
+            // For instance, if current module scope is CommonTypes.Option and p = Path [CommonTypes, Option, None]
+            // then the result should be Path [None]
+            | Path (a1 :: t1), Path (a2 :: t2) ->
+                if a1.Equals(a2) then this.consumeModulePath(Path(t1), Path(t2))
+                else p
+            | _, _ -> p
+        
+        // consume common prefix of an import path with current path.
+        member this.consumeImportPath(p: Path) (import: (Path * ImportType)) =
+            let importPath, importType = import
+            match p, importPath with
+            // Only consume common prefix of "import opened".
+            // For instance, if the current module scope has "import Constant" and
+            // the fully qualified path name is "Constant.int64", we should keep the
+            // fully qualified path name here. However, if we "import opened Constant"
+            // then the correct result should be Path ["int64"].
+            | Path (a1 :: t1), Path (a2 :: t2) ->
+                if a1.Equals(a2) && (importType = ImportOpened) then
+                    this.consumeImportPath (Path(t1)) (Path(t2), ImportOpened)
+                else
+                    p
+            | _, _ -> p
+        
+        override this.decl(ctx: Context, d: Decl) =
+            match d with
+            | Module (name, decls, _) ->
+                let nameP = name.Split(".") |> List.ofArray
+                let imports = List.choose (function
+                    | Import (opened, path) -> Some ((if opened then ImportOpened else ImportDefault), path)
+                    | _ -> None) decls
+                let ctx = List.fold (fun (ctx: Context) e ->
+                    ctx.addImport (snd e, fst e)) (ctx.enterModuleScope(Path(nameP))) imports
+                this.declDefault(ctx, d)
+            // We enter a new module scope when in datatype constructors. For instance,
+            // datatype "Option" inside Joint.CommonTypes should be in scope Path ["Joint", "CommonTypes", "Option"].
+            | Datatype(name, _, _, _, _) ->
+                this.declDefault(ctx.enterModuleScope(Path[name]), d)
+            | _ -> this.declDefault(ctx, d)
+        
+        member this.resolveReceiver(ctx: Context, r: Receiver) =
+            match r with
+            | ObjectReceiver _ -> r // do not care about fields of e.g. local record vars.
+            | StaticReceiver ct ->
+                let imports = ctx.importPaths
+                let currModulePath = ctx.modulePath
+                let objectPath = this.consumeModulePath(ct.path, currModulePath)
+                let objectPath = List.fold (this.consumeImportPath) objectPath imports
+                StaticReceiver {ct with path = objectPath}
+        
+        override this.expr(ctx: Context, e: Expr) =
+            match e with
+            | EMemberRef (r, m, ts) -> EMemberRef(this.resolveReceiver(ctx, r), m, ts)
+            | EMethodApply(r, method, tpargs, exprs, ghost) ->
+                EMethodApply(this.resolveReceiver(ctx, r), method, tpargs, exprs, ghost)
+            | _ -> this.exprDefault(ctx, e)
+        
     /// substitution for expression variables
     let substituteExprs (f: Context, t: Context, subs: (string * Expr) list, e: Expr) : Expr =
         let sub = SubstituteExprs(f,t, subs)

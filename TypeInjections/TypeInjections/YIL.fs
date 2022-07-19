@@ -7,6 +7,7 @@ open Microsoft.BaseTypes
 
 // Yucca
 open Microsoft.Dafny
+open Microsoft.FSharp.Collections
 open Utils
 
 (* AST for the relevant fragment of Dafny
@@ -457,6 +458,16 @@ module YIL =
             | Forall -> "forall"
             | Exists -> "exists"
 
+    // result type for imports analysis
+    type ImportType = ImportOpened | ImportDefault
+    type ModuleImports(modulePath: Path, imports: (Path * ImportType) list) =
+        new() = ModuleImports(Path[], [])
+        member this.modulePath = modulePath
+        member this.imports = imports
+        member this.setModulePath(modulePath: Path) = ModuleImports(modulePath, this.imports)
+        member this.addImport(importPath: Path, importType: ImportType) =
+            ModuleImports(this.modulePath, (importPath, importType) :: this.imports)
+    
     // auxiliary methods
     
     /// wrapping lists of expressions in a block
@@ -613,15 +624,18 @@ module YIL =
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
     *)
-    type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition) =
+    type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition,
+                 modulePath: Path, importPaths: (Path * ImportType) list) =
         // convenience constructor and accessor methods
-        new(p: Program) = Context(p, Path([]), [], [], OtherPosition)
+        new(p: Program) = Context(p, Path([]), [], [], OtherPosition, Path[], [])
         member this.prog = prog
         member this.currentDecl = currentDecl
         member this.tpvars = tpvars
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.pos = pos
+        member this.modulePath = modulePath
+        member this.importPaths = importPaths
 
         /// lookup of a type variable by name
         /// precondition: name must exist in the current context
@@ -660,22 +674,29 @@ module YIL =
 
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
-            Context(prog, currentDecl.child (n), tpvars, vars, pos)
+            Context(prog, currentDecl.child (n), tpvars, vars, pos, modulePath, importPaths)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos)
+            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, modulePath, importPaths)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(tvs: TypeArg list) : Context =
-            Context(prog, currentDecl, List.append tpvars tvs, vars, pos)
+            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, modulePath, importPaths)
 
         member this.add(ds: LocalDecl list) : Context =
-            Context(prog, currentDecl, tpvars, List.append vars ds, pos)
+            Context(prog, currentDecl, tpvars, List.append vars ds, pos, modulePath, importPaths)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
 
         /// remembers where we are
-        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p)
+        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, modulePath, importPaths)
         member this.enterBody() = this.setPos(BodyPosition)
+        
+        /// modules and imports
+        member this.enterModuleScope(newModulePath: Path)  =
+            Context(prog, currentDecl, tpvars, vars, pos, modulePath.append(newModulePath), importPaths)
+        
+        member this.addImport(import: Path, importType: ImportType) =
+            Context(prog, currentDecl, tpvars, vars, pos, modulePath, (import, importType) :: importPaths)
 
     (* ***** printer for the language above
 
@@ -1025,8 +1046,8 @@ module YIL =
 
         member this.receiver(rcv: Receiver) =
             match rcv with
-            | StaticReceiver (ct) -> this.classType (ct)
-            | ObjectReceiver (e) -> this.expr false e
+            | StaticReceiver (ct) -> this.classType (ct) // ClassType --> path, tpargs
+            | ObjectReceiver (e) -> this.expr false e // ruijief: do not touch this. e.g. res.answer
 
         member this.case(case: Case) =
             "case " + this.expr true case.pattern
