@@ -65,6 +65,7 @@ module Traverser =
         member this.declDefault(ctx: Context, d: Decl) : Decl list =
             let childCtx (dName: string) = ctx.enter dName
             match d with
+            | Include p -> [Include p]
             | Module (n, ds, m) ->
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (childCtx n, d)) ds

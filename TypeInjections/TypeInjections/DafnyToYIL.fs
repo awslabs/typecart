@@ -322,7 +322,7 @@ module DafnyToYIL =
                         Y.TObject
                     else
                         unsupported $"built-in type {n}"
-                elif p.names.Head = "TypeUtil" then
+                (*elif p.names.Head = "TypeUtil" then
                     // types defined by Yucca in TypeUtil.dfy
                     let n = p.names.Item(1)
                     begin match n with
@@ -367,7 +367,7 @@ module DafnyToYIL =
                     // Recursive translation of RefL<T, L> = T, Ref<T> = T, Box<T> = T.
                     | "RefL" | "Ref" | "Box" -> makeTApply()
                     | _ -> tpCommon t n args ("unknown type in rust_lib")
-                    end
+                    end*)
                 else
                     makeTApply()
         | :? BoolType -> Y.TBool

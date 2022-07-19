@@ -26,15 +26,24 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Dafny, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\Dafny.dll</HintPath>
-      </Reference>
-      <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
-      </Reference>
-      <Reference Include="Boogie.Core, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\Boogie.Core.dll</HintPath>
-      </Reference>
+        <Reference Include="Boogie.Core, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Boogie.Core.dll</HintPath>
+        </Reference>
+        <Reference Include="Dafny, Version=3.6.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Dafny.dll</HintPath>
+        </Reference>
+        <Reference Include="DafnyPipeline, Version=3.6.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
+        </Reference>
+        <Reference Include="Boogie.BaseTypes, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+          <HintPath>..\..\dafny\Boogie.BaseTypes.dll</HintPath>
+        </Reference>
+        <Reference Include="Boogie.ExecutionEngine, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Boogie.ExecutionEngine.dll</HintPath>
+        </Reference>     
+        <Reference Include="Boogie.CodeContractsExtender, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+          <HintPath>..\..\dafny\Boogie.CodeContractsExtender.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup>

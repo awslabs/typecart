@@ -138,6 +138,7 @@ module Diff =
         let tvsD = idList d.tpvars
         let msD = idList d.children
         match d with
+        | YIL.Include _ // doesn't matter, we never diff include statements.
         | YIL.DUnimplemented -> DUnimplemented
         | YIL.Export ps -> Export ps
         | YIL.Import(o, p) -> Import (o,p)

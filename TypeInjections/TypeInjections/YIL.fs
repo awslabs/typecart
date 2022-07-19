@@ -89,6 +89,9 @@ module YIL =
        Within the program each declaration is uniquely identified.
     *)
     and Decl =
+        (* Include "..." is a preprocessor-like intrinsic in dafny that causes dafny to inline the file specified.
+           We need to include it here essentially because combine.dfy can also use types from joint.dfy. *)
+        | Include of p: Path
         (* We do not allow module abstraction, inheritance; modules are just namespaces and are not used as types.
            In other words, children of a module are static and globally visible via their qualified identifier.
 
@@ -178,6 +181,7 @@ module YIL =
             | TypeDef (n, _, _, _, _, _) -> n
             | Import _ 
             | Export _
+            | Include _
             | DUnimplemented -> "" // check if this causes problems
         // type arguments of a declaration
         member this.tpvars =
@@ -191,6 +195,7 @@ module YIL =
             | ClassConstructor (_, tpvs, _, _, _, _) -> tpvs
             | Import _ -> []
             | Export _ -> []
+            | Include _ -> []
             | DUnimplemented -> []
         member this.children =
             match this with
@@ -747,6 +752,10 @@ module YIL =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""  
             // comm +
             match d with
+            | Include p ->
+                let toSysPath (Path plist) =
+                    String.concat "/" plist                
+                "include " + toSysPath(p)
             | Module (n, ds, a) ->
                 "module "
                 + (this.meta a)
