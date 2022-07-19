@@ -403,7 +403,7 @@ module Traverser =
                             failwith("implementation limitation: possible variable capture")
             | _ -> this.exprDefault (ctx, e)
 
-    type AnalyzeModuleImports(prog : Program) =
+    type AnalyzeModuleImports() =
         inherit Identity()
         
         // consume common prefix of current module path with current path.

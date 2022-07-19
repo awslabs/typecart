@@ -426,7 +426,9 @@ module Translation =
         | TObject ->
             // TODO: check if t,t,diag is sound here
             // alternatively, check if bisimulation works
-            failwith (unsupported "object type")
+            // failwith (unsupported "object type")
+            // TODO: add placeholder here.
+            TObject, TObject, EEqual
         | TNullable t ->
             let tO, tN, tT = tp t
             TNullable tO, TNullable tN, (fun e -> EDisj [EEqual(ETuple[fst e;snd e], ETuple([ENull tO; ENull tN])); tT e])
