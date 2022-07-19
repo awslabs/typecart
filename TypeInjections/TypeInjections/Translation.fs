@@ -488,6 +488,9 @@ module Translation =
     let sameChildren = List.map pathOf pD.decls.getSame  // the unchanged ones among those
     let changedChildren = Utils.listDiff(childPaths, sameChildren) // the changed ones
     let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren) // dependency closure of the changed ones
+    Console.WriteLine(" ***** DEPENDENCY CLOSURE *****")
+    List.iter (fun (Path x) -> Console.WriteLine(String.concat ", " x)) changedClosed
+    Console.WriteLine(" ***** DEPENDENCY CLOSURE END *****")
     let jointPaths = Utils.listDiff(childPaths, changedClosed) // greatest self-contained set of unchanged declarations
     let tr = Translator(p,pD,jointPaths)
     let combine = {name = p.name; decls = tr.doProg()} // the Combine part
