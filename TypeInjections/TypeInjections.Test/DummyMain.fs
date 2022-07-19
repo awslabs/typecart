@@ -2,14 +2,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT
 
-namespace TypeInjections.Test
+namespace TypeInjections
 
 open Microsoft.Dafny
 open System.IO
 open System
 open TypeInjections
 
-module DummyMain =
+module Program =
 
     let log (s: string) = System.Console.WriteLine(s)
     let logObject (s: string) (arg: obj) = System.Console.WriteLine(s, arg)
@@ -58,7 +58,15 @@ module DummyMain =
     // get relative path of file
     let getRelative (oldFolder : string) (fileFull: string) : string =
         let len = oldFolder.Length
-        fileFull[len..]
+        fileFull[len+1..]
+        
+    // since YIL AST won't store '/' replace it with " "
+    let giveSpace (path: string) =
+        path.Replace("/", " ")
+    
+    let spaceToSlash (path: string) =
+        path.Replace(" ", "/")
+            
 
     /// prefixes the names of all toplevel modules
     let prefixTopDecls(prog: YIL.Program)(pref: string): YIL.Program =
@@ -68,46 +76,107 @@ module DummyMain =
             | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
             | d -> d
         {name=prog.name; decls=List.map prD prog.decls}
+        
+        
+    let rename (path: string) (ending: string): string =
+        let endPos = path.IndexOf(".dfy")
+        let newName = path.Insert( endPos, ("_" + ending ))
+        newName.ToLower()
+        
+    let writeFile (prog: YIL.Decl) (folder:string) (prefix:string)  =
+        
+        let getName (x:YIL.Decl) = 
+            if x.meta.position.IsNone then
+                match x with
+                    | YIL.Module (name, _, _) -> name + ".dfy"
+                    | _ -> ".dfy"
+            else
+                prog.meta.position.Value.filename
+        
+        let outputProg = {YIL.name = getName prog; YIL.decls = [prog]}
+
+        let progP =  prefixTopDecls outputProg prefix
+        
+        let endFileName = (rename outputProg.name prefix)
+                
+        let s = YIL.printer().prog(progP)
+        let filePath = IO.Path.Combine(folder, endFileName)
+        
+        IO.File.WriteAllText(filePath, s)
+        0 |> ignore
+    
     
     [<EntryPoint>]
     let main (argv: string array) =
         if argv.Length < 3 then
             failwith "usage: program OLD NEW OUTPUTFOLDER"
         let argvList = argv |> Array.toList
+        
+        // get paths to input and outputs
         let oldFolderPath = argvList.Item(0)
         let newFolderPath = argvList.Item(1)
-        let outputFolder = argvList.Item(2)
+        let outFolderPath = argvList.Item(2)
         
+        // error handling 
         for a in [oldFolderPath;newFolderPath] do
             if not (System.IO.Directory.Exists(a)) then
                 failwith("folder not found:" + a)
-                
-        let oldFolder = DirectoryInfo(oldFolderPath)
-        let newFolder = DirectoryInfo(newFolderPath)
+                                
+        let oldParentFolder = DirectoryInfo(oldFolderPath)
+        let newParentFolder = DirectoryInfo(newFolderPath)
         
-        let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.AllDirectories) |> Seq.toList
-        let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.AllDirectories) |> Seq.toList
-        let reporter = initDafny
-      
-        let oldDafny = List.map (fun (x : FileInfo) -> parseAST [x] ("Old" + x.Name) reporter) oldFiles
-        let newDafny = List.map (fun (x : FileInfo) -> parseAST [x] "New" reporter) newFiles
-          
-        let printWithDaf (prog: Program) (fileName: string) =    
-            //TODO print in correct structure
-            let path = outputFolder + "/"  + prog.Name
+        let difFolder (oldFolder: DirectoryInfo) (newFolder: DirectoryInfo) =
+            // get all files in "new" and "old" folders
+            let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
+            let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
+            let reporter = initDafny
             
-            let output = new StreamWriter(path )
-            let printer = Printer(output)
-            let decls = prog.DefaultModuleDef.TopLevelDecls
-         
+            let oldDafny = parseAST oldFiles "Old" reporter
+            let newDafny = parseAST newFiles "New" reporter
+            
+            
+            let newYIL = DafnyToYIL.program newDafny
+            let oldYIL = DafnyToYIL.program oldDafny
+            
            
-            let rec printLine (vals : TopLevelDecl list) (prefix : string): unit =
-                for (a:TopLevelDecl) in vals do
-                    match a with
-                    | :? LiteralModuleDecl as d ->   output.WriteLine("module " + prefix + "." + d.Name + "{"); printLine (d.ModuleDef.TopLevelDecls |> Seq.toList) prefix; output.WriteLine("}")
-                    | _ ->  printer.PrintTopLevelDecls(Collections.Generic.List([a]), 2, Collections.Generic.List<Microsoft.Boogie.IToken>(), path)
-            printLine (decls |> Seq.toList) "Old"
-            output.Flush()
-              
-        List.iter2 (fun (x: Program) (y: FileInfo) -> printWithDaf x y.FullName) oldDafny oldFiles
+            // tests the transformation code
+            Traverser.test(oldYIL)
+            
+            // diff the programs
+            log "***** diffing the two programs"
+            let diff = Differ.prog (oldYIL, newYIL)
+            let diffS = (Diff.Printer()).prog diff
+            Console.WriteLine(diffS)
+            
+            // generate translation
+            log "***** generating compatibility code"
+            let combine,joint = Translation.prog(oldYIL, diff)
+            let transS = YIL.printer().prog(combine)
+            Console.WriteLine transS
+                  
+            
+                    // write output files
+            log "***** writing output files"
+            let writeOut fileName prefix (prog:YIL.Program) (only: string -> bool) =
+                let folder = outFolderPath
+                IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(folder)) |> ignore
+                // let progF = {YIL.name = prog.name; YIL.decls = List.filter (fun (d:YIL.Decl) -> only d.name) prog.decls}
+                
+                List.iter ( fun x -> writeFile x folder prefix) prog.decls
+                
+            let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
+            // writeOut "joint.dfy" "Joint" oldYIL (fun s -> List.contains s jointNames)
+            writeOut "joint.dfy" "Joint" oldYIL (fun s -> true)
+            // writeOut "old.dfy" "Old" oldYIL (fun s -> not (List.contains s jointNames))
+            // writeOut "new.dfy" "New" newYIL (fun s -> not (List.contains s jointNames))
+            // writeOut "combine.dfy" "Combine" combine (fun s -> true)
+            writeOut "combine.dfy" "Combine" combine (fun s -> true)
+            
+            
+        List.iter2 (fun (x:DirectoryInfo) (y: DirectoryInfo) -> difFolder x y)
+            ((oldParentFolder.GetDirectories("*", SearchOption.AllDirectories)
+              |> Seq.toList) @ [oldParentFolder])
+            ((newParentFolder.GetDirectories("*", SearchOption.AllDirectories)
+              |> Seq.toList) @ [newParentFolder])
+        
         0
