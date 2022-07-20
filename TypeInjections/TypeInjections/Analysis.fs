@@ -45,3 +45,49 @@ module Analysis =
              ) ds
       List.iter add start
       closure
+ 
+  /// Resolve module imports tagged along expressions and declarations.
+  /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
+  type AnalyzeModuleImports() =
+        inherit Traverser.Identity()
+
+        // consume common prefix of current module path with current path.
+        member this.consumeModulePath(p: Path, modulePath: Path) =
+            match p, modulePath with
+            // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
+            // We don't do the same for combine, since it is produced from scratch and the fully-qualified
+            // names should include "Combine.".
+            | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))
+            // remove common prefix of current module scope and the fully qualified path "p".
+            // For instance, if current module scope is CommonTypes.Option and p = Path [CommonTypes, Option, None]
+            // then the result should be Path [None]
+            | Path (a1 :: t1), Path (a2 :: t2) ->
+                if a1.Equals(a2) then this.consumeModulePath(Path(t1), Path(t2))
+                else p
+            | _, _ -> p
+
+        // consume common prefix of an import path with current path.
+        member this.consumeImportPath(p: Path) (import: (Path * ImportType)) =
+            let importPath, importType = import
+            match p, importPath with
+            // Only consume common prefix of "import opened".
+            // For instance, if the current module scope has "import Constant" and
+            // the fully qualified path name is "Constant.int64", we should keep the
+            // fully qualified path name here. However, if we "import opened Constant"
+            // then the correct result should be Path ["int64"].
+            | Path (a1 :: t1), Path (a2 :: t2) ->
+                if a1.Equals(a2) && (importType = ImportOpened) then
+                    this.consumeImportPath (Path(t1)) (Path(t2), ImportOpened)
+                else
+                    p
+            | _, _ -> p
+
+        override this.receiver(ctx: Context, r: Receiver) =
+            match r with
+            | ObjectReceiver _ -> r // do not care about fields of e.g. local record vars.
+            | StaticReceiver ct ->
+                let imports = ctx.importPaths
+                let currModulePath = ctx.modulePath
+                let objectPath = this.consumeModulePath(ct.path, currModulePath)
+                let objectPath = List.fold (this.consumeImportPath) objectPath imports
+                StaticReceiver {ct with path = objectPath}

@@ -106,7 +106,7 @@ module Program =
         // generate translation
         log "***** generating compatibility code"
         let combine,joint = Translation.prog(oldYIL, diff)
-        let transS = YIL.printer().prog(Traverser.AnalyzeModuleImports().prog(combine))
+        let transS = YIL.printer().prog(Analysis.AnalyzeModuleImports().prog(combine))
         Console.WriteLine transS
         
         // write output files
@@ -116,7 +116,7 @@ module Program =
             IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f)) |> ignore
             let progF = {YIL.name = prog.name; YIL.decls = List.filter (fun (d:YIL.Decl) -> only d.name) prog.decls}
             let progP = prefixTopDecls progF prefix
-            let s = YIL.printer().prog(Traverser.AnalyzeModuleImports().prog(progP))
+            let s = YIL.printer().prog(Analysis.AnalyzeModuleImports().prog(progP))
             IO.File.WriteAllText(f, s)
         let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
         writeOut "joint.dfy" "Joint" oldYIL (fun s -> List.contains s jointNames)
