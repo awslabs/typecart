@@ -518,4 +518,4 @@ module Translation =
     let jointPaths = Utils.listDiff(childPaths, changedClosed) // greatest self-contained set of unchanged declarations
     let tr = Translator(p,pD,jointPaths)
     let combine = {name = p.name; decls = tr.doProg()} // the Combine part
-    Analysis.ImportJointInCombine().prog(combine), jointPaths
+    Analysis.ImportInCombine().prog(combine), jointPaths

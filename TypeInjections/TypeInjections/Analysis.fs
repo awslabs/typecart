@@ -46,18 +46,24 @@ module Analysis =
       List.iter add start
       closure
  
-  type ImportJointInCombine() =
+  type ImportInCombine() =
       inherit Traverser.Identity()
       
       override this.decl(ctx: Context, decl: Decl) =
           match decl with
           | Module(name, decls, meta) ->
-              [ Module(name, Import(false, Path ["Joint"]) :: decls, meta) ]
+              [ Module(name, Import(false, Path ["Joint"])
+                               :: Import(false, Path ["Old"])
+                               :: Import(false, Path ["New"])
+                               :: decls, meta) ]
           | _ -> this.declDefault(ctx, decl)
       
       override this.prog(prog: Program) =
           let prog' = this.progDefault(prog)
-          { prog' with decls = (Include(Path ["joint.dfy"])) :: prog'.decls }
+          { prog' with decls = (Include(Path ["joint.dfy"]))
+                               :: (Include (Path ["old.dfy"]))
+                               :: (Include (Path ["new.dfy"]))
+                               :: prog'.decls }
   
   /// Resolve module imports tagged along expressions and declarations.
   /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
