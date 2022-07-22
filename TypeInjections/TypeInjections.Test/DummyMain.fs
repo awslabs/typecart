@@ -58,7 +58,10 @@ module Program =
     // get relative path of file
     let getRelative (oldFolder : string) (fileFull: string) : string =
         let len = oldFolder.Length
-        fileFull[len+1..]
+        if len <> fileFull.Length then
+            fileFull[len..]
+        else
+            "/"
         
     // since YIL AST won't store '/' replace it with " "
     let giveSpace (path: string) =
@@ -94,9 +97,7 @@ module Program =
                 prog.meta.position.Value.filename
         
         let outputProg = {YIL.name = getName prog; YIL.decls = [prog]}
-
         let progP =  prefixTopDecls outputProg prefix
-        
         let endFileName = (rename outputProg.name prefix)
                 
         let s = YIL.printer().prog(progP)
@@ -112,7 +113,7 @@ module Program =
             failwith "usage: program OLD NEW OUTPUTFOLDER"
         let argvList = argv |> Array.toList
         
-        // get paths to input and outputs
+        // get paths to input and output folders
         let oldFolderPath = argvList.Item(0)
         let newFolderPath = argvList.Item(1)
         let outFolderPath = argvList.Item(2)
@@ -122,8 +123,6 @@ module Program =
             if not (System.IO.Directory.Exists(a)) then
                 failwith("folder not found:" + a)
                 
-                //NOTE use 'printTopLevelDecl' like method to keep folder structure
-                
         let oldParentFolder = DirectoryInfo(oldFolderPath)
         let newParentFolder = DirectoryInfo(newFolderPath)
         
@@ -131,16 +130,16 @@ module Program =
             // get all files in "new" and "old" folders
             let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
             let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
-           // let old = oldFolder
-            let reporter = initDafny
             
-         //   let oldRelative = getRelative oldFolderPath oldFolder.FullName
-          //  let newRelative = getRelative newFolderPath newFolder.FullName
-          
+            let reporter = initDafny
+            // relative path of folder we're running typecart on (to keep structure in output)
+            let relativePath = getRelative oldFolderPath oldFolder.FullName
+            
+            // get Dafny AST of new and old files
             let oldDafny = parseAST oldFiles "Old" reporter
             let newDafny = parseAST newFiles "New" reporter
             
-            
+            // convert dafny ast to yil ast
             let newYIL = DafnyToYIL.program newDafny
             let oldYIL = DafnyToYIL.program oldDafny
             
@@ -161,24 +160,24 @@ module Program =
             Console.WriteLine transS
                   
             
-                    // write output files
+            // write output files
             log "***** writing output files"
-            let writeOut fileName prefix (prog:YIL.Program) (only: string -> bool) =
-                let folder = outFolderPath
-                IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(folder)) |> ignore
-                // let progF = {YIL.name = prog.name; YIL.decls = List.filter (fun (d:YIL.Decl) -> only d.name) prog.decls}
+            let writeOut partialPath prefix (prog:YIL.Program) (only: string -> bool) =
+                let fullPath = IO.Path.Combine(outFolderPath + partialPath)
+                IO.Directory.CreateDirectory(fullPath) |> ignore
+                List.iter ( fun x -> writeFile x fullPath prefix) prog.decls
                 
-                List.iter ( fun x -> writeFile x folder prefix) prog.decls
-                
+            //TODO jointNames not working properly
             let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
-     //       writeOut "joint.dfy" "Joint" oldYIL (fun s -> List.contains s jointNames)
-            writeOut "joint.dfy" "Joint" oldYIL (fun s -> true)
-         //   writeOut "old.dfy" "Old" oldYIL (fun s -> not (List.contains s jointNames))
-        //    writeOut "new.dfy" "New" newYIL (fun s -> not (List.contains s jointNames))
-           // writeOut "combine.dfy" "Combine" combine (fun s -> true)
-            writeOut "combine.dfy" "Combine" combine (fun s -> true)
+     //       writeOut relativePath "Joint" oldYIL (fun s -> List.contains s jointNames)
+       //     writeOut relativePath "Joint" oldYIL (fun s -> true)
+            writeOut relativePath "Old" oldYIL (fun s -> not (List.contains s jointNames))
+            writeOut relativePath "New" newYIL (fun s -> not (List.contains s jointNames))
+            writeOut relativePath "Combine" combine (fun s -> true)
             
-            
-        List.iter2 (fun (x:DirectoryInfo) (y: DirectoryInfo) -> difFolder x y) ((oldParentFolder.GetDirectories("*", SearchOption.AllDirectories) |> Seq.toList)@ [oldParentFolder] ) ((newParentFolder.GetDirectories("*", SearchOption.AllDirectories) |> Seq.toList) @ [newParentFolder])
+        let allNewDir = (newParentFolder.GetDirectories("*", SearchOption.AllDirectories) |> Seq.toList) @ [newParentFolder]
+        let allOldDir = (oldParentFolder.GetDirectories("*", SearchOption.AllDirectories) |> Seq.toList) @ [oldParentFolder]
+        
+        List.iter2 (fun (x:DirectoryInfo) (y: DirectoryInfo) -> difFolder x y) allOldDir allNewDir
         
         0
