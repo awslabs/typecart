@@ -757,7 +757,7 @@ module YIL =
             | Include p ->
                 let toSysPath (Path plist) =
                     String.concat "/" plist                
-                "include " + toSysPath(p)
+                "include " + "\"" + toSysPath(p) + "\""
             | Module (n, ds, a) ->
                 "module "
                 + (this.meta a)

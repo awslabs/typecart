@@ -26,6 +26,7 @@ module Traverser =
         abstract member decl : Context * Decl -> Decl list
         abstract member tp : Context * Type -> Type
         abstract member expr : Context * Expr -> Expr
+        abstract member prog : Program -> Program
 
         /// translate each expression in the context extended with all variable declarations made in previous expressions
         member this.exprList(ctx: Context, es: Expr list) =
@@ -54,7 +55,7 @@ module Traverser =
            The implementations below are straightforward but tedious.
         *)
 
-        member this.prog(p: Program) : Program =
+        member this.progDefault(p: Program) : Program =
             let ctx = Context(p)
             let dsT =
                 List.collect (fun (d: Decl) -> this.decl (ctx, d)) p.decls
@@ -329,6 +330,7 @@ module Traverser =
         override this.decl(ctx: Context, d: Decl) = base.declDefault (ctx, d)
         override this.tp(ctx: Context, t: Type) = base.tpDefault (ctx, t)
         override this.expr(ctx: Context, e: Expr) = base.exprDefault (ctx, e)
+        override this.prog(prog: Program) = base.progDefault(prog)
 
 
     (* checks that all identifiers references can be resolved; identity otherwise *)

@@ -46,6 +46,19 @@ module Analysis =
       List.iter add start
       closure
  
+  type ImportJointInCombine() =
+      inherit Traverser.Identity()
+      
+      override this.decl(ctx: Context, decl: Decl) =
+          match decl with
+          | Module(name, decls, meta) ->
+              [ Module(name, Import(false, Path ["Joint"]) :: decls, meta) ]
+          | _ -> this.declDefault(ctx, decl)
+      
+      override this.prog(prog: Program) =
+          let prog' = this.progDefault(prog)
+          { prog' with decls = (Include(Path ["joint.dfy"])) :: prog'.decls }
+  
   /// Resolve module imports tagged along expressions and declarations.
   /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
   type AnalyzeModuleImports() =
