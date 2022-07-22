@@ -229,6 +229,7 @@ module YIL =
         | TNullable of Type
         // identifiers
         | TApply of op: Path * args: Type list
+        | TApplyPrimitive of op: Path * underlyingType: Type
         | TVar of string
         // dummy for missing cases
         | TUnimplemented
@@ -249,6 +250,7 @@ module YIL =
             | TBitVector (w) -> "bv" + w.ToString()
             | TVar (n) -> n
             | TApply (op, args) -> op.name + (tps args)
+            | TApplyPrimitive (op, t) -> op.name + "." + (t.ToString())
             | TTuple (ts) -> product ts
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
             | TSeq (b,t) -> "seq" + b.ToString() + (tps [ t ])

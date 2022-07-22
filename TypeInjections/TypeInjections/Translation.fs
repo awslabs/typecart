@@ -398,11 +398,17 @@ module Translation =
         | TApply (p, ts) ->
             let pO, pN, pT = path p
             let r = StaticReceiver({ path = pT.parent; tpargs = [] })
-            let tsONT = List.map tp ts
+            let tsONT= List.map tp ts
             let tsT = List.map (fun (o, n, t) -> abstractRel ("x", o, n, t)) tsONT
             let tsO, tsN, _ = List.unzip3 tsONT
             let tsON = Utils.listInterleave (tsO, tsN)
             TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT, tsON, tsT @ [ x; y ], false))
+        | TApplyPrimitive (p, t) ->
+            let pO, pN, pT = path p
+            let r = StaticReceiver({ path = pT.parent; tpargs = [] })
+            let tO, tN, tONT = tp t
+            let tT = abstractRel ("x", tO, tN, tONT)
+            TApplyPrimitive(pO, tO), TApplyPrimitive(pN, tN), (fun (x, y) -> EMethodApply(r, pT, [tO; tN], [tT; x; y], false))
         | TTuple ts ->
             // two tuples are related if all elements are
             let tsO, tsN, tsT = List.unzip3 (List.map tp ts)

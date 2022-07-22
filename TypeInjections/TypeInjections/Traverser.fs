@@ -140,6 +140,7 @@ module Traverser =
             | TBitVector _
             | TVar _ -> tp
             | TApply (op, args) -> TApply(this.path(ctx,op), rcL args)
+            | TApplyPrimitive (op, t) -> TApplyPrimitive(this.path(ctx, op), rc t)
             | TTuple ts -> TTuple (rcL ts)
             | TSeq(b,t) -> TSeq (b, rc t)
             | TSet(b,t) -> TSet (b, rc t)
