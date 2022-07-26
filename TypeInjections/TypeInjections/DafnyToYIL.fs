@@ -345,17 +345,17 @@ module DafnyToYIL =
                     // This is only for legacy support, can be removed later if we don't run typeCart on a
                     // legacy diff.
                     let n = p.names.Item(1)
-                    begin match n with
-                    | "string32" -> Y.TString Y.Bound32 
-                    | "seq32" when args.Length = 1 -> Y.TSeq(Y.Bound32, args.Head) 
-                    | "set32" when args.Length = 1 -> Y.TSet(Y.Bound32, args.Head)
-                    | "map32" when args.Length = 2 -> Y.TMap (Y.Bound32, args.Head, args.Tail.Head) 
-                    | "arr32" when args.Length = 1 -> Y.TArray(Y.Bound32, args.Head) 
-                    | "byteArray" -> Y.TArray(Y.NoBound, Y.TInt Y.Bound8) 
-                    | "nat32" -> Y.TNat Y.Bound32 
-                    | "nat64" -> Y.TNat Y.Bound64 
-                    | _ -> tpCommon t n args ("unknown type in TypeUtil")
-                    end 
+                    (p, begin match n with
+                        | "string32" -> Y.TString Y.Bound32 
+                        | "seq32" when args.Length = 1 -> Y.TSeq(Y.Bound32, args.Head) 
+                        | "set32" when args.Length = 1 -> Y.TSet(Y.Bound32, args.Head)
+                        | "map32" when args.Length = 2 -> Y.TMap (Y.Bound32, args.Head, args.Tail.Head) 
+                        | "arr32" when args.Length = 1 -> Y.TArray(Y.Bound32, args.Head) 
+                        | "byteArray" -> Y.TArray(Y.NoBound, Y.TInt Y.Bound8) 
+                        | "nat32" -> Y.TNat Y.Bound32 
+                        | "nat64" -> Y.TNat Y.Bound64 
+                        | _ -> tpCommon t n args ("unknown type in TypeUtil")
+                        end) |> Y.TApplyPrimitive
                 elif p.names.Head = "JavaLib" then
                     // types defined by Yucca in JavaLib.dfy.
                     let n = p.names.Item(1)
