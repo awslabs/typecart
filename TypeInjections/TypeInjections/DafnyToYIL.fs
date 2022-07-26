@@ -175,7 +175,23 @@ module DafnyToYIL =
         match d with
         | :? TraitDecl -> true
         | _ -> false
-
+    
+    and resolveDafnyMethodTypePayload(s: string) =
+        match s with
+        | "function" -> Y.IsFunction
+        | "function method" -> Y.IsFunctionMethod
+        | "predicate" -> Y.IsPredicate
+        | "predicate method" -> Y.IsPredicateMethod
+        | "lemma" -> Y.IsLemma
+        | "method" -> Y.IsMethod
+        | Prefix "ghost " p -> resolveDafnyMethodTypePayload(p)
+        | _ -> unsupported $"unsupported method type payload: %s{s}"
+        
+    and resolveDafnyMethodType(s: string) =
+        match s with
+        | Prefix "static " s -> Y.StaticMethod (resolveDafnyMethodTypePayload(s))
+        | _ -> Y.NonStaticMethod (resolveDafnyMethodTypePayload(s))
+        
     and memberDecl (m: MemberDecl) : Y.Decl =
         match m with
         | :? Constructor as m ->
@@ -212,7 +228,8 @@ module DafnyToYIL =
                     Some(expr m.Body)
             let mName = m.Name
             let meta = namedMeta m
-            Y.Method(false, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
+            let yilMethodType = resolveDafnyMethodType m.FunctionDeclarationKeywords
+            Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
@@ -230,12 +247,13 @@ module DafnyToYIL =
 
             let mName = m.Name
 
-            let isLemma =
-                match m with
-                | :? Lemma -> true
-                | _ -> false
-
-            Y.Method(isLemma, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, namedMeta m)
+            let yilMethodType =
+                match m.IsStatic, m with
+                // Lemmas shall always not have static qualifiers when printing
+                | _, :? Lemma -> Y.NonStaticMethod Y.IsLemma 
+                | true, _ -> Y.StaticMethod Y.IsMethod
+                | false, _ -> Y.NonStaticMethod Y.IsMethod
+            Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m
@@ -526,7 +544,7 @@ module DafnyToYIL =
             let tpargs = tp @ e.InferredTypeArgs
             let args = expr @ e.Arguments
 
-            if n.StartsWith("_#Make") then
+            if Y.isDafnyTuple(Y.Path [n]) then
                 // built-in datatype for tuples
                 Y.ETuple(args) // tpargs are the types of the components
             else

@@ -1,5 +1,7 @@
 namespace TypeInjections
 
+open TypeInjections.YIL
+
 /// diffs two YIL AST items and returns the corresponding AST item in Diff._
 module Differ =
     open YIL
@@ -205,3 +207,5 @@ module Differ =
             Diff.SameType old
         else
             Diff.UpdateType nw
+
+        

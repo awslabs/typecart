@@ -99,7 +99,7 @@ module Program =
         
         let endFileName = (rename outputProg.name prefix)
                 
-        let s = YIL.printer().prog(progP)
+        let s = YIL.printer().prog(progP, YIL.Context(progP))
         let filePath = IO.Path.Combine(folder, endFileName)
         
         IO.File.WriteAllText(filePath, s)
@@ -151,7 +151,7 @@ module Program =
             // generate translation
             log "***** generating compatibility code"
             let combine,joint = Translation.prog(oldYIL, diff)
-            let transS = YIL.printer().prog(combine)
+            let transS = YIL.printer().prog(combine, YIL.Context(combine))
             Console.WriteLine transS
                   
             

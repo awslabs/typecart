@@ -114,7 +114,7 @@ module Translation =
             // That is very simple and sufficient for now. 
             // A more general treatment might use some kind of observational equality, possibly using coalgebraic methods.
             let body = EEqual(xO,xN)
-            let relation = Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            let relation = Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
             let memberLemmas = decls ctxI msD
             relation :: memberLemmas
         | Diff.ClassConstructor _ ->
@@ -143,7 +143,7 @@ module Translation =
                     // otherwise, call relation of supertype
                     let _, _, superT = tp super
                     superT (xO, xN)
-            [ Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
+            [ Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
             | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
 
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
@@ -188,7 +188,7 @@ module Translation =
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             let tO, tN = localDeclType xtO, localDeclType xtN
             let body = EMatch(ETuple [ xO; xN ], TTuple [ tO; tN ], List.collect mkCase ctrsD.elements, Some dflt)
-            let relation = Method(false, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            let relation = Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
             let memberLemmas = decls ctxI msD
             relation :: memberLemmas
         // immutable fields with initializer yield a lemma, mutable fields yield nothing
@@ -205,7 +205,7 @@ module Translation =
                 sr parentO, sr parentN
             let fieldsRelated = tT (EMemberRef(recO, pO, []), EMemberRef(recN, pN, []))
             [ Method(
-                  true,
+                  NonStaticMethod IsLemma,
                   pT.name,
                   [],
                   InputSpec([], []),
@@ -219,7 +219,7 @@ module Translation =
         // methods produce lemmas; lemmas produce nothing
         | Diff.Method(_, tvsD, insD, outsD, bdD) ->
            match decl with
-           | Method(isLemma=true) -> []
+           | Method(methodIs = (NonStaticMethod IsLemma)) -> []
            | Method (_, _, tvs, ins, outs, bodyO, _, isStatic, _) ->
             // for now, we only support a change in the body
             if not tvsD.isSame then
@@ -320,7 +320,7 @@ module Translation =
                     // changed body: generate empty proof
                     None
 
-            [ Method(true, pT.name, typeParams, inSpec, outSpec, proof, true, true, emptyMeta) ]
+            [ Method(NonStaticMethod IsLemma, pT.name, typeParams, inSpec, outSpec, proof, true, true, emptyMeta) ]
            | _ -> failwith("impossible") // Diff.Method must occur with YIL.Method
 
     // joint code for type declarations

@@ -101,3 +101,17 @@ module Utils =
             ignore (d.[k] = v)
         else
             d.Add(k, v)
+
+    // Prefix matcher
+    let (|Prefix|_|) (pre: string) (s: string) =
+        if s.StartsWith(pre) then
+            Some(s.Substring(pre.Length))
+        else
+            None
+    
+    // Suffix matcher
+    let (|Suffix|_|) (suf: string) (s: string) =
+        if s.EndsWith(suf) then
+            Some(s.Substring(0, s.Length - suf.Length))
+        else
+            None
