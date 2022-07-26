@@ -929,11 +929,34 @@ module YIL =
         member this.exprO(isPattern: bool)(eO: Expr option, sep: string, pctx: PrintingContext) =
             Option.defaultValue ("") (Option.map (fun e -> sep + (this.expr isPattern e pctx)) eO)
 
+        member this.isIfWithoutThenBlock(e: Expr) =
+            match e with
+            | EIf (_, _, None) -> true
+            | _ -> false
+        
         member this.expr(isPattern: bool)(e: Expr)(pctx: PrintingContext) =
             let expr e = this.expr(isPattern)(e)(pctx)
             let exprs es = this.exprs(isPattern)(es)(pctx)
             let exprO (e, sep) = this.exprO(isPattern)(e, sep, pctx)
             let exprsNoBr p es sep = this.exprsNoBr(p)(es)(sep)(pctx)
+            
+            // if statements without then-blocks cannot have ";" after them. Afford special treatment for them.
+            // The last statement is the return value in functions, so we do not prefix with ";".
+            // To efficiently handle the last statement in a singly linked list, we first reverse the list
+            // match on the last which is now the first, and then reverse the list back into the original order.
+            let exprsNoBrBlock p es sep =
+                let aux revEs =
+                    match revEs with
+                    | e :: t ->
+                        (this.expr p e pctx) ::
+                        (List.map
+                          (fun e ->
+                            if this.isIfWithoutThenBlock(e) then
+                                this.expr p e pctx
+                            else (this.expr p e pctx) + sep) t)
+                    | [] -> []
+                aux (List.rev es) |> List.rev |> String.concat ""
+            
             let dims ds = this.dims(ds, pctx)
             let receiver r = this.receiver(r, pctx)
             let case c = this.case c pctx
@@ -1025,7 +1048,9 @@ module YIL =
             | EBlock es ->
                 // throw out empty blocks; these are usually artifacts of the processing
                 let notEmptyBlock e = match e with | EBlock [] | ECommented(_,EBlock[]) -> false | _ -> true
-                indentedBraced(exprsNoBr false (List.filter notEmptyBlock es) ";\n")
+                let esS = exprsNoBrBlock false (List.filter notEmptyBlock es) ";\n"
+                let s = indentedBraced(esS)
+                s
             | ELet (n, t, d, e) ->
                 "var "
                 + n
@@ -1047,11 +1072,13 @@ module YIL =
                     match e with
                     | None -> "" // avoid using exprO which prints out ";".
                     | Some e -> " else " + expr e
-                "if "
-                + (expr c)
-                + (if printThen then " then " else "")
-                + (expr t)
-                + elsePart
+                let s =
+                    "if "
+                    + (expr c)
+                    + (if printThen then " then " else "")
+                    + (expr t)
+                    + elsePart
+                s
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
@@ -1069,7 +1096,8 @@ module YIL =
                     | None -> ""
 
                 sprintf "%swhile (%s)%s" label (expr c) (expr e)
-            | EReturn (es) -> "return " + (exprsNoBr false es ", ") + ";"
+            | EReturn (es) ->
+                "return " + (exprsNoBr false es ", ") + ";"
             | EBreak l ->
                 let label =
                     match l with
