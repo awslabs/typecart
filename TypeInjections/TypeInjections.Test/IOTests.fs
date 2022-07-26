@@ -19,3 +19,7 @@ module IOTests =
     [<Test>]
     let SimpleFolderTest () =
         testRunner "InputDirectory" "OutputDirectory" "ExpectedDirectory" 
+    
+    [<Test>]
+    let SubFolderTest () =
+        testRunner "InputDirectory" "OutputDirectory" "ExpectedDirectory"

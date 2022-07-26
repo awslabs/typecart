@@ -5,6 +5,7 @@ namespace TypeInjections.Test
 
 open System.IO
 open System.Reflection
+open TypeInjections
 
 module TestUtils =
     open NUnit.Framework
@@ -14,6 +15,7 @@ module TestUtils =
 
     let pwd (testModule: string) : string =
         let wd = Environment.CurrentDirectory
+        
 
         let pd =
             Directory
@@ -27,7 +29,7 @@ module TestUtils =
         Path.Combine(
             [| pd
                "Resources"
-              // testModule
+            //   testModule
                TestContext.CurrentContext.Test.Name |]
         )
 
@@ -115,8 +117,8 @@ module TestUtils =
             System.IO.Path.Combine([| pwd; expectedDirectoryName |])
 
         //TypeInjections.Program.foo inputDirectory outputDirectory
-        //TypeInjections.Program.main [|"/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Old"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/New"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Output"|]
-        //|> ignore
+     //   TypeInjections.Program.main [|inputDirectory + "/Old"; inputDirectory + "/New"; outputDirectory|]
+     //   |> ignore
         
         testToRun outputDirectory expectedDirectory
 
