@@ -2,7 +2,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT
 
-namespace TypeInjections
+namespace TypeInjections.Test
 
 open Microsoft.Dafny
 open System.IO
@@ -24,6 +24,9 @@ module Program =
         if err <> null && err <> "" then
             failwith ("Dafny error: " + err)
         dafnyProgram
+        
+        
+
 
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
@@ -55,23 +58,17 @@ module Program =
         log "***** Dafny initialised"
         reporter
  
-    // get relative path of file
-    let getRelative (oldFolder : string) (fileFull: string) : string =
-        let len = oldFolder.Length
+    // get relative path of file/folder -> fileFull = a/b/c/d.dfy, parentFolder = a/b, output = c/d.dfy
+    let getRelative (parentFolder : string) (fileFull: string) : string =
+        let len = parentFolder.Length
         if len <> fileFull.Length then
             fileFull[len..]
         else
             "/"
         
-    // since YIL AST won't store '/' replace it with " "
-    let giveSpace (path: string) =
-        path.Replace("/", " ")
-    
-    let spaceToSlash (path: string) =
-        path.Replace(" ", "/")
             
 
-    /// prefixes the names of all toplevel modules
+    // prefixes the names of all toplevel modules
     let prefixTopDecls(prog: YIL.Program)(pref: string): YIL.Program =
         let prN (n: string) = pref + "." + n
         let prD (d: YIL.Decl) =
@@ -81,6 +78,8 @@ module Program =
         {name=prog.name; decls=List.map prD prog.decls}
         
         
+    //TODO find built-in renameFile function
+    // appends 'ending' to filename
     let rename (path: string) (ending: string): string =
         let endPos = path.IndexOf(".dfy")
         let newName = path.Insert( endPos, ("_" + ending ))
@@ -105,7 +104,20 @@ module Program =
         
         IO.File.WriteAllText(filePath, s)
         0 |> ignore
-    
+        
+    let writeOut fullPath prefix (prog:YIL.Program) (only: string -> bool) =
+        // let fullPath = IO.Path.Combine(outFolderPath + partialPath)
+        IO.Directory.CreateDirectory(fullPath) |> ignore
+        List.iter ( fun x -> writeFile x fullPath prefix) prog.decls
+        
+        
+        
+    let noDiff (files: FileInfo list) prefix (path:string) =
+        let reporter = initDafny
+        let Dafny = parseAST files prefix reporter
+        let YIL = DafnyToYIL.program Dafny
+        writeOut path prefix YIL (fun s -> true)
+
     
     [<EntryPoint>]
     let main (argv: string array) =
@@ -126,14 +138,11 @@ module Program =
         let oldParentFolder = DirectoryInfo(oldFolderPath)
         let newParentFolder = DirectoryInfo(newFolderPath)
         
-        let difFolder (oldFolder: DirectoryInfo) (newFolder: DirectoryInfo) =
+        
+        
+        let difFolder (oldFiles: FileInfo list) (newFiles: FileInfo list) (path:string) =
             // get all files in "new" and "old" folders
-            let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
-            let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
-            
             let reporter = initDafny
-            // relative path of folder we're running typecart on (to keep structure in output)
-            let relativePath = getRelative oldFolderPath oldFolder.FullName
             
             // get Dafny AST of new and old files
             let oldDafny = parseAST oldFiles "Old" reporter
@@ -162,22 +171,61 @@ module Program =
             
             // write output files
             log "***** writing output files"
-            let writeOut partialPath prefix (prog:YIL.Program) (only: string -> bool) =
-                let fullPath = IO.Path.Combine(outFolderPath + partialPath)
-                IO.Directory.CreateDirectory(fullPath) |> ignore
-                List.iter ( fun x -> writeFile x fullPath prefix) prog.decls
+
                 
             //TODO jointNames not working properly
             let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
-     //       writeOut relativePath "Joint" oldYIL (fun s -> List.contains s jointNames)
-       //     writeOut relativePath "Joint" oldYIL (fun s -> true)
-            writeOut relativePath "Old" oldYIL (fun s -> not (List.contains s jointNames))
-            writeOut relativePath "New" newYIL (fun s -> not (List.contains s jointNames))
-            writeOut relativePath "Combine" combine (fun s -> true)
+            // writeOut relativePath "Joint" oldYIL (fun s -> List.contains s jointNames)
+            writeOut path "Joint" oldYIL (fun s -> true)
+            writeOut path "Old" oldYIL (fun s -> not (List.contains s jointNames))
+            writeOut path "New" newYIL (fun s -> not (List.contains s jointNames))
+            writeOut path "Combine" combine (fun s -> true)
             
+            
+        let runComparision (possRelPath: string)  =
+            let oldFolder = DirectoryInfo(oldFolderPath + possRelPath)
+            let newFolder = DirectoryInfo(newFolderPath + possRelPath)
+            
+            // error handling if one project doesn't have given folder
+            let oldFiles =
+                try
+                    oldFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
+                with
+                    | :? DirectoryNotFoundException -> logObject "****** No files in {0} for old project" possRelPath; []
+                    
+            let newFiles =
+                try
+                    newFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
+                with
+                    | :? DirectoryNotFoundException -> logObject "****** No files in {0} for old project" possRelPath; []
+   
+            let path = outFolderPath + possRelPath
+            
+            // if one folder doesn't have any files in given path, print out files in other path
+            if newFiles.IsEmpty then
+                log "***** newFiles is empty"
+                noDiff oldFiles "Old" path
+            else if oldFiles.IsEmpty then
+                log "***** oldFiles is empty"
+                noDiff newFiles "New" path
+            else
+                difFolder oldFiles newFiles path
+                
+            0 |> ignore
+          
+          
+          
+        // get all possible relative folder paths in new and old, get list of all unique folder paths and then compare the files in these folders
         let allNewDir = (newParentFolder.GetDirectories("*", SearchOption.AllDirectories) |> Seq.toList) @ [newParentFolder]
         let allOldDir = (oldParentFolder.GetDirectories("*", SearchOption.AllDirectories) |> Seq.toList) @ [oldParentFolder]
         
-        List.iter2 (fun (x:DirectoryInfo) (y: DirectoryInfo) -> difFolder x y) allOldDir allNewDir
+        let newRel = List.map (fun (x:DirectoryInfo) -> getRelative newParentFolder.FullName x.FullName ) allNewDir
+        let oldRel = List.map (fun (x: DirectoryInfo) -> getRelative oldParentFolder.FullName x.FullName) allOldDir
+        
+        let relDir = (Seq.distinct (newRel @ oldRel)) |> Seq.toList
+        
+        
+        
+        List.iter (fun (x:string) -> runComparision x) relDir 
         
         0

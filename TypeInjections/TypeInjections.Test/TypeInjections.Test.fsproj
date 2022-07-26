@@ -43,6 +43,7 @@
       <Folder Include="Resources\TestIO\New" />
       <Folder Include="Resources\SimpleFolderTest\InputDirectory" />
       <Folder Include="Resources\SimpleFolderTest\OutputDirectory" />
+
     </ItemGroup>
 
 </Project>

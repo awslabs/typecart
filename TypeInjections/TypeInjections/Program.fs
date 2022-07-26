@@ -175,8 +175,8 @@ module Program =
 
         // parse input files into Dafny programs
         log "***** calling Dafny to parse and type-check old and new file"
-        let oldDafny = parseAST oldFile "Old" reporter
-        let newDafny = parseAST newFile "New" reporter
+        let oldDafny = parseAST [FileInfo(oldFile)] "Old" reporter
+        let newDafny = parseAST [FileInfo(newFile)] "New" reporter
 
         log "***** converting to YIL AST"
         log ("***** ... the old one ")
