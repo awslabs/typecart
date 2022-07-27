@@ -90,15 +90,15 @@ module Translation =
     /// translates one declaration
     and decl (context: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
         match dD with
-        | Diff.Same d -> declSameOrUpdate context d (Diff.idDecl d)
+        | Diff.Same d -> declSameOrUpdate context (d,d) (Diff.idDecl d)
         | Diff.Add _
         | Diff.Delete _ -> []  // nothing to generate for added/deleted declarations
-        | Diff.Update(d,df) -> declSameOrUpdate context d df
+        | Diff.Update(d,n,df) -> declSameOrUpdate context (d,n) df
 
     /// translates a possibly changed declaration
     // The treatment of unchanged and changed declarations often shares so much code that it is easier
     // to handle both in the same method.
-    and declSameOrUpdate (context: Context)(decl: Decl)(dif: Diff.Decl) : Decl list =
+    and declSameOrUpdate (context: Context)(declO: Decl, declN: Decl)(dif: Diff.Decl) : Decl list =
         let n = match dif.name with
                 | Diff.SameName n -> n
                 | Diff.Rename _ -> failwith (unsupported "renamed declaration")
@@ -107,7 +107,7 @@ module Translation =
         let ctxI = context.enter(n)
         match dif with
         | Diff.Class(_,_,_,msD) ->
-            let tvs = decl.tpvars
+            let tvs = declO.tpvars
             let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             // We use the strictest possible relation here: only identical objects are related.
@@ -122,17 +122,17 @@ module Translation =
             // With the current minimal treatment of classes, nothing is needed.
             []
         | Diff.Import _
-        | Diff.Export _ -> [decl] // TODO check
-        | Diff.DUnimplemented -> [decl]
+        | Diff.Export _ -> [declO] // TODO check what to do here if anything
+        | Diff.DUnimplemented -> [declO]
         | Diff.Module (_, msD) ->
             [ Module(n, decls ctxI msD, context.currentMeta()) ]
         | Diff.TypeDef(_, tvsD, superD, exprD) ->
            if not tvsD.isSame || not superD.isSame || not exprD.isSame then
                failwith(unsupported "change in type declaration: " + p.ToString())
-           match decl with
+           match declO with
            | TypeDef (_, _, super, _, isNew, _) ->
             // TypeDefs produce methods
-            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, decl)
+            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, declO)
             let xO = localDeclTerm xtO
             let xN = localDeclTerm xtN
             let body =
@@ -149,7 +149,7 @@ module Translation =
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
             if not tvsD.isSame then
                 failwith (unsupported "change in type parameters: " + p.ToString() )
-            let tvs = tvsD.getSame
+            let tvs = tvsD.getSame()
             // datatype p.name<u,v> = con1(a,u) | con2(b,v) --->
             // datatype pO<uO,vO> = con1(aO,uO) | con2(bO,vO)
             // datatype pN<uN,vN> = con1(aN,uN) | con2(bN,vN)
@@ -178,7 +178,7 @@ module Translation =
                     [{ vars = insN
                        pattern = ETuple([ patO; EWildcard ])
                        body = ECommented("deleted constructor", EBool false)}]
-                | Diff.Update (ctr,ctrU) -> [] // we could generate something here, but it's unclear what
+                | Diff.Update (ctrO,ctrN,ctrD) -> [] // we could generate something here, but it's unclear what
                 | Diff.Same ctr ->
                     [{ vars = Utils.listInterleave (insO, insN)
                        pattern = ETuple([ patO; patN ])
@@ -193,7 +193,7 @@ module Translation =
             relation :: memberLemmas
         // immutable fields with initializer yield a lemma, mutable fields yield nothing
         | Diff.Field (_, tpD, dfD) ->
-           match decl with
+           match declO with
            | Field(_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
            | Field (_, t, _, _, _, _, _) ->
             if not tpD.isSame then
@@ -218,15 +218,18 @@ module Translation =
            | _ -> failwith("impossible") // Diff.Field must occur with YIL.Field
         // methods produce lemmas; lemmas produce nothing
         | Diff.Method(_, tvsD, insD, outsD, bdD) ->
-           match decl with
-           | Method(methodIs = (NonStaticMethod IsLemma)) -> []
-           | Method (_, _, tvs, ins, outs, bodyO, _, isStatic, _) ->
-            // for now, we only support a change in the body
+           match declO,declN with
+           | Method(methodIs = (NonStaticMethod IsLemma)),_ -> []
+           | Method (_, _, tvs, ins_o, outs, bodyO, _, isStatic, _),
+             Method (_, _, _,   ins_n, _, _, _, _, _) ->
+            // we ignore bodyO, i.e., ignore changes in the body
             if not tvsD.isSame then
                 failwith (unsupported "change in type parameters: " + p.ToString())
-            if not insD.isSame then
-                failwith (unsupported "change in inputs: " + p.ToString())
-            if not outsD.isSame then
+            // we ignore changes in in/output conditions here and only compare declarations
+            // in fact, ensures clauses (no matter if changed) are ignored entirely
+            if not (insD.decls.getUpdate().IsEmpty) then
+                failwith (unsupported "update to individual inputs: " + p.ToString())
+            if not outsD.decls.isSame then
                 failwith (unsupported "change in outputs: " + p.ToString())
             // as "methods", we only consider pure functions here
             // a more general approach might also generate two-state lemmas for method invocations on class instances
@@ -270,16 +273,22 @@ module Translation =
             // parent type parameters and instanceInputs are empty if static
             let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg tvs)
             let typeParams = Utils.listInterleave (parentTvsO @ tvsO, parentTvsN @ tvsN)
-            let insO, insN, insT =
-                match ins with
-                | InputSpec (lds, _) -> List.unzip3 (List.map localDecl lds)
+            // old inputs and new inputs
+            let insO, _, _ = List.unzip3 (List.map localDecl ins_o.decls)
+            let _, insN, _ = List.unzip3 (List.map localDecl ins_n.decls)
+            // assumptions that the inputs occuring in both old and new are related
+            let _,_, insT = List.unzip3 (List.map localDecl (insD.decls.getSame()))
             let inputs =
                 instanceInputs
                 @ parentTvsT
-                @ tvsT @ Utils.listInterleave (insO, insN)
+                @ tvsT @ insO @ insN
 
-            let inputRequiresO,inputRequiresN,_ =
-                ins.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
+            // old requires clauses applied to old arguments
+            let inputRequiresO,_,_ =
+                ins_o.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
+            // new requires clauses applied to new arguments
+            let _,inputRequiresN,_ =
+                ins_n.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
             let inputsRelated =
                 if isStatic then
                     insT
@@ -347,8 +356,8 @@ module Translation =
     /// Therefore, we translate them at once using multiple outputs.
     and context (tpDs: Diff.TypeArgList, ldDs: Diff.LocalDeclList) : TypeArg list * LocalDecl list * Condition list =
         if tpDs.isSame && ldDs.isSame then
-            let tps = tpDs.getSame
-            let lds = ldDs.getSame
+            let tps = tpDs.getSame()
+            let lds = ldDs.getSame()
             let tpsO, tpsN, tpsT = List.unzip3 (List.map typearg tps)
             let ldsO, ldsN, ldsT = List.unzip3 (List.map localDecl lds)
             Utils.listInterleave (tpsO, tpsN), tpsT @ Utils.listInterleave (ldsO, ldsN), ldsT
@@ -509,7 +518,7 @@ module Translation =
     let ctx = Context(p)
     let pathOf(d: Decl) = ctx.currentDecl.child(d.name)
     let childPaths = List.map pathOf p.decls // toplevel paths of p
-    let sameChildren = List.map pathOf pD.decls.getSame  // the unchanged ones among those
+    let sameChildren = List.map pathOf (pD.decls.getSame())  // the unchanged ones among those
     let changedChildren = Utils.listDiff(childPaths, sameChildren) // the changed ones
     let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren) // dependency closure of the changed ones
     Console.WriteLine(" ***** DEPENDENCY CLOSURE *****")

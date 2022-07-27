@@ -26,18 +26,20 @@ module Diff =
         /// true if all elements are unchanged
         member this.isSame = List.forall (fun (e: Elem<'y, 'd>) -> e.isSame) this.elements
         /// the unchanged elements
-        member this.getSame = List.choose (fun e -> match e with Same y -> Some y | _ -> None) this.elements
+        member this.getSame() = List.choose (fun e -> match e with Same y -> Some y | _ -> None) this.elements
+        /// the updated elements
+        member this.getUpdate() = List.choose (fun e -> match e with Update (yo,yn,_) -> Some (yo,yn) | _ -> None) this.elements
         /// the added elements
-        member this.getAdd = List.choose (fun e -> match e with Add y -> Some y | _ -> None) this.elements
+        member this.getAdd() = List.choose (fun e -> match e with Add y -> Some y | _ -> None) this.elements
         /// the deleted elements
-        member this.getDelete = List.choose (fun e -> match e with Delete y -> Some y | _ -> None) this.elements
+        member this.getDelete() = List.choose (fun e -> match e with Delete y -> Some y | _ -> None) this.elements
 
     /// change in an element of a list of YIL.y with comparision type Diff.d
     and Elem<'y, 'd> =
         | Same of 'y
         | Add of 'y
         | Delete of 'y
-        | Update of 'y * 'd
+        | Update of 'y * 'y * 'd
         member this.isSame =
             match this with
             | Same _ -> true
@@ -47,7 +49,7 @@ module Diff =
             | Same y
             | Add y
             | Delete y
-            | Update (y,_) -> y
+            | Update (y,_,_) -> y
 
     type Name =
         | SameName of string
@@ -203,7 +205,7 @@ module Diff =
             | Same y -> UNC + " " + py y
             | Add y -> ADD + " " + py y
             | Delete y -> DEL + " " + py y
-            | Update (_,y) -> UPD + " " + pd y
+            | Update (_,_,y) -> UPD + " " + pd y
 
         member this.prog(p: Program) = this.decls p.decls
 

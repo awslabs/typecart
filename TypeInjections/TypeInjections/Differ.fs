@@ -22,7 +22,7 @@ module Differ =
                 | Some n ->
                     nwDiffed <- n :: nwDiffed
                     let d = Option.get (diff (o, n)) // succeeds by precondition
-                    Diff.Update (o,d)
+                    Diff.Update (o,n,d)
                 | None -> Diff.Delete o
         let changed = List.map diffOne old
         // append Add for the elements of nw that have not been used by diffOne
@@ -46,13 +46,11 @@ module Differ =
         let mutable nwLeft = nw
 
         let diffOne o =
-            if not nwLeft.IsEmpty then
-                // old delcarations deleted at the end
+            if nwLeft.IsEmpty then
+                // old declarations deleted at the end
                 [ Diff.Delete o ]
             else
-                let iO =
-                    List.tryFindIndex (fun n -> similar (o, n)) nwLeft
-
+                let iO = List.tryFindIndex (fun n -> similar (o, n)) nwLeft
                 match iO with
                 | Some i ->
                     // similar element comes later, assume everything in between (if anything) is added
@@ -61,9 +59,13 @@ module Differ =
                     let n = nwLeft.Head
                     nwLeft <- nwLeft.Tail
                     // the diff between the two similar elements
-                    let d = Option.get (diff (o, n)) // succeeds by precondition
+                    let elem =
+                        if o = n then Diff.Same o
+                        else
+                          let d = Option.get (diff (o, n)) // succeeds by precondition
+                          Diff.Update (o,n,d)
                     // now o = n
-                    (List.map Diff.Add added) @ [ Diff.Update (o,d) ]
+                    (List.map Diff.Add added) @ [ elem ]
                 | None ->
                     // no similar elements occurs later, assume deleted
                     [ Diff.Delete o ]
@@ -184,7 +186,6 @@ module Differ =
 
     /// diffs two output specifications
     and outputSpec (old: OutputSpec, nw: OutputSpec) =
-        let cs = conditions (old.conditions, nw.conditions)
         match old, nw with
         | OutputSpec (ldsO, reqsO), OutputSpec (ldsN, reqsN) ->
             Diff.OutputSpec(localDecls (ldsO, ldsN), conditions (reqsO, reqsN))
