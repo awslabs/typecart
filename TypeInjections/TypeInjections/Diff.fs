@@ -87,7 +87,9 @@ module Diff =
 
     and DeclList = List<Y.Decl, Decl>
 
-    and DatatypeConstructor = DatatypeConstructor of Name * LocalDeclList
+    and DatatypeConstructor =
+        | DatatypeConstructor of Name * LocalDeclList
+            member this.ins() = match this with | DatatypeConstructor(_,ds) -> ds
 
     and DatatypeConstructorList = List<Y.DatatypeConstructor, DatatypeConstructor>
 

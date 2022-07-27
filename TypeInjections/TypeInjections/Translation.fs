@@ -160,30 +160,40 @@ module Translation =
             // and accordingly for the general case.
             let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
 
-            let mkCase (ctrD: Diff.Elem<YIL.DatatypeConstructor,Diff.DatatypeConstructor>) =
-                let ctr = ctrD.yil
-                let insO, insN, insT = List.unzip3 (List.map localDecl ctr.ins)
+            let mkCase (elem: Diff.Elem<YIL.DatatypeConstructor,Diff.DatatypeConstructor>) =
+                // to share code between the cases, we interpret the change as an update 
+                // old and new constructor and the diff
+                let ctrO,ctrN,ctrD =
+                    match elem with
+                    | Diff.Update(o,n,d) -> o,n,d
+                    | _ ->
+                        // if not an Update, we use default values that are only used partially below
+                        elem.yil, elem.yil, Diff.idConstructor elem.yil
+                let insO, _, _ = List.unzip3 (List.map localDecl ctrO.ins)
+                let _, insN, _ = List.unzip3 (List.map localDecl ctrN.ins)
+                let _, _, insT = List.unzip3 (List.map localDecl (ctrD.ins().getSame()))
                 let argsO = List.map localDeclTerm insO
                 let argsN = List.map localDeclTerm insN
-                let cn = ctr.name
-                let patO = EConstructorApply(pO.child (cn), [], argsO) // type parameters do not matter in a pattern
-                let patN = EConstructorApply(pN.child (cn), [], argsN)
-                match ctrD with
+                let patO = EConstructorApply(pO.child (ctrO.name), [], argsO) // type parameters do not matter in a pattern
+                let patN = EConstructorApply(pN.child (ctrN.name), [], argsN)
+                // to share code between two cases below
+                let buildCase(vs, p1, p2, comment, body) =
+                     [{ vars = vs
+                        pattern = ETuple([ p1; p2 ])
+                        body = ECommented(comment, body) }]
+
+                match elem with
                 // no cases to generate for Add and Delete, but we generate stubs for customization
                 | Diff.Add _ ->
-                    [{ vars = insN
-                       pattern = ETuple([ EWildcard; patN ])
-                       body = ECommented("added constructor", EBool false)}]
+                    buildCase(insN, EWildcard, patN, "added constructor", EBool false)
                 | Diff.Delete _ ->
-                    [{ vars = insN
-                       pattern = ETuple([ patO; EWildcard ])
-                       body = ECommented("deleted constructor", EBool false)}]
-                | Diff.Update (ctrO,ctrN,ctrD) -> [] // we could generate something here, but it's unclear what
-                | Diff.Same ctr ->
-                    [{ vars = Utils.listInterleave (insO, insN)
-                       pattern = ETuple([ patO; patN ])
-                       body = EConj(insT) }]
-
+                    buildCase(insO, patO, EWildcard, "deleted constructor", EBool false)
+                | Diff.Same _ ->
+                    buildCase(insO @ insN, patO, patN, "unchanged constructor", EConj(insT))
+                | Diff.Update _ ->
+                    // for updates, we only generate the conditions that the unchanged arguments are related
+                    // the relation must be customized in a way that takes the added/deleted arguments into account 
+                    buildCase(insO @ insN, patO, patN, "added/deleted constructor arguments", EConj(insT))
             let dflt = EBool false
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             let tO, tN = localDeclType xtO, localDeclType xtN
