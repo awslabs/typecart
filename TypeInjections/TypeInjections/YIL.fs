@@ -1000,7 +1000,8 @@ module YIL =
             | EBool (v) -> match v with true -> "true" | false -> "false"
             | EChar (v) -> "'" + v.ToString() + "'"
             | EString (v) -> "\"" + v.ToString() + "\""
-            | EToString (es) -> "\"" + (exprs es) + "\""
+            // EToString compile from sequence display expressions of char sequences.
+            | EToString (es) -> "[" + (exprsNoBr false es ", ") + "]"
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToString()
             | EQuant (q, lds, r, b) ->
