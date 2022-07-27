@@ -1022,14 +1022,14 @@ module YIL =
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToString()
             | EQuant (q, lds, r, b) ->
-                q.ToString()
+                "(" + q.ToString()
                 + " "
                 + this.localDeclsBr (lds,false)
                 + " :: "
                 + (match r with
                    | Some e -> expr e + (if q = Forall then " ==> " else " && ")
                    | None -> ""
-                ) + (expr b)
+                ) + (expr b) + ")"
             | EOld e -> "old(" + (expr e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
