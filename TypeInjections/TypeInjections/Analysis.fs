@@ -65,11 +65,39 @@ module Analysis =
                                :: (Include (Path ["new.dfy"]))
                                :: prog'.decls }
   
+  type ImportJointInOldNew() =
+      inherit Traverser.Identity()
+      
+      override this.decl(ctx: Context, decl: Decl) =
+          match decl with
+          | Module(name, decls, meta) ->
+              [ Module(name, Import(false, Path ["Joint"])
+                               :: decls, meta) ]
+          | _ -> this.declDefault(ctx, decl)
+      
+      override this.prog(prog: Program) =
+          let prog' = this.progDefault(prog)
+          { prog' with decls = (Include(Path ["joint.dfy"]))
+                               :: prog'.decls }
+  
+  /// prefixes the names of all toplevel modules
+  type PrefixTopDecls(pref: string) =
+    inherit Traverser.Identity()
+    member this.pref = pref
+    
+      override this.prog(prog: Program) =
+        let prN (n: string) = pref + "." + n
+        let prD (d: YIL.Decl) =
+            match d with
+            | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
+            | d -> d
+        {name=prog.name; decls=List.map prD prog.decls}
+  
   /// Resolve module imports tagged along expressions and declarations.
   /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
   type AnalyzeModuleImports() =
         inherit Traverser.Identity()
-
+        
         // consume common prefix of current module path with current path.
         member this.consumeModulePath(p: Path, modulePath: Path) =
             match p, modulePath with
@@ -77,6 +105,8 @@ module Analysis =
             // We don't do the same for combine, since it is produced from scratch and the fully-qualified
             // names should include "Combine.".
             | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))
+            | _, Path ("New" :: t) -> this.consumeModulePath(p, Path(t))
+            | _, Path ("Old" :: t) -> this.consumeModulePath(p, Path(t))
             // remove common prefix of current module scope and the fully qualified path "p".
             // For instance, if current module scope is CommonTypes.Option and p = Path [CommonTypes, Option, None]
             // then the result should be Path [None]
@@ -100,7 +130,9 @@ module Analysis =
                 else
                     p
             | _, _ -> p
+        
 
+        
         override this.receiver(ctx: Context, r: Receiver) =
             match r with
             | ObjectReceiver _ -> r // do not care about fields of e.g. local record vars.
@@ -110,3 +142,24 @@ module Analysis =
                 let objectPath = this.consumeModulePath(ct.path, currModulePath)
                 let objectPath = List.fold (this.consumeImportPath) objectPath imports
                 StaticReceiver {ct with path = objectPath}
+
+
+    type Pipeline(passes : (#Traverser.Transform) list) =
+        member this.passes = passes
+        member this.apply(prog: Program) =
+            let rec one (passes: (#Traverser.Transform) list) (r: Program) =
+                match passes with
+                | curr :: next ->
+                    curr.prog(r) |> one next
+                | [] -> r
+            one this.passes prog
+    
+    type Filter(declFilter: YIL.Decl -> bool) =
+        member this.declFilter = declFilter
+        member this.apply(prog: Program) =
+             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
+             
+    type FilterPipeline(declFilter: YIL.Decl -> bool, passes: (#Traverser.Transform) list) =
+        member this.pipeline = Pipeline(passes)
+        member this.filter = Filter(declFilter)
+        member this.apply(prog: Program) = prog |> this.filter.apply |> this.pipeline.apply
