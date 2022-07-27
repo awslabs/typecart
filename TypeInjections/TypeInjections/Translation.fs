@@ -171,7 +171,10 @@ module Translation =
                         elem.yil, elem.yil, Diff.idConstructor elem.yil
                 let insO, _, _ = List.unzip3 (List.map localDecl ctrO.ins)
                 let _, insN, _ = List.unzip3 (List.map localDecl ctrN.ins)
-                let _, _, insT = List.unzip3 (List.map localDecl (ctrD.ins().getSame()))
+                let _, _, insT =
+                    if not (ctrD.ins().getUpdate().IsEmpty) then
+                        failwith (unsupported "update to datatype constructor argument")
+                    List.unzip3 (List.map localDecl (ctrD.ins().getSame()))
                 let argsO = List.map localDeclTerm insO
                 let argsN = List.map localDeclTerm insN
                 let patO = EConstructorApply(pO.child (ctrO.name), [], argsO) // type parameters do not matter in a pattern
