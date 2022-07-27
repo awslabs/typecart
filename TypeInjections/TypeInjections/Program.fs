@@ -105,41 +105,41 @@ module Program =
         // write output files
         log "***** writing output files"
         
-        let writeOut fileName (prog:YIL.Program) (fp: Analysis.FilterPipeline) =
+        let writeOut fileName (prog:YIL.Program) (fp: Analysis.Pipeline) =
             let f = IO.Path.Combine(outFolder, fileName)
             IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f)) |> ignore
             let progF = fp.apply(prog)
             let s =YIL.printer().prog(progF, YIL.Context(progF))
             IO.File.WriteAllText(f, s)
         
-        let mkFilter(only: string -> bool) = (fun (d: YIL.Decl) -> only d.name)
         let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
-        let (^^) a b = Analysis.FilterPipeline(a, b)
-        let processOld =
-            mkFilter(fun s -> not (List.contains s jointNames))
-                ^^ [Analysis.PrefixNotFoundImportsWithJoint()
+        let processOld: Traverser.Transform list = [
+                    Analysis.mkFilter(fun s -> not (List.contains s jointNames))
+                    Analysis.PrefixNotFoundImportsWithJoint()
                     Analysis.PrefixTopDecls("Old")
                     Analysis.ImportJointInOldNew()
                     Analysis.AnalyzeModuleImports()]
-        let processNew =
-            mkFilter(fun s -> not (List.contains s jointNames))
-                ^^ [Analysis.PrefixNotFoundImportsWithJoint()
+        let processNew: Traverser.Transform list = [
+                    Analysis.mkFilter(fun s -> not (List.contains s jointNames))
+                    Analysis.PrefixNotFoundImportsWithJoint()
                     Analysis.PrefixTopDecls("New")
                     Analysis.ImportJointInOldNew()
                     Analysis.AnalyzeModuleImports()]
-        let processJoint =
-            mkFilter(fun s -> List.contains s jointNames)
-                ^^ [Analysis.PrefixTopDecls("Joint")
+        let processJoint: Traverser.Transform list = [
+                    Analysis.mkFilter(fun s -> List.contains s jointNames)
+                    Analysis.PrefixTopDecls("Joint")
                     Analysis.AnalyzeModuleImports()]
-        let processCombine =
-            mkFilter(fun _ -> true)
-                ^^ [Analysis.PrefixTopDecls("Combine")
+        let processCombine: Traverser.Transform list = [
+                    Analysis.mkFilter(fun _ -> true)
+                    Analysis.PrefixTopDecls("Combine")
                     Analysis.ImportInCombine()
                     Analysis.AnalyzeModuleImports()]
         
-        writeOut "joint.dfy" oldYIL processJoint
-        writeOut "old.dfy" oldYIL processOld
-        writeOut "new.dfy" newYIL processNew
-        writeOut "combine.dfy" combine processCombine
+        let (~~) arg = arg |> Analysis.Pipeline
+        
+        writeOut "joint.dfy" oldYIL ~~processJoint
+        writeOut "old.dfy" oldYIL ~~processOld
+        writeOut "new.dfy" newYIL ~~processNew
+        writeOut "combine.dfy" combine ~~processCombine
         0
  

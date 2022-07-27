@@ -176,23 +176,22 @@ module Analysis =
                 let objectPath = List.fold (this.consumeImportPath) objectPath imports
                 StaticReceiver {ct with path = objectPath}
 
+    
+     type Filter(declFilter: Decl -> bool) =
+        inherit Traverser.Identity()
+        member this.declFilter = declFilter
+        override this.prog(prog: Program) =
+             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
+
 
     type Pipeline(passes : Traverser.Transform list) =
         member this.passes = passes
         member this.apply(prog: Program) =
-            let rec one (passes: (#Traverser.Transform) list) (r: Program) =
+            let rec oneRest (passes: (#Traverser.Transform) list) (r: Program) =
                 match passes with
                 | curr :: next ->
-                    curr.prog(r) |> one next
+                    curr.prog(r) |> oneRest next
                 | [] -> r
-            one this.passes prog
-    
-    type Filter(declFilter: YIL.Decl -> bool) =
-        member this.declFilter = declFilter
-        member this.apply(prog: Program) =
-             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
-             
-    type FilterPipeline(declFilter: YIL.Decl -> bool, passes: Traverser.Transform list) =
-        member this.pipeline = Pipeline(passes)
-        member this.filter = Filter(declFilter)
-        member this.apply(prog: Program) = prog |> this.filter.apply |> this.pipeline.apply
+            oneRest this.passes prog
+
+    let mkFilter(only: string -> bool) = Filter(fun (d: Decl) -> only d.name)
