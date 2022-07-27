@@ -7,50 +7,6 @@ open Microsoft.Dafny
 open System
 
 module Program =
-
-    let log (s: string) = System.Console.WriteLine(s)
-    let logObject (s: string) (arg: obj) = System.Console.WriteLine(s, arg)
-
-    let initDafny : ConsoleErrorReporter =
-        // preparations, adapted from DafnyDriver.Main
-        let reporter = ConsoleErrorReporter()
-        let options = DafnyOptions()
-        log "***** searching for DafnyPrelude.bpl"
-        (* Dafny initialization always call Boogie initialization, which depends on loading DafnyPrelude.bpl, a Boogie file
-               implementing the Dafny built-ins. Even though we will not run Boogie, we need to go through this step.
-               But Dafny cannot find the file in dafny/Binaries because it uses the location of the current program to locate it.
-               So we copy the file into the current project and point Dafny to it.
-            *)
-        // get the directory of the running program
-        let codebase = Utils.location
-        //ToDo: the orElse branch could only be checked if the first test failed
-        let dafnyPrelude =
-            // When using the binary installation of Dafny:
-            Utils.findFile (codebase, "dafny", "DafnyPrelude.bpl")
-            // When using Dafny built from source:
-            |> Option.orElse (Utils.findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl"))
-            |> Option.get
-        Console.WriteLine(dafnyPrelude)
-        let dafnyPreludeDir =
-            Utils.findDirectory (codebase, "dafny", "DafnyPrelude.bpl")
-            |> Option.get
-        logObject "found in: {0}" dafnyPreludeDir
-        log "***** initialising Dafny"
-        options.DafnyPrelude <- dafnyPrelude
-        DafnyOptions.Install(options)
-        log "***** Dafny initialised"
-        reporter
-
-    let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
-        let dafnyFile = DafnyFile(file)
-        let mutable dafnyProgram = Unchecked.defaultof<Program>
-        logObject "***** calling Dafny parser and checker for {0}" file
-        let dafnyFiles = [ dafnyFile ]
-        let err =
-            Main.ParseCheck(Utils.toIList dafnyFiles, programName, reporter, &dafnyProgram)
-        if err <> null && err <> "" then
-            failwith ("Dafny errors: " + err)
-        dafnyProgram
     
     [<EntryPoint>]
     let main (argv: string array) =
@@ -72,30 +28,30 @@ module Program =
                 failwith ("file not found: " + a)
         
         //initialise Dafny
-        let reporter = initDafny
+        let reporter = Utils.initDafny
 
         // parse input files into Dafny programs
-        log "***** calling Dafny to parse and type-check old and new file"
-        let oldDafny = parseAST oldFile "Old" reporter
-        let newDafny = parseAST newFile "New" reporter
+        Utils.log "***** calling Dafny to parse and type-check old and new file"
+        let oldDafny = Utils.parseAST oldFile "Old" reporter
+        let newDafny = Utils.parseAST newFile "New" reporter
 
-        log "***** converting to YIL AST"
-        log ("***** ... the old one ")
+        Utils.log "***** converting to YIL AST"
+        Utils.log ("***** ... the old one ")
         let oldYIL = DafnyToYIL.program oldDafny
-        log ("***** ... the new one ")
+        Utils.log ("***** ... the new one ")
         let newYIL = DafnyToYIL.program newDafny
 
         // tests the transformation code
         Traverser.test(oldYIL)
         
         // diff the programs
-        log "***** diffing the two programs"
+        Utils.log "***** diffing the two programs"
         let diff = Differ.prog (oldYIL, newYIL)
         let diffS = (Diff.Printer()).prog diff
         Console.WriteLine(diffS)
         
         // generate translation
-        log "***** generating compatibility code"
+        Utils.log "***** generating compatibility code"
         let combine,joint = Translation.prog(oldYIL, diff)
         let transS =
             let combine = Analysis.AnalyzeModuleImports().prog(combine) in
@@ -103,7 +59,7 @@ module Program =
         Console.WriteLine transS
         
         // write output files
-        log "***** writing output files"
+        Utils.log "***** writing output files"
         
         let writeOut fileName (prog:YIL.Program) (fp: Analysis.Pipeline) =
             let f = IO.Path.Combine(outFolder, fileName)

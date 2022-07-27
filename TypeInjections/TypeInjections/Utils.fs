@@ -1,6 +1,8 @@
 namespace TypeInjections
 
+open System
 open System.Collections.Generic
+open Microsoft.Dafny
 
 // FR: copying over my Utils file from YuccaDafnyCompiler, this should be merged into the one here
 module Utils =
@@ -115,3 +117,51 @@ module Utils =
             Some(s.Substring(0, s.Length - suf.Length))
         else
             None
+    
+    /// Logging utils
+    let log (s: string) = Console.WriteLine(s)
+    let logObject (s: string) (arg: obj) = Console.WriteLine(s, arg)
+
+    
+    /// Dafny utils
+    let initDafny : ConsoleErrorReporter =
+        // preparations, adapted from DafnyDriver.Main
+        let reporter = ConsoleErrorReporter()
+        let options = DafnyOptions()
+        log "***** searching for DafnyPrelude.bpl"
+        (* Dafny initialization always call Boogie initialization, which depends on loading DafnyPrelude.bpl, a Boogie file
+               implementing the Dafny built-ins. Even though we will not run Boogie, we need to go through this step.
+               But Dafny cannot find the file in dafny/Binaries because it uses the location of the current program to locate it.
+               So we copy the file into the current project and point Dafny to it.
+            *)
+        // get the directory of the running program
+        let codebase = location
+        //ToDo: the orElse branch could only be checked if the first test failed
+        let dafnyPrelude =
+            // When using the binary installation of Dafny:
+            findFile (codebase, "dafny", "DafnyPrelude.bpl")
+            // When using Dafny built from source:
+            |> Option.orElse (findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl"))
+            |> Option.get
+        Console.WriteLine(dafnyPrelude)
+        let dafnyPreludeDir =
+            findDirectory (codebase, "dafny", "DafnyPrelude.bpl")
+            |> Option.get
+        logObject "found in: {0}" dafnyPreludeDir
+        log "***** initialising Dafny"
+        options.DafnyPrelude <- dafnyPrelude
+        DafnyOptions.Install(options)
+        log "***** Dafny initialised"
+        reporter
+    
+    let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+        let dafnyFile = DafnyFile(file)
+        let mutable dafnyProgram = Unchecked.defaultof<Program>
+        logObject "***** calling Dafny parser and checker for {0}" file
+        let dafnyFiles = [ dafnyFile ]
+        let err =
+            Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
+        if err <> null && err <> "" then
+            failwith ("Dafny errors: " + err)
+        dafnyProgram
+
