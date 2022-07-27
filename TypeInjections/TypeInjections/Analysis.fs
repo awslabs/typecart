@@ -46,6 +46,7 @@ module Analysis =
       List.iter add start
       closure
  
+  /// Import joint, old, new in combine.
   type ImportInCombine() =
       inherit Traverser.Identity()
       
@@ -80,7 +81,39 @@ module Analysis =
           { prog' with decls = (Include(Path ["joint.dfy"]))
                                :: prog'.decls }
   
-  /// prefixes the names of all toplevel modules
+  /// Any import that isn't found in the old, new ASTs must belong in Joint module.
+  type PrefixNotFoundImportsWithJoint() =
+      inherit Traverser.Identity()
+      
+      override this.decl(ctx: Context, decl: Decl) =
+          let importIn importPath =
+              match List.tryFind (fun (p, _) -> p.Equals(importPath)) ctx.importPaths with
+              | Some _ -> true
+              | None -> false
+          match decl with
+          | Module(name, decls, meta) ->
+              let filtDecls =
+                  List.map (fun decl ->
+                      match decl with
+                      | Import (o, p) ->
+                          if importIn p then decl
+                          else Import (o, p.prefix("Joint"))
+                      | _ -> decl) decls
+              [ Module(name, filtDecls, meta) ]
+          | _ -> this.declDefault(ctx, decl)
+      
+      override this.prog(prog: Program) =
+          let decls = prog.decls in
+          let ctx =
+              List.fold (fun (ctx: Context) decl ->
+                  match decl with
+                  | Module(name, _, _)-> ctx.addImport(Path [name], ImportDefault)
+                  | _ -> ctx) (Context(prog)) decls
+          let dsT = List.collect (fun (d: Decl) -> this.decl (ctx, d)) prog.decls
+          { name = prog.name
+            decls = dsT }
+
+  /// Prefixes the names of all toplevel modules
   type PrefixTopDecls(pref: string) =
     inherit Traverser.Identity()
     member this.pref = pref

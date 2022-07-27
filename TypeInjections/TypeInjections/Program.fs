@@ -115,13 +115,31 @@ module Program =
         let mkFilter(only: string -> bool) = (fun (d: YIL.Decl) -> only d.name)
         let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
         let (^^) a b = Analysis.FilterPipeline(a, b)
-        let processOld = mkFilter(fun s -> not (List.contains s jointNames)) ^^ [Analysis.PrefixTopDecls("Old"); Analysis.ImportJointInOldNew(); Analysis.AnalyzeModuleImports()]
-        let processNew = mkFilter(fun s -> not (List.contains s jointNames)) ^^ [Analysis.PrefixTopDecls("New"); Analysis.ImportJointInOldNew(); Analysis.AnalyzeModuleImports()]
-        let processJoint = mkFilter(fun s -> List.contains s jointNames) ^^ [Analysis.PrefixTopDecls("Joint"); Analysis.AnalyzeModuleImports()]
-        let processCombine = mkFilter(fun _ -> true) ^^ [Analysis.PrefixTopDecls("Combine"); Analysis.ImportInCombine(); Analysis.AnalyzeModuleImports()]
+        let processOld =
+            mkFilter(fun s -> not (List.contains s jointNames))
+                ^^ [Analysis.PrefixNotFoundImportsWithJoint()
+                    Analysis.PrefixTopDecls("Old")
+                    Analysis.ImportJointInOldNew()
+                    Analysis.AnalyzeModuleImports()]
+        let processNew =
+            mkFilter(fun s -> not (List.contains s jointNames))
+                ^^ [Analysis.PrefixNotFoundImportsWithJoint()
+                    Analysis.PrefixTopDecls("New")
+                    Analysis.ImportJointInOldNew()
+                    Analysis.AnalyzeModuleImports()]
+        let processJoint =
+            mkFilter(fun s -> List.contains s jointNames)
+                ^^ [Analysis.PrefixTopDecls("Joint")
+                    Analysis.AnalyzeModuleImports()]
+        let processCombine =
+            mkFilter(fun _ -> true)
+                ^^ [Analysis.PrefixTopDecls("Combine")
+                    Analysis.ImportInCombine()
+                    Analysis.AnalyzeModuleImports()]
         
         writeOut "joint.dfy" oldYIL processJoint
         writeOut "old.dfy" oldYIL processOld
         writeOut "new.dfy" newYIL processNew
         writeOut "combine.dfy" combine processCombine
         0
+ 

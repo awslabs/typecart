@@ -20,6 +20,7 @@ module YIL =
     let error msg = failwith msg
 
     /// a qualified identifier of a declaration, see lookupByPath for semantics
+    [<CustomEquality;NoComparison>]
     type Path =
         | Path of string list
         member this.names =
@@ -31,6 +32,7 @@ module YIL =
                 this
             else
                 Path(this.names @ [ n ])
+        member this.prefix(s: string) = match this with Path ps -> Path (s :: ps)
         member this.append(ns: Path) =
             Path(
                 this.names
@@ -46,6 +48,21 @@ module YIL =
             && p.names.[..l - 1] = this.names
 
         override this.ToString() = listToString (this.names, ".")
+        
+        // Two paths is equal if every pair of elements in each position are equal.
+        override this.Equals(that: Object) =
+            let eq (that: Path) =
+                match this, that with
+                | Path (a :: t), Path (b :: t') -> a.Equals(b) && (Path t).Equals(Path t')
+                | Path [], Path [] -> true
+                | _ -> false
+            match that with
+            | :? Path as that -> eq that
+            | _ -> false
+        
+        override this.GetHashCode() =
+            match this with Path ps -> (String.concat ";" ps).GetHashCode()
+            
 
     // meta-information
     [<CustomEquality;NoComparison>]
