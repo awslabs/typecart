@@ -177,7 +177,7 @@ module Analysis =
                 StaticReceiver {ct with path = objectPath}
 
 
-    type Pipeline(passes : (#Traverser.Transform) list) =
+    type Pipeline(passes : Traverser.Transform list) =
         member this.passes = passes
         member this.apply(prog: Program) =
             let rec one (passes: (#Traverser.Transform) list) (r: Program) =
@@ -192,7 +192,7 @@ module Analysis =
         member this.apply(prog: Program) =
              {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
              
-    type FilterPipeline(declFilter: YIL.Decl -> bool, passes: (#Traverser.Transform) list) =
+    type FilterPipeline(declFilter: YIL.Decl -> bool, passes: Traverser.Transform list) =
         member this.pipeline = Pipeline(passes)
         member this.filter = Filter(declFilter)
         member this.apply(prog: Program) = prog |> this.filter.apply |> this.pipeline.apply
