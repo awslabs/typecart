@@ -64,6 +64,47 @@ module YIL =
             match this with Path ps -> (String.concat ";" ps).GetHashCode()
             
 
+    // A PathFamily is a tree, a collection of paths.
+    // It is implemented as a trie, where add / lookup / delete work in time proportional to length of path.
+    type PathFamily =
+        // -------*--->
+        | PFRight of curr: string * child: PathFamily * next: PathFamily
+        //        |
+        //        *------...
+        | PFLast of curr: string * child: PathFamily
+        // empty set of paths.
+        | PFEmpty
+        
+        member this.add(p: Path) =
+            match this, p with
+            | PFLast (curr, child), Path (a :: t) when a.Equals(curr) ->
+                PFLast (curr, child.add(Path(t)))
+            | PFLast (curr, child), Path (a :: t) ->
+                PFRight (curr, child, PFLast (a, PFEmpty.add(Path(t))))
+            | PFLast (curr, child), Path [] -> PFLast (curr, child)
+            | PFRight (curr, child, next), Path (a :: t) when a.Equals(curr) ->
+                PFRight (curr, child.add(Path(t)), next)
+            | PFRight (curr, child, next), Path (a :: t) ->
+                PFRight (curr, child, next.add(p))
+            | PFRight (curr, child, next), Path [] -> PFRight (curr, child, next)
+            | PFEmpty, Path (a :: t) ->
+                PFLast (a, PFEmpty.add(Path(t)))
+            | PFEmpty, Path [] -> PFEmpty
+        
+        member this.exists(p: Path) =
+            match this, p with
+            // base case: empty path is always in path family.
+            | PFLast _, Path [] 
+            | PFRight _, Path [] 
+            | PFEmpty, Path [] -> true
+            // non-match case
+            | PFLast (curr, _), Path (a :: _) when not(curr.Equals(a)) -> false
+            // inductive cases.
+            | PFLast (curr, child), Path (a :: t) when curr.Equals((a)) -> child.exists(Path t)
+            | PFRight (curr, child, _), Path (a :: t) when curr.Equals(a) -> child.exists(Path t)
+            | PFRight (curr, _, next), Path (a :: t) when not(curr.Equals(a)) -> next.exists(Path t)
+            | _, _ -> false
+        
     // meta-information
     [<CustomEquality;NoComparison>]
     type Meta =
@@ -709,6 +750,8 @@ module YIL =
        - 
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
+       
+       TODO: remove importPaths and just use the tree representation of imports.
     *)
     type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition,
                  modulePath: Path, importPaths: (Path * ImportType) list, currMethod: (string * MethodType) option, inForLoopInitializer: bool, inForLoopBody: bool) =
@@ -777,30 +820,31 @@ module YIL =
         
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
-            Context(prog, currentDecl.child (n), tpvars, vars, pos, modulePath, importPaths, None, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl.child (n), tpvars, vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, modulePath, importPaths, None, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(tvs: TypeArg list) : Context =
-            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, modulePath, importPaths, None, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
 
         member this.add(ds: LocalDecl list) : Context =
-            Context(prog, currentDecl, tpvars, List.append vars ds, pos, modulePath, importPaths, None, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, tpvars, List.append vars ds, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
 
         /// remembers where we are
-        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, modulePath, importPaths, None, inForLoopInitializer, inForLoopBody)
+        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         member this.enterBody() = this.setPos(BodyPosition)
         
         /// enter a new module
         member this.enterModuleScope(newModulePath: Path)  =
-            Context(prog, currentDecl, tpvars, vars, pos, modulePath.append(newModulePath), importPaths, None, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, tpvars, vars, pos, modulePath.append(newModulePath), importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         
+        // add and remove imports
         member this.addImport(import: Path, importType: ImportType) =
-            Context(prog, currentDecl, tpvars, vars, pos, modulePath, (import, importType) :: importPaths, None, inForLoopInitializer, inForLoopBody)
-    
+            Context(prog, currentDecl, tpvars, vars, pos, modulePath, (import, importType) :: importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+               
     (* ***** printer for the language above
 
        This is implemented as a class so that we can use state for indentation or overriding for variants.

@@ -164,7 +164,6 @@ module Analysis =
                     p
             | _, _ -> p
         
-
         
         override this.receiver(ctx: Context, r: Receiver) =
             match r with
@@ -176,6 +175,23 @@ module Analysis =
                 let objectPath = List.fold (this.consumeImportPath) objectPath imports
                 StaticReceiver {ct with path = objectPath}
 
+     type DeduplicateImports() =
+         inherit Traverser.Identity()
+         
+         override this.decl(ctx: Context, d: Decl) =
+             match d with
+             | Module(name, decls, meta) ->
+                   let newDecls, _ = List.fold (fun (newDecls: Decl list, paths: PathFamily) decl ->
+                     match decl with
+                     | Import (_, p) ->
+                         if paths.exists(p) then
+                             newDecls, paths
+                         else
+                            decl :: newDecls, paths.add(p)
+                     | _ -> decl :: newDecls, paths) ([], PFEmpty) decls
+                   [ Module (name, List.rev newDecls, meta) ]
+             | _ -> this.declDefault(ctx, d) 
+     
     
      type Filter(declFilter: Decl -> bool) =
         inherit Traverser.Identity()
