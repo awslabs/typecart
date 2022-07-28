@@ -63,47 +63,6 @@ module YIL =
         override this.GetHashCode() =
             match this with Path ps -> (String.concat ";" ps).GetHashCode()
             
-
-    // A PathFamily is a tree, a collection of paths.
-    // It is implemented as a trie, where add / lookup / delete work in time proportional to length of path.
-    type PathFamily =
-        // -------*--->
-        | PFRight of curr: string * child: PathFamily * next: PathFamily
-        //        |
-        //        *------...
-        | PFLast of curr: string * child: PathFamily
-        // empty set of paths.
-        | PFEmpty
-        
-        member this.add(p: Path) =
-            match this, p with
-            | PFLast (curr, child), Path (a :: t) when a.Equals(curr) ->
-                PFLast (curr, child.add(Path(t)))
-            | PFLast (curr, child), Path (a :: t) ->
-                PFRight (curr, child, PFLast (a, PFEmpty.add(Path(t))))
-            | PFLast (curr, child), Path [] -> PFLast (curr, child)
-            | PFRight (curr, child, next), Path (a :: t) when a.Equals(curr) ->
-                PFRight (curr, child.add(Path(t)), next)
-            | PFRight (curr, child, next), Path (a :: t) ->
-                PFRight (curr, child, next.add(p))
-            | PFRight (curr, child, next), Path [] -> PFRight (curr, child, next)
-            | PFEmpty, Path (a :: t) ->
-                PFLast (a, PFEmpty.add(Path(t)))
-            | PFEmpty, Path [] -> PFEmpty
-        
-        member this.exists(p: Path) =
-            match this, p with
-            // base case: empty path is always in path family.
-            | PFLast _, Path [] 
-            | PFRight _, Path [] 
-            | PFEmpty, Path [] -> true
-            // non-match case
-            | PFLast (curr, _), Path (a :: _) when not(curr.Equals(a)) -> false
-            // inductive cases.
-            | PFLast (curr, child), Path (a :: t) when curr.Equals((a)) -> child.exists(Path t)
-            | PFRight (curr, child, _), Path (a :: t) when curr.Equals(a) -> child.exists(Path t)
-            | PFRight (curr, _, next), Path (a :: t) when not(curr.Equals(a)) -> next.exists(Path t)
-            | _, _ -> false
         
     // meta-information
     [<CustomEquality;NoComparison>]

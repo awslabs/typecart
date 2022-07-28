@@ -181,14 +181,13 @@ module Analysis =
          override this.decl(ctx: Context, d: Decl) =
              match d with
              | Module(name, decls, meta) ->
-                   let newDecls, _ = List.fold (fun (newDecls: Decl list, paths: PathFamily) decl ->
+                   let newDecls, _ = List.fold (fun (newDecls: Decl list, paths: Path list) decl ->
                      match decl with
                      | Import (_, p) ->
-                         if paths.exists(p) then
-                             newDecls, paths
-                         else
-                            decl :: newDecls, paths.add(p)
-                     | _ -> decl :: newDecls, paths) ([], PFEmpty) decls
+                         match List.tryFind (fun x -> x.Equals(p)) paths with
+                         | Some _ -> newDecls, paths
+                         | None -> decl :: newDecls, p :: paths
+                     | _ -> decl :: newDecls, paths) ([], []) decls
                    [ Module (name, List.rev newDecls, meta) ]
              | _ -> this.declDefault(ctx, d) 
      
