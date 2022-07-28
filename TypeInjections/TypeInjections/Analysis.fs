@@ -175,8 +175,19 @@ module Analysis =
                 let objectPath = List.fold (this.consumeImportPath) objectPath imports
                 StaticReceiver {ct with path = objectPath}
 
-     type DeduplicateImports() =
+     type DeduplicateImportsIncludes() =
          inherit Traverser.Identity()
+         
+         override this.prog(prog: Program) =
+             let prog = this.progDefault(prog)
+             let decls, _ = List.fold (fun (decls, includes: Path list) decl ->
+                 match decl with
+                 | Include p ->
+                     match List.tryFind (fun x -> x.Equals(p)) includes with
+                     | Some _ -> (decls, includes)
+                     | None -> (decl :: decls, p :: includes)
+                 | _ -> (decl :: decls, includes)) ([], []) prog.decls
+             {prog with decls = List.rev decls}
          
          override this.decl(ctx: Context, d: Decl) =
              match d with
