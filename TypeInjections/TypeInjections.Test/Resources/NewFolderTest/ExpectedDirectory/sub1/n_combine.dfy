@@ -6,6 +6,12 @@
     }
     
     
+    function bar(b_O: bar, b_N: bar):bool
+     {
+      (b_O == b_N)
+    }
+    
+    
     
   }
   
