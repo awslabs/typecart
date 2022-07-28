@@ -74,26 +74,22 @@ module Program =
                     Analysis.PrefixNotFoundImportsWithJoint()
                     Analysis.PrefixTopDecls("Old")
                     Analysis.ImportJointInOldNew()
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImports()]
+                    Analysis.AnalyzeModuleImports()]
         let processNew: Traverser.Transform list = [
                     Analysis.mkFilter(fun s -> not (List.contains s jointNames))
                     Analysis.PrefixNotFoundImportsWithJoint()
                     Analysis.PrefixTopDecls("New")
                     Analysis.ImportJointInOldNew()
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImports()]
+                    Analysis.AnalyzeModuleImports()]
         let processJoint: Traverser.Transform list = [
                     Analysis.mkFilter(fun s -> List.contains s jointNames)
                     Analysis.PrefixTopDecls("Joint")
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImports()]
+                    Analysis.AnalyzeModuleImports()]
         let processCombine: Traverser.Transform list = [
                     Analysis.mkFilter(fun _ -> true)
                     Analysis.PrefixTopDecls("Combine")
                     Analysis.ImportInCombine()
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImports()]
+                    Analysis.AnalyzeModuleImports()]
         
         let (~~) arg = arg |> Analysis.Pipeline
         

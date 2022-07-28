@@ -150,6 +150,8 @@ module Utils =
         logObject "found in: {0}" dafnyPreludeDir
         log "***** initialising Dafny"
         options.DafnyPrelude <- dafnyPrelude
+        // Disable module reveals / provides scopes, otherwise we get e.g. lemmas with empty bodies.
+        options.DisableScopes <- true
         DafnyOptions.Install(options)
         log "***** Dafny initialised"
         reporter
