@@ -1,6 +1,6 @@
 namespace TypeInjections
 
-open YIL
+open TypeInjections.YIL
 
 module Analysis =
   /// dependency of two declarations
@@ -228,7 +228,20 @@ module Analysis =
                      | _ -> decl :: newDecls, paths) ([], []) decls
                    [ Module (name, List.rev newDecls, meta) ]
              | _ -> this.declDefault(ctx, d) 
-     
+    
+     type CreateEmptyModuleIfNoneExists(moduleName: string) =
+         inherit Traverser.Identity()
+         
+         let noModule(t: Decl list) =
+             match List.tryFind (function | Module _ -> true | _ -> false) t with
+             | None -> true
+             | Some _ -> false
+         
+         override this.prog(prog: Program) =
+             match prog.decls with
+             | [] as l | l when noModule(l) ->
+                 {prog with decls = l @ [Module(moduleName, [], emptyMeta)]}
+             | _ -> prog
     
      type Filter(declFilter: Decl -> bool) =
         inherit Traverser.Identity()
@@ -247,4 +260,5 @@ module Analysis =
                 | [] -> r
             oneRest this.passes prog
 
+    
     let mkFilter(only: string -> bool) = Filter(fun (d: Decl) -> only d.name)
