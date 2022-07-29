@@ -38,7 +38,7 @@ module Translation =
     // This is the only place that uses the literal prefix strings.
     let rec path (p: Path) : Path * Path * Path =
         let prefixRoot (p: Path) (s: string) =
-            Path((s + "." + p.names.Head) :: p.names.Tail)
+            Path(s :: p.names.Head :: p.names.Tail)
         // joint decls are the same in old and new version
         // the combine declaration is still generated because e.g., a joint type can be called with non-joint type parameters
         if List.exists (fun (j:Path) -> j.isAncestorOf p) jointDecls then
@@ -429,8 +429,9 @@ module Translation =
             let pO, pN, pT = path p
             let r = StaticReceiver({ path = pT.parent; tpargs = [] })
             let tO, tN, tONT = tp t
-            let tT = abstractRel ("x", tO, tN, tONT)
-            TApplyPrimitive(pO, tO), TApplyPrimitive(pN, tN), (fun (x, y) -> EMethodApply(r, pT, [tO; tN], [tT; x; y], false))
+            TApplyPrimitive(pO, tO), TApplyPrimitive(pN, tN),
+                (fun (x, y) ->
+                    EMethodApply(r, pT, [TApplyPrimitive(pO, tO); TApplyPrimitive(pN, tN)], [x; y], false))
         | TTuple ts ->
             // two tuples are related if all elements are
             let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
