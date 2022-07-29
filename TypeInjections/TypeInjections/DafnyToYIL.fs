@@ -281,18 +281,7 @@ module DafnyToYIL =
 
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
     and tp (t: Type) : Y.Type =
-        // translate common types in CommonTypes.dfy.
-        // This is included both in JavaLib and RustLib.
-        let tpCommon (t : UserDefinedType) n (args : YIL.Type list) err =
-            begin match n with
-            | "int8" -> Y.TInt Y.Bound8
-            | "int16" -> Y.TInt Y.Bound16 
-            | "int32" -> Y.TInt Y.Bound32 
-            | "int64" -> Y.TInt Y.Bound64
-            | "float" -> Y.TReal Y.Bound32
-            | "double" -> Y.TReal Y.Bound64
-            | _ -> unsupported err
-            end
+
         match t with
         | :? UserDefinedType as t ->
             // Detection of type parameters: https://github.com/dafny-lang/dafny/pull/1188
@@ -310,6 +299,18 @@ module DafnyToYIL =
                       Y.TNullable tT
                     else
                       tT
+                // translate common types in CommonTypes.dfy.
+                // This is included both in JavaLib and RustLib.
+                let tpCommon (t : UserDefinedType) n (args : YIL.Type list) err =
+                    begin match n with
+                    | "int8" -> Y.TInt Y.Bound8
+                    | "int16" -> Y.TInt Y.Bound16 
+                    | "int32" -> Y.TInt Y.Bound32 
+                    | "int64" -> Y.TInt Y.Bound64
+                    | "float" -> Y.TReal Y.Bound32
+                    | "double" -> Y.TReal Y.Bound64
+                    | _ -> unsupported $"%s{err}: %s{t.ToString()}"
+                    end
                 // Dafny puts a few built-in types into the DafnySystem namespace instead of making them primitive
                 if p.names.Head = DafnySystem then
                     let n = p.names.Item(1)
@@ -388,6 +389,11 @@ module DafnyToYIL =
                         | "RefL" | "Ref" | "Box" -> makeTApply()
                         | _ -> tpCommon t n args ("unknown type in rust_lib")
                         end) |> Y.TApplyPrimitive
+                elif p.names.Head = "CommonTypes" then
+                    (p, if p.names.Item(1).StartsWith("Option") then
+                            makeTApply()
+                        else tpCommon t (p.names.Item(1)) args ("unknown type in CommonTypes"))
+                    |> Y.TApplyPrimitive
                 else
                     makeTApply()
         | :? BoolType -> Y.TBool

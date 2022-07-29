@@ -40,6 +40,10 @@ module YIL =
             )
         member this.parent = Path(listDropLast (this.names))
         member this.name = listLast (this.names)
+        member this.namesWithoutLast() =
+            match List.rev this.names with
+            | _ :: t -> List.rev t
+            | [] -> []
 
         /// this is prefix of that (reflexive)
         member this.isAncestorOf(p: Path) =
@@ -296,8 +300,15 @@ module YIL =
             | TReal b -> match b with | Bound (Some 32) -> "float" | Bound (Some 64) -> "double" | _ -> "real"
             | TBitVector (w) -> "bv" + w.ToString()
             | TVar (n) -> n
-            | TApply (op, args) -> op.name + (tps args)
-            | TApplyPrimitive (op, t) -> (String.concat "." op.names) + "." + (t.ToString())
+            | TApply (op, args) -> (String.concat "." op.names) + (tps args)
+            | TApplyPrimitive (op, t) ->
+                match t with
+                | TApply _ -> t.ToString()
+                | _ ->
+                    let pathUntil = op.namesWithoutLast()
+                    match pathUntil with
+                    | [] -> t.ToString()
+                    | _ -> (String.concat "." pathUntil) + "." + (t.ToString())
             | TTuple (ts) -> product ts
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
             | TSeq (b,t) -> "seq" + b.ToString() + (tps [ t ])

@@ -53,10 +53,6 @@ module Program =
         // generate translation
         Utils.log "***** generating compatibility code"
         let combine,joint = Translation.prog(oldYIL, diff)
-        let transS =
-            let combine = Analysis.AnalyzeModuleImports().prog(combine) in
-                YIL.printer().prog(combine, YIL.Context(combine))
-        Console.WriteLine transS
         
         // write output files
         Utils.log "***** writing output files"

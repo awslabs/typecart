@@ -132,11 +132,16 @@ module Analysis =
         inherit Traverser.Identity()
         
         // consume common prefix of current module path with current path.
-        member this.consumeModulePath(p: Path, modulePath: Path) =
+        member this.consumeModulePath(p: Path, modulePath: Path) : Path =
             match p, modulePath with
             // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
             // We don't do the same for combine, since it is produced from scratch and the fully-qualified
             // names should include "Combine.".
+            // Handle spceical case first: when both paths are in the same module, then we elide both.
+            | Path ("Joint" :: t1), Path ("Joint" :: t2) 
+            | Path ("Combine" :: t1), Path ("Combine" :: t2)
+            | Path ("New" :: t1), Path ("New" :: t2)
+            | Path ("Old" :: t1), Path ("Old" :: t2) -> this.consumeModulePath(Path t1, Path t2)
             | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))
             | _, Path ("New" :: t) -> this.consumeModulePath(p, Path(t))
             | _, Path ("Old" :: t) -> this.consumeModulePath(p, Path(t))
@@ -163,7 +168,21 @@ module Analysis =
                 else
                     p
             | _, _ -> p
-        
+            
+        member this.doPathForReceiver(p: Path, currModulePath: Path, imports: (Path * ImportType) list) =
+                let objectPath = this.consumeModulePath(p, currModulePath)
+                let objectPath' = List.fold (this.consumeImportPath) objectPath imports
+                objectPath'
+              
+        member this.doPathForType(p: Path, currModulePath: Path, imports: (Path * ImportType) list) =
+                
+                let objectPath = this.consumeModulePath(p, currModulePath)
+                let objectPath' =
+                    match objectPath with
+                    | Path [] -> Path [p.name]
+                    | _ -> List.fold (this.consumeImportPath) objectPath imports
+                objectPath'
+
         
         override this.receiver(ctx: Context, r: Receiver) =
             match r with
@@ -171,9 +190,17 @@ module Analysis =
             | StaticReceiver ct ->
                 let imports = ctx.importPaths
                 let currModulePath = ctx.modulePath
-                let objectPath = this.consumeModulePath(ct.path, currModulePath)
-                let objectPath = List.fold (this.consumeImportPath) objectPath imports
+                let objectPath = this.doPathForReceiver(ct.path, currModulePath, imports)
                 StaticReceiver {ct with path = objectPath}
+        
+        override this.tp(ctx: Context, t: Type) =
+            let imports = ctx.importPaths
+            let currModulePath = ctx.modulePath
+            let doPath p = this.doPathForType(p, currModulePath, imports)
+            match t with
+            | TApply (p, ts) -> TApply(doPath(p), List.map (fun x -> this.tp (ctx, x)) ts)
+            | TApplyPrimitive (p, t) -> TApplyPrimitive(doPath(p), this.tp(ctx, t))
+            | _ -> this.tpDefault(ctx, t)
 
      type DeduplicateImportsIncludes() =
          inherit Traverser.Identity()
