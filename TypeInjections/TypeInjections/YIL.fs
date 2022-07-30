@@ -836,18 +836,26 @@ module YIL =
         
         member this.prog(p: Program, pctx: PrintingContext) = this.declsGeneral(p.decls, pctx, false)
 
-        member this.tpvar(a: TypeArg) =
-            // Not print out variance types for now. Before we prefix "+" for (n, Some true)
-            // and prefix "-" for (n, Some false).
-            match a with
-            | (n,None) 
-            | (n,Some true) 
-            | (n,Some false) -> n
-        member this.tpvars(ns: TypeArg list) =
+        member this.tpvar(inDecl: bool) (a: TypeArg) =
+            // Only print out variance type info for declaration-level printing.
+            // Prefix "+" for (n, Some true) and prefix "-" for (n, Some false).
+            if inDecl then
+                match a with
+                | (n,None) -> n
+                | (n,Some true) -> "+" + n
+                | (n,Some false) -> "-" + n
+            else
+                match a with
+                | (n,None) 
+                | (n,Some true) 
+                | (n,Some false) -> n
+        // inDecl should only be set to true when printing out class or datatype declarations.
+        // These are the only places when variance type signature should be print out.
+        member this.tpvars(inDecl: bool)(ns: TypeArg list) =
             if ns.IsEmpty then
                 ""
             else
-                "<" + listToString (List.map this.tpvar ns, ", ") + ">"
+                "<" + listToString (List.map (this.tpvar inDecl) ns, ", ") + ">"
 
         member this.declsGeneral(ds: Decl list, pctx: PrintingContext, braced: Boolean) =
                 indented(listToString (List.map (fun d -> this.decl(d, pctx) + "\n\n") ds, ""), braced)
@@ -882,7 +890,7 @@ module YIL =
                 "datatype "
                 + (this.meta a)
                 + n
-                + (this.tpvars tpvs)
+                + (this.tpvars true tpvs)
                 + " = " 
                 + listToString (consS, " | ")
                 + (decls ds)
@@ -890,7 +898,7 @@ module YIL =
                 if isTrait then "trait " else "class "
                 + (this.meta a)
                 + n
-                + (this.tpvars tpvs)
+                + (this.tpvars true tpvs)
                 + if p.IsEmpty then
                       ""
                   else
@@ -901,7 +909,7 @@ module YIL =
             | TypeDef (n, tpvs, sup, predO, isNew, _) ->
                 (if isNew then "newtype " else "type ")
                 + n
-                + (this.tpvars tpvs)
+                + (this.tpvars true tpvs)
                 + " = "
                 + (match predO with
                    | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr false p pctx)
@@ -921,7 +929,7 @@ module YIL =
                 let methodCtx = pctx.enterMethod(n, methodType)
                 this.methodType(methodType) + " "
                 + n
-                + (this.tpvars tpvs)
+                + (this.tpvars false tpvs)
                 + (this.localDecls ins.decls)
                 + (match methodType.map() with
                    | IsLemma | IsPredicate | IsPredicateMethod -> ""
@@ -935,7 +943,7 @@ module YIL =
                 "constructor "
                 + (this.meta a)
                 + n
-                + (this.tpvars tpvs)
+                + (this.tpvars false tpvs)
                 + this.inputSpec(ins, pctx)
                 + (this.conditions(false, outs, pctx))
                 + "\n"
