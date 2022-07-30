@@ -35,7 +35,7 @@ module Translation =
   type Translator(prog: Program, progD: Diff.Program, jointDecls: Path list) =
 
     /// old, new, and combine path for a path
-    // This is the only place that uses the literal prefix strings.
+    // This is the only place besides functionNames(s) below that uses the literal prefix strings.
     let rec path (p: Path) : Path * Path * Path =
         let prefixRoot (p: Path) (s: string) =
             Path(s :: p.names.Head :: p.names.Tail)
@@ -49,6 +49,9 @@ module Translation =
     /// s ---> s_old, s_new, s
     // This is the only place that uses the literal names.
     and name (s: string) = s+"_O", s+"_N", s
+    
+    // Function name must be distinct from lemma names. So we prefix all function names with "T_".
+    and functionName(s: string) = "T_" + s
 
     /// a --->  a_old, a_new, a: a_old * a_new -> bool
     and typearg (a: TypeArg) : TypeArg * TypeArg * LocalDecl =
@@ -143,7 +146,7 @@ module Translation =
                     // otherwise, call relation of supertype
                     let _, _, superT = tp super
                     superT (xO, xN)
-            [ Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
+            [ Method(NonStaticMethod IsFunction, functionName pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
             | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
 
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
@@ -201,7 +204,7 @@ module Translation =
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             let tO, tN = localDeclType xtO, localDeclType xtN
             let body = EMatch(ETuple [ xO; xN ], TTuple [ tO; tN ], List.collect mkCase ctrsD.elements, Some dflt)
-            let relation = Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            let relation = Method(NonStaticMethod IsFunction,  functionName pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
             let memberLemmas = decls ctxI msD
             relation :: memberLemmas
         // immutable fields with initializer yield a lemma, mutable fields yield nothing
@@ -424,14 +427,17 @@ module Translation =
             let tsT = List.map (fun (o, n, t) -> abstractRel ("x", o, n, t)) tsONT
             let tsO, tsN, _ = List.unzip3 tsONT
             let tsON = Utils.listInterleave (tsO, tsN)
-            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT, tsON, tsT @ [ x; y ], false))
+            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT.transformLast(functionName pT.name), tsON, tsT @ [ x; y ], false))
         | TApplyPrimitive (p, t) ->
             let pO, pN, pT = path p
             let r = StaticReceiver({ path = pT.parent; tpargs = [] })
             let tO, tN, tONT = tp t
-            TApplyPrimitive(pO, tO), TApplyPrimitive(pN, tN),
-                (fun (x, y) ->
-                    EMethodApply(r, pT, [TApplyPrimitive(pO, tO); TApplyPrimitive(pN, tN)], [x; y], false))
+            let primitiveTO = TApplyPrimitive(pO, tO)
+            let primitiveTN = TApplyPrimitive(pN, tN)
+            // TApplyPrimitive(...) is really just a transparent wrapper type here designed to give us
+            // access to the fully qualified path of a type, so tONT operating on tO and tN should still
+            // be a valid translation function here.
+            TApplyPrimitive(pO, tO), TApplyPrimitive(pN, tN), tONT
         | TTuple ts ->
             // two tuples are related if all elements are
             let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
@@ -460,7 +466,7 @@ module Translation =
             let ldsO, ldsN, ldsT = List.unzip3 (List.map localDecl lds)
             let inputTypesO = List.map localDeclType ldsO
             let inputTypesN = List.map localDeclType ldsN
-            let outputTypeO, outputTypeN, outputTypeRelationn = tp u
+            let outputTypeO, outputTypeN, outputTypeRelation = tp u
             let inputDecls = Utils.listInterleave (ldsO, ldsN)
             let inputsO = List.map localDeclTerm ldsO
             let inputsN = List.map localDeclTerm ldsN
@@ -469,7 +475,7 @@ module Translation =
             let funsRelated (o, n) =
                 let outputO = EAnonApply(o, inputsO)
                 let outputN = EAnonApply(n, inputsN)
-                let outputRelated = outputTypeRelationn (outputO, outputN)
+                let outputRelated = outputTypeRelation (outputO, outputN)
                 EQuant(Forall, inputDecls, Some(inputsRelated), outputRelated)
 
             TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), funsRelated

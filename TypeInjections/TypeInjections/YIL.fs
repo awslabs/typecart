@@ -44,7 +44,12 @@ module YIL =
             match List.rev this.names with
             | _ :: t -> List.rev t
             | [] -> []
-
+        member this.transformLast(name': string) =
+            match List.rev this.names with
+            | [] -> failwith "cannot transform last of an empty path"
+            | _ :: t -> name' :: t
+            |> List.rev
+            |> Path
         /// this is prefix of that (reflexive)
         member this.isAncestorOf(p: Path) =
             let l = this.names.Length
