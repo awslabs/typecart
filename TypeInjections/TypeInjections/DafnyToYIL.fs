@@ -188,21 +188,23 @@ module DafnyToYIL =
         | :? TraitDecl -> true
         | _ -> false
     
-    and resolveDafnyMethodTypePayload(s: string) =
-        match s with
-        | "function" -> Y.IsFunction
-        | "function method" -> Y.IsFunctionMethod
-        | "predicate" -> Y.IsPredicate
-        | "predicate method" -> Y.IsPredicateMethod
-        | "lemma" -> Y.IsLemma
-        | "method" -> Y.IsMethod
-        | Prefix "ghost " p -> resolveDafnyMethodTypePayload(p)
+    and resolveDafnyMethodTypePayload(isByMethod: bool, s: string) =
+        match isByMethod, s with
+        | true, "function" -> Y.IsFunctionMethod
+        | false, "function" -> Y.IsFunction
+        | _, "function method" -> Y.IsFunctionMethod
+        | true, "predicate" -> Y.IsPredicateMethod
+        | false, "predicate" -> Y.IsPredicate
+        | _, "predicate method" -> Y.IsPredicateMethod
+        | _, "lemma" -> Y.IsLemma
+        | _, "method" -> Y.IsMethod
+        | _, Prefix "ghost " p -> resolveDafnyMethodTypePayload(isByMethod, p)
         | _ -> unsupported $"unsupported method type payload: %s{s}"
         
-    and resolveDafnyMethodType(s: string) =
+    and resolveDafnyMethodType(isByMethod: bool, s: string) =
         match s with
-        | Prefix "static " s -> Y.StaticMethod (resolveDafnyMethodTypePayload(s))
-        | _ -> Y.NonStaticMethod (resolveDafnyMethodTypePayload(s))
+        | Prefix "static " s -> Y.StaticMethod (resolveDafnyMethodTypePayload(isByMethod, s))
+        | _ -> Y.NonStaticMethod (resolveDafnyMethodTypePayload(isByMethod, s))
         
     and memberDecl (m: MemberDecl) : Y.Decl =
         match m with
@@ -240,7 +242,7 @@ module DafnyToYIL =
                     Some(expr m.Body)
             let mName = m.Name
             let meta = namedMeta m
-            let yilMethodType = resolveDafnyMethodType m.FunctionDeclarationKeywords
+            let yilMethodType = resolveDafnyMethodType((match m.ByMethodDecl with null -> false | _ -> true), m.FunctionDeclarationKeywords)
             Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
@@ -258,9 +260,9 @@ module DafnyToYIL =
                     Some(statement m.Body)
 
             let mName = m.Name
-
+            
             let yilMethodType =
-                match m.IsStatic, m with
+                match m.HasStaticKeyword, m with
                 // Lemmas shall always not have static qualifiers when printing
                 | _, :? Lemma -> Y.NonStaticMethod Y.IsLemma 
                 | true, _ -> Y.StaticMethod Y.IsMethod
