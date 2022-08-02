@@ -682,7 +682,11 @@ module DafnyToYIL =
                 // Rewrite var _, _ := rhs1, rhs2 to rhs1; rhs2
                 if List.forall (fun (x: LocalVariable) -> x.DisplayName = "_") (fromIList s.Locals) then
                     let ds = rhsOfUpdate (u)
-                    Y.EBlock(List.map (fun (x: Y.UpdateRHS) -> x.df) ds)
+                    let blockS = List.map (fun (x: Y.UpdateRHS) -> x.df) ds
+                    match blockS with
+                    | [] -> error "RHS expected for var _ := ... statement"
+                    | [ s ] -> s
+                    | _ -> Y.EBlock(blockS)
                 else
                     let ds = rhsOfUpdate (u)
 
