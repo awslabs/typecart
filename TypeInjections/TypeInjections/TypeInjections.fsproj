@@ -4,6 +4,19 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>net6.0</TargetFramework>
         <RootNamespace>TypeInjectionsAlt</RootNamespace>
+
+
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>typeinjection</ToolCommandName>
+        <PackageOutputPath>./nupkg</PackageOutputPath>
+
+
+        <PackageId>simple_typeCart</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>syedahir tschuerl</Authors>
+        <Company>AWS</Company>
+
+        <IsPackable>true</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>
@@ -38,5 +51,13 @@
         <Reference Include="Boogie.CodeContractsExtender, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
           <HintPath>..\..\dafny\Boogie.CodeContractsExtender.dll</HintPath>
         </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7" />
+      <PackageReference Include="Boogie.Core" Version="2.15.7" />
+      <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.7" />
+      <PackageReference Include="DafnyPipeline" Version="3.6.0.40511" />
+      <PackageReference Include="Microsoft.Z3" Version="4.10.1" />
     </ItemGroup>
 </Project>

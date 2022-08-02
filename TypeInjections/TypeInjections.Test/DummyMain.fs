@@ -41,19 +41,19 @@ module Program =
         // get the directory of the running program
         let codebase = TypeInjections.Utils.location
         //ToDo: the orElse branch could only be checked if the first test failed
-        let dafnyPrelude =
-            // When using the binary installation of Dafny:
-            Utils.findFile (codebase, "dafny", "DafnyPrelude.bpl")
-            // When using Dafny built from source:
-            |> Option.orElse (Utils.findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl"))
-            |> Option.get
-        Console.WriteLine(dafnyPrelude)
-        let dafnyPreludeDir =
-            Utils.findDirectory (codebase, "dafny", "DafnyPrelude.bpl")
-            |> Option.get
-        logObject "found in: {0}" dafnyPreludeDir
-        log "***** initialising Dafny"
-        options.DafnyPrelude <- dafnyPrelude
+//        let dafnyPrelude =
+//            // When using the binary installation of Dafny:
+//            Utils.findFile (codebase, "dafny", "DafnyPrelude.bpl")
+//            // When using Dafny built from source:
+//            |> Option.orElse (Utils.findFile (codebase, "dafny/Binaries", "DafnyPrelude.bpl"))
+//            |> Option.get
+//        Console.WriteLine(dafnyPrelude)
+//        let dafnyPreludeDir =
+//            Utils.findDirectory (codebase, "dafny", "DafnyPrelude.bpl")
+//            |> Option.get
+//        logObject "found in: {0}" dafnyPreludeDir
+//        log "***** initialising Dafny"
+//        options.DafnyPrelude <- dafnyPrelude
         DafnyOptions.Install(options)
         log "***** Dafny initialised"
         reporter

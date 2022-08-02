@@ -1,0 +1,189 @@
+{
+  "format": 1,
+  "restore": {
+    "/Volumes/workplace/typecart/TypeInjections/typeCart/typeCart.fsproj": {}
+  },
+  "projects": {
+    "/Volumes/workplace/typecart/TypeInjections/typeCart/typeCart.fsproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Volumes/workplace/typecart/TypeInjections/typeCart/typeCart.fsproj",
+        "projectName": "typecart",
+        "projectPath": "/Volumes/workplace/typecart/TypeInjections/typeCart/typeCart.fsproj",
+        "packagesPath": "/Users/tschuerl/.nuget/packages/",
+        "outputPath": "/Volumes/workplace/typecart/TypeInjections/typeCart/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/tschuerl/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net6.0"
+        ],
+        "sources": {
+          "/usr/local/share/dotnet/sdk/6.0.302/FSharp/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {
+              "/Volumes/workplace/typecart/TypeInjections/TypeInjections/TypeInjections.fsproj": {
+                "projectPath": "/Volumes/workplace/typecart/TypeInjections/TypeInjections/TypeInjections.fsproj"
+              }
+            }
+          }
+        }
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "dependencies": {
+            "Boogie.CodeContractsExtender": {
+              "target": "Package",
+              "version": "[2.15.7, )",
+              "generatePathProperty": true
+            },
+            "Boogie.Core": {
+              "target": "Package",
+              "version": "[2.15.7, )",
+              "generatePathProperty": true
+            },
+            "Boogie.ExecutionEngine": {
+              "target": "Package",
+              "version": "[2.15.7, )",
+              "generatePathProperty": true
+            },
+            "DafnyPipeline": {
+              "target": "Package",
+              "version": "[3.6.0.40511, )",
+              "generatePathProperty": true
+            },
+            "FSharp.Core": {
+              "include": "Runtime, Compile, Build, Native, Analyzers, BuildTransitive",
+              "target": "Package",
+              "version": "[6.0.5, )",
+              "generatePathProperty": true
+            },
+            "LibGit2Sharp": {
+              "target": "Package",
+              "version": "[0.27.0-preview-0182, )",
+              "generatePathProperty": true
+            },
+            "Microsoft.Z3": {
+              "target": "Package",
+              "version": "[4.10.1, )",
+              "generatePathProperty": true
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/6.0.302/RuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "": {
+          "#import": []
+        }
+      }
+    },
+    "/Volumes/workplace/typecart/TypeInjections/TypeInjections/TypeInjections.fsproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Volumes/workplace/typecart/TypeInjections/TypeInjections/TypeInjections.fsproj",
+        "projectName": "simple_typeCart",
+        "projectPath": "/Volumes/workplace/typecart/TypeInjections/TypeInjections/TypeInjections.fsproj",
+        "packagesPath": "/Users/tschuerl/.nuget/packages/",
+        "outputPath": "/Volumes/workplace/typecart/TypeInjections/TypeInjections/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/tschuerl/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net6.0"
+        ],
+        "sources": {
+          "/usr/local/share/dotnet/sdk/6.0.302/FSharp/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {}
+          }
+        }
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "dependencies": {
+            "Boogie.CodeContractsExtender": {
+              "target": "Package",
+              "version": "[2.15.7, )",
+              "generatePathProperty": true
+            },
+            "Boogie.Core": {
+              "target": "Package",
+              "version": "[2.15.7, )",
+              "generatePathProperty": true
+            },
+            "Boogie.ExecutionEngine": {
+              "target": "Package",
+              "version": "[2.15.7, )",
+              "generatePathProperty": true
+            },
+            "DafnyPipeline": {
+              "target": "Package",
+              "version": "[3.6.0.40511, )",
+              "generatePathProperty": true
+            },
+            "FSharp.Core": {
+              "include": "Runtime, Compile, Build, Native, Analyzers, BuildTransitive",
+              "target": "Package",
+              "version": "[6.0.5, )",
+              "generatePathProperty": true
+            },
+            "Microsoft.Z3": {
+              "target": "Package",
+              "version": "[4.10.1, )",
+              "generatePathProperty": true
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/6.0.302/RuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "": {
+          "#import": []
+        }
+      }
+    }
+  }
+}
