@@ -137,9 +137,21 @@ module DafnyToYIL =
                 | :? NonNullTypeDecl as td -> Some(pathOfTopLevelDecl td)
                 | :? IndDatatypeDecl as dd -> Some(pathOfTopLevelDecl dd)
                 | _ -> None
-            let exportPaths : YIL.Path list =
-                d.Exports |> List.ofSeq |> List.choose exportPath
-            [ Y.Export exportPaths ]
+            
+            let exports =
+                d.Exports |> List.ofSeq
+            
+            let provides, reveals =
+                List.fold (fun (provides, reveals) (expSig: ExportSignature) ->
+                    match expSig.Opaque, exportPath expSig with
+                    | true (* provides *), Some ps ->
+                        ps :: provides, reveals
+                    | false (* reveals *), Some ps ->
+                        provides, ps :: reveals
+                    | _, _ (* cannot handle *) ->
+                        provides, reveals) ([], []) exports
+            
+            [ Y.Export(Y.ExportType(provides, reveals)) ]
         | _ ->
             // default module contains a default class, which contains non-nesting declarations
             unsupported (

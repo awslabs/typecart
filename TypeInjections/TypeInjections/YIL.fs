@@ -127,6 +127,17 @@ module YIL =
         member this.map() =
             match this with
             | NonStaticMethod m | StaticMethod m -> m
+    
+    type ExportType(provides: Path list, reveals: Path list) =
+        new() = ExportType([], [])
+        member this.provides = provides
+        member this.reveals = reveals
+        override this.ToString() =
+            let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> p.name), ", "))
+            "export \n"
+                + "   provides " + (lts this.provides)
+                + "\n"
+                + "   reveals " + (lts this.reveals)
         
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
@@ -213,7 +224,7 @@ module YIL =
             isStatic: bool *
             meta: Meta
         | Import of opened: bool * modPath: Path
-        | Export of Path list
+        | Export of ExportType
         // dummy for missing cases
         | DUnimplemented
         member this.meta =
@@ -949,7 +960,7 @@ module YIL =
                 + "\n"
                 + Option.fold (fun (s: string) (e: Expr) -> expr false e) "{}" b
             | Import(o,p) -> "import " + (if o then "opened " else "") + p.ToString() 
-            | Export ps -> "export provides " + (listToString(ps |> List.map (fun p -> p.name), ", "))
+            | Export exportT -> exportT.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
         member this.inputSpec(ins: InputSpec, pctx: PrintingContext) =

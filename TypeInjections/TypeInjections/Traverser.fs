@@ -62,6 +62,12 @@ module Traverser =
             { name = p.name
               decls = dsT }
 
+        member this.exportType(ctx: Context, e: ExportType) =
+            let path p = this.path(ctx, p)
+            let provides = List.map path e.provides
+            let reveals = List.map path e.reveals
+            ExportType(provides, reveals)            
+        
         // transform a declaration
         member this.declDefault(ctx: Context, d: Decl) : Decl list =
             let childCtx (dName: string) (ctx: Context) = ctx.enter dName
@@ -122,7 +128,7 @@ module Traverser =
                 let bT = this.exprO(bodyCtx, b)
                 [ ClassConstructor(n, tpvs, insT, outsT, bT, m) ]
             | Import(o, p) -> [Import (o, this.path(ctx,p))]
-            | Export ps -> [Export (List.map (fun p -> this.path(ctx, p)) ps)]
+            | Export exportT -> [Export (this.exportType(ctx, exportT))]
             | DUnimplemented -> [ d ]
 
         // transforms a type

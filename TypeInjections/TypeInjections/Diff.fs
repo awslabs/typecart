@@ -68,7 +68,7 @@ module Diff =
         | Field of Name * Type * ExprO
         | Method of Name * TypeArgList * InputSpec * OutputSpec * ExprO
         | Import of bool * YIL.Path
-        | Export of YIL.Path list
+        | Export of exportT: YIL.ExportType
         | DUnimplemented
         member this.name =
             match this with
@@ -144,7 +144,7 @@ module Diff =
         match d with
         | YIL.Include _ // doesn't matter, we never diff include statements.
         | YIL.DUnimplemented -> DUnimplemented
-        | YIL.Export ps -> Export ps
+        | YIL.Export eT -> Export eT
         | YIL.Import(o, p) -> Import (o,p)
         | YIL.Module _ -> Module(nD, msD)
         | YIL.Datatype(_,_,ctrs,_,_) -> Datatype(nD,tvsD, idList ctrs, msD)
@@ -269,7 +269,7 @@ module Diff =
                 + " = \n"
                 + this.exprO b
              | Import(o,p) -> P().decl(YIL.Import(o,p), YIL.emptyPrintingContext)
-             | Export ps -> P().decl(YIL.Export ps, YIL.emptyPrintingContext)
+             | Export eT -> P().decl(YIL.Export eT, YIL.emptyPrintingContext)
              | DUnimplemented -> "Unimplemented"
 
         member this.datatypeConstructors(cs: DatatypeConstructorList) =
