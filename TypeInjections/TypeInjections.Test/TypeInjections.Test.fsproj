@@ -1,14 +1,30 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net5.0</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
 
-        <IsPackable>false</IsPackable>
+        <IsPackable>true</IsPackable>
         <GenerateProgramFile>false</GenerateProgramFile>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>localcart</ToolCommandName>
+        <PackageOutputPath>./nupkg</PackageOutputPath>
+
+
+        <PackageId>localcart</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>syedahir tschuerl</Authors>
+        <Company>AWS</Company>
+
+
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7" />
+        <PackageReference Include="Boogie.Core" Version="2.15.7" />
+        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.7" />
+        <PackageReference Include="Microsoft.Z3" Version="4.10.1" />
         <PackageReference Include="NUnit" Version="3.13.1" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
         <PackageReference Include="NUnit3TestAdapter" Version="4.0.0-beta.1" />
@@ -16,9 +32,7 @@
 
     <ItemGroup>
         <Compile Include="TestUtils.fs" />
-        <Compile Include="TypeEqTests.fs" />
-        <Compile Include="GenFunctionTests.fs" />
-        <Compile Include="ClassGenTests.fs" />
+        <Compile Include="IOTests.fs" />
         <Compile Include="DummyMain.fs" />
         <Content Include="Resources\**\*" />
     </ItemGroup>
@@ -28,12 +42,34 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Dafny, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\Dafny.dll</HintPath>
-      </Reference>
-      <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
-      </Reference>
+<!--      <Reference Include="Dafny, Version=3.2.x, Culture=neutral, PublicKeyToken=null">-->
+<!--        <HintPath>..\..\dafny\Dafny.dll</HintPath>-->
+<!--      </Reference>-->
+<!--        <Reference Include="Boogie.Core, Version=2.15.x, Culture=neutral, PublicKeyToken=null">-->
+<!--            <HintPath>..\..\dafny\Boogie.Core.dll</HintPath>-->
+<!--        </Reference>-->
+<!--        <PackageReference Include="Boogie.Core" Version="2.15.6" />-->
+        
+<!--      <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">-->
+<!--        <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>-->
+<!--      </Reference>-->
+        <PackageReference Include="DafnyPipeline" Version="3.6.0.40511" />
+
+<!--        <Reference Include="Boogie.ExecutionEngine, Version=2.15.x, Culture=neutral, PublicKeyToken=null">-->
+<!--            <HintPath>..\..\dafny\Boogie.ExecutionEngine.dll</HintPath>-->
+<!--        </Reference>-->
+<!--        <Reference Include="Boogie.CodeContractsExtender, Version=2.15.x, Culture=neutral, PublicKeyToken=null">-->
+<!--            <HintPath>.\dafny\Boogie.CodeContractsExtender.dll</HintPath>-->
+<!--        </Reference>-->
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Resources\IOExamples\New" />
+      <Folder Include="Resources\IOExamples\Output" />
+      <Folder Include="Resources\TestIO\New" />
+      <Folder Include="Resources\SimpleFolderTest\InputDirectory" />
+      <Folder Include="Resources\SimpleFolderTest\OutputDirectory" />
+
     </ItemGroup>
 
 </Project>

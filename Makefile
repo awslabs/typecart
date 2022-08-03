@@ -7,13 +7,13 @@ DAFNY_DIR = dafny
 DAFNY = $(DAFNY_DIR)/dafny
 
 ifeq ($(uname_S),Linux)
-	DAFNY_DOWNLOAD_LOCATION = https://github.com/dafny-lang/dafny/releases/download/v3.3.0/dafny-3.3.0-x64-ubuntu-16.04.zip
+	DAFNY_DOWNLOAD_LOCATION = https://github.com/dafny-lang/dafny/releases/download/v3.6.0/dafny-3.6.0-x64-ubuntu-16.04.zip
 	Z3_DOWNLOAD_LOCATION = https://github.com/Z3Prover/z3/releases/download/Z3-4.8.5/z3-4.8.5-x64-ubuntu-16.04.zip
 	Z3 = z3-4.8.5-x64-ubuntu-16.04
 endif
 
 ifeq ($(uname_S),Darwin)
-	DAFNY_DOWNLOAD_LOCATION = https://github.com/dafny-lang/dafny/releases/download/v3.3.0/dafny-3.3.0-x64-osx-10.14.2.zip
+	DAFNY_DOWNLOAD_LOCATION = https://github.com/dafny-lang/dafny/releases/download/v3.6.0/dafny-3.6.0-x64-osx-10.14.2.zip
 	Z3_DOWNLOAD_LOCATION = https://github.com/Z3Prover/z3/releases/download/Z3-4.8.5/z3-4.8.5-x64-osx-10.14.2.zip
 	Z3 = z3-4.8.5-x64-osx-10.14.2
 endif

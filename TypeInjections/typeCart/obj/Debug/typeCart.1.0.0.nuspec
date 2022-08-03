@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>typeCart</id>
+    <version>1.0.0</version>
+    <authors>typeCart</authors>
+    <description>Package Description</description>
+    <dependencies>
+      <group targetFramework="net6.0">
+        <dependency id="simple_typeCart" version="1.0.0" exclude="Build,Analyzers" />
+        <dependency id="Boogie.CodeContractsExtender" version="2.15.7" exclude="Build,Analyzers" />
+        <dependency id="Boogie.Core" version="2.15.7" exclude="Build,Analyzers" />
+        <dependency id="Boogie.ExecutionEngine" version="2.15.7" exclude="Build,Analyzers" />
+        <dependency id="DafnyPipeline" version="3.6.0.40511" exclude="Build,Analyzers" />
+        <dependency id="FSharp.Core" version="6.0.5" exclude="Build,Analyzers" />
+        <dependency id="LibGit2Sharp" version="0.27.0-preview-0182" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Z3" version="4.10.1" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="/Volumes/workplace/typecart/TypeInjections/typeCart/bin/Debug/net6.0/typeCart.runtimeconfig.json" target="lib/net6.0/typeCart.runtimeconfig.json" />
+    <file src="/Volumes/workplace/typecart/TypeInjections/typeCart/bin/Debug/net6.0/typeCart.dll" target="lib/net6.0/typeCart.dll" />
+  </files>
+</package>

@@ -1,9 +1,0 @@
-EQUAL TYPES
------------
-
-NON-EQUAL TYPES
----------------
-A.lengthTypeArgsNeq
-A.lengthWithWithoutArgsNeq
-A.lengthConstrutorsNeq
-A.lengthConstructorArgsNeq

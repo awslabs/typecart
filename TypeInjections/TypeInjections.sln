@@ -4,6 +4,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TypeInjections", "TypeInjec
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TypeInjections.Test", "TypeInjections.Test\TypeInjections.Test.fsproj", "{E5C31F7E-4EBB-48F1-BA22-AA1313E9A31E}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "typeCart", "typeCart\typeCart.fsproj", "{1905458A-4EF8-410C-9846-7E091546DCCD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{E5C31F7E-4EBB-48F1-BA22-AA1313E9A31E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E5C31F7E-4EBB-48F1-BA22-AA1313E9A31E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E5C31F7E-4EBB-48F1-BA22-AA1313E9A31E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1905458A-4EF8-410C-9846-7E091546DCCD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1905458A-4EF8-410C-9846-7E091546DCCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1905458A-4EF8-410C-9846-7E091546DCCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1905458A-4EF8-410C-9846-7E091546DCCD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

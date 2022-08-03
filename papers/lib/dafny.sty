@@ -1,0 +1,52 @@
+% dafny.sty
+% Dafny mode for the LaTeX listings package.
+% Rustan Leino, 22 June 2008.
+
+\usepackage{listings}
+
+\lstdefinelanguage{dafny}{
+  morekeywords={class,datatype,codatatype,newtype,type,iterator,trait,extends,
+      bool,char,nat,int,real,object,set,iset,multiset,seq,string,map,imap,array,array2,array3,
+      bv0,bv1,bv2,bv3,bv4,bv5,bv6,bv7,bv8,bv12,bv16,bv20,bv24,bv32,bv48,bv64,bv128,
+      function,predicate,copredicate,inductive,
+      ghost,var,static,protected,refines,
+      method,lemma,constructor,colemma,twostate,
+      returns,yields,abstract,module,import,default,opened,as,in,
+      requires,modifies,ensures,reads,decreases,include,provides,reveals,witness,
+      % expressions
+      match,case,false,true,null,old,fresh,allocated,unchanged,this,
+      % statements
+      assert,by,assume,print,new,if,then,else,while,invariant,break,label,return,yield,
+      where,calc,modify
+      },
+  literate=%
+    ,
+  sensitive=true,  % case sensitive
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morecomment=[s]{\{:}{\}},
+  morestring=[b]",
+  numbers=none,
+  firstnumber=0,
+  numberstyle=\tiny,
+  stepnumber=5,
+  basicstyle=\scriptsize\sffamily,
+  commentstyle=\itshape,
+  keywordstyle=\bfseries,
+  ndkeywordstyle=\bfseries,
+}
+\lstnewenvironment{dafny}[1][]{%
+  \lstset{language=dafny,
+    floatplacement={tbp},captionpos=b,
+    frame=lines,xleftmargin=8pt,xrightmargin=8pt,basicstyle=\small\ttfamily,#1}}{}
+\lstnewenvironment{dafnyNoLines}[1][]{%
+  \lstset{language=dafny,
+    floatplacement={tbp},captionpos=b,
+    xleftmargin=8pt,xrightmargin=8pt,basicstyle=\ttfamily,#1}}{}
+\def\inlinedafny{%
+    \lstinline[language=dafny,basicstyle=\small\ttfamily,columns=fixed]}
+\newcommand{\lstfile}[1]{
+  \lstset{escapechar=`}
+  \lstinputlisting[language=dafny,%
+    frame=lines,xleftmargin=8pt,xrightmargin=8pt,basicstyle=\scriptsize\ttfamily,columns=fixed]{#1}
+}
