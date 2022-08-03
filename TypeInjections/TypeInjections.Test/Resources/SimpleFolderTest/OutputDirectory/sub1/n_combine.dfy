@@ -1,19 +1,22 @@
+include "belowsub1_old.dfy"
+include "belowsub1_new.dfy"
 
   module Combine.N {
-    function foo(f_O: foo, f_N: foo):bool
-     {
-      (f_O == f_N)
+
+    import Old
+
+    import New
+    function method fooOldToNew(f: Old.N.foo): (f': New.N.foo)
+      ensures f as int == f' as int
+      decreases f
+    {
+      f as int as New.N.foo
     }
-    
-    
-    function bar(b_O: bar, b_N: bar):bool
-     {
-      (b_O == b_N)
+
+    function method barOldToNew(b: Old.N.bar): (b': New.N.bar)
+      ensures b as real == b' as real
+      decreases b
+    {
+      b as real as New.N.bar
     }
-    
-    
-    
   }
-  
-  
-  

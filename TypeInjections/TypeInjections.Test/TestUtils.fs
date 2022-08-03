@@ -6,6 +6,7 @@ namespace TypeInjections.Test
 open System.IO
 open System.Reflection
 open TypeInjections
+open Microsoft.Dafny
 
 module TestUtils =
     open NUnit.Framework
@@ -29,7 +30,6 @@ module TestUtils =
         Path.Combine(
             [| pd
                "Resources"
-            //   testModule
                TestContext.CurrentContext.Test.Name |]
         )
 
@@ -43,7 +43,7 @@ module TestUtils =
             Console.WriteLine(actual)
             Assert.Fail()
             
-    let fileNameFromPath (path : string) =
+    let fileFromPath (path : string) =
         let len = path.Length - 1
         let mutable i = len 
         while path[i] <> '/' do
@@ -51,18 +51,38 @@ module TestUtils =
         
         path[i..]
         
+        
+    let ASTcompare (actual: YIL.Program) (expected: YIL.Program) =
+        // can't compare actual to expect directly, the tok contains the file path of the program. Which will always be different
+      
+        
+        if actual.Equals(expected) then
+            ()
+        else
+            Console.WriteLine("Expected")
+            // Console.WriteLine(expected)
+            Console.WriteLine("Actual")
+            // Console.WriteLine(actual)
+            Assert.Fail()
 
     let fileCompare (actualFile: string) (expectedFile: string) =
         
-        let expectedName = fileNameFromPath expectedFile
-        let actualName = fileNameFromPath actualFile
+        let expectedName = fileFromPath expectedFile
+        let actualName = fileFromPath actualFile
         
         compare expectedName actualName
         
-        let expected = File.ReadAllText(actualFile)
-        let actual = File.ReadAllText(expectedFile)
+        let reporter = Program.initDafny
+        
+        let expected = Program.parseAST [FileInfo(expectedFile)] "compare" reporter
+        let actual = Program.parseAST [FileInfo(actualFile)] "compare" reporter
+        
+        let eYIL = DafnyToYIL.program expected
+        let aYIL = DafnyToYIL.program actual
+        
+        0 |> ignore
 
-        compare actual expected
+      //  ASTcompare aYIL eYIL
         
     let folderCompare(actualFolder: string) (expectedFolder: string) =
         
@@ -117,8 +137,8 @@ module TestUtils =
             System.IO.Path.Combine([| pwd; expectedDirectoryName |])
 
         //TypeInjections.Program.foo inputDirectory outputDirectory
-     //   TypeInjections.Program.main [|inputDirectory + "/Old"; inputDirectory + "/New"; outputDirectory|]
-     //   |> ignore
+        // TypeInjections.Program.main [|inputDirectory + "/Old"; inputDirectory + "/New"; outputDirectory|]
+        // |> ignore
         
         testToRun outputDirectory expectedDirectory
 
