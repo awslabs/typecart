@@ -4,3 +4,5 @@ module N {
 
   newtype bar = y : real | -0.9 <= y <= 10.0 && y < 90.0
 }
+
+  

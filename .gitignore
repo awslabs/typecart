@@ -12,5 +12,7 @@ dafny/
 /TypeInjections/TypeInjections.sln.DotSettings.user
 TypeInjections/TypeInjections.Test/bin
 TypeInjections/TypeInjections.Test/obj
+TypeInjectiontns/typeCart/bins/typeCart/bin
+TypeInjections/typeCart/obj
 *.dll
 *.runtimeconfig.json
