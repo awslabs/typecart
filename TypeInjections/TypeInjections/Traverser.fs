@@ -66,7 +66,8 @@ module Traverser =
             let path p = this.path(ctx, p)
             let provides = List.map path e.provides
             let reveals = List.map path e.reveals
-            ExportType(provides, reveals)            
+            ExportType(provides, reveals)
+            
         
         // transform a declaration
         member this.declDefault(ctx: Context, d: Decl) : Decl list =

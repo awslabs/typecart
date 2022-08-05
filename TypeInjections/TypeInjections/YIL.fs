@@ -139,6 +139,13 @@ module YIL =
                 + "\n"
                 + "   reveals " + (lts this.reveals)
         
+        
+        override this.Equals(that) =
+            match that with
+            | :? ExportType as that ->
+                this.provides.Equals(that.provides) && this.reveals.Equals(that.reveals)
+            | _ -> false
+        
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
 
