@@ -40,64 +40,7 @@ module Program =
         let oldYIL = DafnyToYIL.program oldDafny
         Utils.log ("***** ... the new one ")
         let newYIL = DafnyToYIL.program newDafny
-
-        // tests the transformation code
-        Traverser.test(oldYIL)
         
-        // diff the programs
-        Utils.log "***** diffing the two programs"
-        let diff = Differ.prog (oldYIL, newYIL)
-        let diffS = (Diff.Printer()).prog diff
-        Console.WriteLine(diffS)
-        
-        // generate translation
-        Utils.log "***** generating compatibility code"
-        let combine,joint = Translation.prog(oldYIL, diff)
-        
-        // write output files
-        Utils.log "***** writing output files"
-        
-        let writeOut fileName (prog:YIL.Program) (fp: Analysis.Pipeline) =
-            let f = IO.Path.Combine(outFolder, fileName)
-            IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f)) |> ignore
-            let progF = fp.apply(prog)
-            let s =YIL.printer().prog(progF, YIL.Context(progF))
-            IO.File.WriteAllText(f, s)
-        
-        let jointNames = List.map (fun (p:YIL.Path) -> p.name) joint
-        let processOld: Traverser.Transform list = [
-                    Analysis.mkFilter(fun s -> not (List.contains s jointNames))
-                    Analysis.PrefixNotFoundImportsWithJoint()
-                    Analysis.PrefixTopDecls("Old")
-                    Analysis.ImportJointInOldNew()
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImportsIncludes()
-                    Analysis.CreateEmptyModuleIfNoneExists("Old")]
-        let processNew: Traverser.Transform list = [
-                    Analysis.mkFilter(fun s -> not (List.contains s jointNames))
-                    Analysis.PrefixNotFoundImportsWithJoint()
-                    Analysis.PrefixTopDecls("New")
-                    Analysis.ImportJointInOldNew()
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImportsIncludes()
-                    Analysis.CreateEmptyModuleIfNoneExists("New")]
-        let processJoint: Traverser.Transform list = [
-                    Analysis.mkFilter(fun s -> List.contains s jointNames)
-                    Analysis.PrefixTopDecls("Joint")
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImportsIncludes()]
-        let processCombine: Traverser.Transform list = [
-                    Analysis.mkFilter(fun _ -> true)
-                    Analysis.PrefixTopDecls("Combine")
-                    Analysis.ImportInCombine()
-                    Analysis.AnalyzeModuleImports()
-                    Analysis.DeduplicateImportsIncludes()]
-        
-        let (~~) arg = arg |> Analysis.Pipeline
-        
-        writeOut "joint.dfy" oldYIL ~~processJoint
-        writeOut "old.dfy" oldYIL ~~processOld
-        writeOut "new.dfy" newYIL ~~processNew
-        writeOut "combine.dfy" combine ~~processCombine
+        Typecart.typecart(oldYIL, newYIL, Utils.log).go(Typecart.DefaultTypecartOutput(outFolder))
         0
  

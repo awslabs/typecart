@@ -17,7 +17,7 @@
     <ItemGroup>
         <Compile Include="TestUtils.fs" />
         <Compile Include="IOTests.fs" />
-        <Compile Include="DummyMain.fs" />
+        <Compile Include="Tester.fs" />
         <Content Include="Resources\**\*" />
     </ItemGroup>
 
