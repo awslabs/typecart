@@ -69,7 +69,7 @@ module Typecart =
         // constructor without a logger instance
         new(oldYIL: YIL.Program, newYIL: YIL.Program) = Typecart(oldYIL, newYIL, None)
         // constructor with a logger instance
-        new(oldYIL: YIL.Program, newYIL: YIL.Program, logger: string -> unit) = Typecart(oldYIL, newYIL, logger)
+        new(oldYIL: YIL.Program, newYIL: YIL.Program, logger: string -> unit) = Typecart(oldYIL, newYIL, Some logger)
         
         member this.logger s =
             match logger with
