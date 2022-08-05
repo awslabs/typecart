@@ -58,7 +58,8 @@ module Typecart =
                 Analysis.mkFilter(fun s -> List.contains s (jointNames joint))
                 Analysis.PrefixTopDecls("Joint")
                 Analysis.AnalyzeModuleImports()
-                Analysis.DeduplicateImportsIncludes()]
+                Analysis.DeduplicateImportsIncludes()
+                Analysis.NormalizeGhostMethodWithEmptyBody()]
         let processCombine: Traverser.Transform list = [
                 Analysis.mkFilter(fun _ -> true)
                 Analysis.PrefixTopDecls("Combine")

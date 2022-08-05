@@ -252,6 +252,7 @@ module Traverser =
                 | ENull(t) -> ENull(rcT t)
                 | EPrint es -> EPrint (rcEs es)
                 | EAssert e -> EAssert (rcE e)
+                | EAssume e -> EAssume (rcE e)
                 | ECommented(s,e) -> ECommented(s, rcE e)
                 | EUnimplemented _ -> expr
 

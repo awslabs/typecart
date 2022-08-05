@@ -499,6 +499,7 @@ module YIL =
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
         | EAssert of Expr
+        | EAssume of Expr
         | ECommented of string * Expr
         // temporary dummy for missing cases
         | EUnimplemented
@@ -1215,7 +1216,8 @@ module YIL =
                 + (expr e)
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
-            | EAssert e -> "assert " + (expr e)
+            | EAssert e -> "assert " + (expr e) + ";"
+            | EAssume e -> "assume " + (expr e) + ";"
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 

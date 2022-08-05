@@ -856,7 +856,7 @@ module DafnyToYIL =
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
         | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
-        | :? AssumeStmt -> Y.ECommented("assume statement omitted", Y.ESKip)
+        | :? AssumeStmt as s ->Y.EAssume(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
         // | :? ForallStmt ->
         | _ -> unsupported $"statement {s.ToString()}"
