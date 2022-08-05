@@ -2,6 +2,7 @@ namespace TypeInjections
 
 open System
 open System.Collections.Generic
+open System.IO
 open Microsoft.Dafny
 
 // FR: copying over my Utils file from YuccaDafnyCompiler, this should be merged into the one here
@@ -156,6 +157,7 @@ module Utils =
         log "***** Dafny initialised"
         reporter
     
+    // Read in and parse a single Dafny file
     let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
         let dafnyFile = DafnyFile(file)
         let mutable dafnyProgram = Unchecked.defaultof<Program>
@@ -165,5 +167,16 @@ module Utils =
             Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
         if err <> null && err <> "" then
             failwith ("Dafny errors: " + err)
+        dafnyProgram
+    
+    // Read in and parse a list of Dafny files
+    let parseASTs (files: FileInfo list) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+        let dafnyFiles = List.map (fun (x : FileInfo) -> DafnyFile x.FullName) files
+        let mutable dafnyProgram = Unchecked.defaultof<Program>
+        log "***** calling dafny parser for multiple files"
+        let err =
+            Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
+        if err <> null && err <> "" then
+            failwith ("Dafny error: " + err)
         dafnyProgram
 
