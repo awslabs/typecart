@@ -145,7 +145,37 @@ module YIL =
             | :? ExportType as that ->
                 this.provides.Equals(that.provides) && this.reveals.Equals(that.reveals)
             | _ -> false
+    
+        override this.GetHashCode() = this.ToString().GetHashCode()
+    
+    type ImportType =
+        | ImportDefault of Path
+        | ImportOpened of Path
+        | ImportEquals of lhsDir: Path * rhsDir: Path
+        override this.ToString() =
+            match this with
+            | ImportDefault p -> "import " + p.ToString()
+            | ImportOpened p -> "import opened " + p.ToString()
+            | ImportEquals (lhs, rhs) -> "import " + lhs.ToString() + " = " + rhs.ToString()
+        // for ImportEquals, compare rhsDir since it is the given name to the import.
+        member this.pathEquals(p': Path) =
+            match this with
+            | ImportDefault p
+            | ImportOpened p
+            | ImportEquals (_, p) -> p.Equals(p')
+        // return path of import. For ImportEquals, return path of rhs
+        member this.getPath() =
+            match this with
+            | ImportDefault p
+            | ImportOpened p
+            | ImportEquals (_, p) -> p
+        member this.prefix(pre: string) =
+            match this with
+            | ImportDefault p -> ImportDefault (p.prefix(pre))
+            | ImportOpened p -> ImportOpened (p.prefix(pre))
+            | ImportEquals (lhs, p) -> ImportEquals (lhs, p.prefix(pre))
         
+    
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
 
@@ -230,7 +260,7 @@ module YIL =
             ghost: bool *
             isStatic: bool *
             meta: Meta
-        | Import of opened: bool * modPath: Path
+        | Import of ImportType
         | Export of ExportType
         // dummy for missing cases
         | DUnimplemented
@@ -548,14 +578,13 @@ module YIL =
             | Exists -> "exists"
 
     // result type for imports analysis
-    type ImportType = ImportOpened | ImportDefault
-    type ModuleImports(modulePath: Path, imports: (Path * ImportType) list) =
+    type ModuleImports(modulePath: Path, imports: ImportType list) =
         new() = ModuleImports(Path[], [])
         member this.modulePath = modulePath
         member this.imports = imports
         member this.setModulePath(modulePath: Path) = ModuleImports(modulePath, this.imports)
         member this.addImport(importPath: Path, importType: ImportType) =
-            ModuleImports(this.modulePath, (importPath, importType) :: this.imports)
+            ModuleImports(this.modulePath, importType :: this.imports)
     
     // auxiliary methods
     
@@ -748,7 +777,7 @@ module YIL =
        TODO: remove importPaths and just use the tree representation of imports.
     *)
     type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition,
-                 modulePath: Path, importPaths: (Path * ImportType) list, currMethod: (string * MethodType) option, inForLoopInitializer: bool, inForLoopBody: bool) =
+                 modulePath: Path, importPaths: ImportType list, currMethod: (string * MethodType) option, inForLoopInitializer: bool, inForLoopBody: bool) =
         // convenience constructor and accessor methods
         new(p: Program) = Context(p, Path([]), [], [], OtherPosition, Path[], [], None, false, false)
         
@@ -836,8 +865,8 @@ module YIL =
             Context(prog, currentDecl, tpvars, vars, pos, modulePath.append(newModulePath), importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         
         // add and remove imports
-        member this.addImport(import: Path, importType: ImportType) =
-            Context(prog, currentDecl, tpvars, vars, pos, modulePath, (import, importType) :: importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+        member this.addImport(importType: ImportType) =
+            Context(prog, currentDecl, tpvars, vars, pos, modulePath, importType :: importPaths, currMethod, inForLoopInitializer, inForLoopBody)
                
     (* ***** printer for the language above
 
@@ -967,7 +996,7 @@ module YIL =
                 + (this.conditions(false, outs, pctx))
                 + "\n"
                 + Option.fold (fun (s: string) (e: Expr) -> expr false e) "{}" b
-            | Import(o,p) -> "import " + (if o then "opened " else "") + p.ToString() 
+            | Import importT -> importT.ToString()
             | Export exportT -> exportT.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
@@ -1223,7 +1252,7 @@ module YIL =
                 + (expr e)
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
-            | EAssert e -> "assert " + (expr e) + ";"
+            | EAssert e -> "assert " + (expr e) 
             | EAssume e -> "assume " + (expr e) + ";"
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED

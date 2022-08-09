@@ -62,6 +62,12 @@ module Traverser =
             { name = p.name
               decls = dsT }
 
+        member this.importType(ctx: Context, e: ImportType) =
+            match e with
+            | ImportDefault p -> ImportDefault (this.path(ctx, p))
+            | ImportOpened p ->  ImportOpened (this.path(ctx, p))
+            | ImportEquals (lhs, rhs) -> ImportEquals (this.path(ctx, lhs), this.path(ctx, rhs))
+        
         member this.exportType(ctx: Context, e: ExportType) =
             let path p = this.path(ctx, p)
             let provides = List.map path e.provides
@@ -76,11 +82,9 @@ module Traverser =
             | Include p -> [Include p]
             | Module (n, ds, m) ->
                 let nameP = n.Split(".") |> List.ofArray
-                let imports = List.choose (function
-                    | Import (opened, path) -> Some ((if opened then ImportOpened else ImportDefault), path)
-                    | _ -> None) ds
-                let moduleCtx = List.fold (fun (ctx: Context) e ->
-                    ctx.addImport (snd e, fst e)) (ctx.enterModuleScope(Path(nameP))) imports
+                let imports = List.choose (function | Import it -> Some it | _ -> None) ds
+                let moduleCtx = List.fold
+                                    (fun (ctx: Context) -> ctx.addImport) (ctx.enterModuleScope(Path(nameP))) imports
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (childCtx n moduleCtx, d)) ds
                 [ Module(n, membersT, m) ]
@@ -128,7 +132,7 @@ module Traverser =
                 let bodyCtx = (headerCtx.add ins.decls).enterBody()
                 let bT = this.exprO(bodyCtx, b)
                 [ ClassConstructor(n, tpvs, insT, outsT, bT, m) ]
-            | Import(o, p) -> [Import (o, this.path(ctx,p))]
+            | Import importT -> [Import importT]
             | Export exportT -> [Export (this.exportType(ctx, exportT))]
             | DUnimplemented -> [ d ]
 

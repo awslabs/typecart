@@ -53,9 +53,9 @@ module Analysis =
       override this.decl(ctx: Context, decl: Decl) =
           match decl with
           | Module(name, decls, meta) ->
-              [ Module(name, Import(false, Path ["Joint"])
-                               :: Import(false, Path ["Old"])
-                               :: Import(false, Path ["New"])
+              [ Module(name, Import (ImportDefault (Path ["Joint"]))
+                               :: Import (ImportDefault (Path ["Old"]))
+                               :: Import (ImportDefault (Path ["New"]))
                                :: decls, meta) ]
           | _ -> this.declDefault(ctx, decl)
       
@@ -72,7 +72,7 @@ module Analysis =
       override this.decl(ctx: Context, decl: Decl) =
           match decl with
           | Module(name, decls, meta) ->
-              [ Module(name, Import(false, Path ["Joint"])
+              [ Module(name, Import (ImportDefault (Path ["Joint"]))
                                :: decls, meta) ]
           | _ -> this.declDefault(ctx, decl)
       
@@ -87,7 +87,7 @@ module Analysis =
       
       override this.decl(ctx: Context, decl: Decl) =
           let importIn importPath =
-              match List.tryFind (fun (p, _) -> p.Equals(importPath)) ctx.importPaths with
+              match List.tryFind (fun p -> importPath.Equals(p)) ctx.importPaths with
               | Some _ -> true
               | None -> false
           match decl with
@@ -95,9 +95,9 @@ module Analysis =
               let filtDecls =
                   List.map (fun decl ->
                       match decl with
-                      | Import (o, p) ->
-                          if importIn p then decl
-                          else Import (o, p.prefix("Joint"))
+                      | Import it ->
+                          if importIn it then decl
+                          else Import (it.prefix("Joint"))
                       | _ -> decl) decls
               [ Module(name, filtDecls, meta) ]
           | _ -> this.declDefault(ctx, decl)
@@ -107,7 +107,7 @@ module Analysis =
           let ctx =
               List.fold (fun (ctx: Context) decl ->
                   match decl with
-                  | Module(name, _, _)-> ctx.addImport(Path [name], ImportDefault)
+                  | Module(name, _, _)-> ctx.addImport(ImportDefault (Path [name]))
                   | _ -> ctx) (Context(prog)) decls
           let dsT = List.collect (fun (d: Decl) -> this.decl (ctx, d)) prog.decls
           { name = prog.name
@@ -154,27 +154,26 @@ module Analysis =
             | _, _ -> p
 
         // consume common prefix of an import path with current path.
-        member this.consumeImportPath(p: Path) (import: (Path * ImportType)) =
-            let importPath, importType = import
-            match p, importPath with
+        member this.consumeImportPath(p: Path) (import: ImportType) =
+            match p, import with
             // Only consume common prefix of "import opened".
             // For instance, if the current module scope has "import Constant" and
             // the fully qualified path name is "Constant.int64", we should keep the
             // fully qualified path name here. However, if we "import opened Constant"
             // then the correct result should be Path ["int64"].
-            | Path (a1 :: t1), Path (a2 :: t2) ->
-                if a1.Equals(a2) && (importType = ImportOpened) then
-                    this.consumeImportPath (Path(t1)) (Path(t2), ImportOpened)
-                else
-                    p
+            | Path (a1 :: t1), ImportOpened (Path (a2 :: t2)) when a1.Equals(a2) ->
+                this.consumeImportPath (Path(t1)) (ImportOpened (Path(t2)))
+            | Path (a1 :: t1), ImportOpened (Path (a2 :: t2))
+            | Path (a1 :: t1), ImportDefault (Path (a2 :: t2))
+            | Path (a1 :: t1), ImportEquals (Path (a2 :: t2), _) -> p
             | _, _ -> p
             
-        member this.doPathForReceiver(p: Path, currModulePath: Path, imports: (Path * ImportType) list) =
+        member this.doPathForReceiver(p: Path, currModulePath: Path, imports: ImportType list) =
                 let objectPath = this.consumeModulePath(p, currModulePath)
                 let objectPath' = List.fold (this.consumeImportPath) objectPath imports
                 objectPath'
               
-        member this.doPathForType(p: Path, currModulePath: Path, imports: (Path * ImportType) list) =
+        member this.doPathForType(p: Path, currModulePath: Path, imports: ImportType list) =
                 
                 let objectPath = this.consumeModulePath(p, currModulePath)
                 let objectPath' =
@@ -221,10 +220,10 @@ module Analysis =
              | Module(name, decls, meta) ->
                    let newDecls, _ = List.fold (fun (newDecls: Decl list, paths: Path list) decl ->
                      match decl with
-                     | Import (_, p) ->
-                         match List.tryFind (fun x -> x.Equals(p)) paths with
+                     | Import it ->
+                         match List.tryFind (fun x -> x.Equals(it.getPath())) paths with
                          | Some _ -> newDecls, paths
-                         | None -> decl :: newDecls, p :: paths
+                         | None -> decl :: newDecls, it.getPath() :: paths
                      | _ -> decl :: newDecls, paths) ([], []) decls
                    [ Module (name, List.rev newDecls, meta) ]
              | _ -> this.declDefault(ctx, d) 
