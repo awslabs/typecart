@@ -9,7 +9,7 @@ on:
 env:
   DAFNY_DOWNLOAD_LOCATION: https://github.com/dafny-lang/dafny/releases/download/v3.3.0/dafny-3.3.0-x64-ubuntu-16.04.zip
   DAFNY_ZIP: dafny-3.3.0-x64-ubuntu-16.04.zip
-  TOOL_DLL: TypeInjections/TypeInjections/bin/Debug/net5.0/TypeInjections.dll
+  TOOL_DLL: TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections.dll
   TOOL_SLN: TypeInjections/TypeInjections.sln
   TOOL_TEST: TypeInjections/TypeInjections.Test/TypeInjections.Test.fsproj
   
@@ -23,7 +23,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 5.0.x
+        dotnet-version: 6.0.x
     - name: Install Dafny, build and test
       run: |
         curl $DAFNY_DOWNLOAD_LOCATION -L -o $DAFNY_ZIP
