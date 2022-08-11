@@ -21,23 +21,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Reference Include="Boogie.Core, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
-            <HintPath>..\..\dafny\Boogie.Core.dll</HintPath>
-        </Reference>
-        <Reference Include="Dafny, Version=3.6.x, Culture=neutral, PublicKeyToken=null">
-            <HintPath>..\..\dafny\Dafny.dll</HintPath>
-        </Reference>
-        <Reference Include="DafnyPipeline, Version=3.6.x, Culture=neutral, PublicKeyToken=null">
-            <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
-        </Reference>
-        <Reference Include="Boogie.BaseTypes, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
-          <HintPath>..\..\dafny\Boogie.BaseTypes.dll</HintPath>
-        </Reference>
-        <Reference Include="Boogie.ExecutionEngine, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
-            <HintPath>..\..\dafny\Boogie.ExecutionEngine.dll</HintPath>
-        </Reference>      
-        <Reference Include="Boogie.CodeContractsExtender, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
-          <HintPath>..\..\dafny\Boogie.CodeContractsExtender.dll</HintPath>
-        </Reference>
+        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7" />
+        <PackageReference Include="Boogie.Core" Version="2.15.7" />
+        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.7" />
+        <PackageReference Include="CommandLineParser.FSharp" Version="2.9.2-ci-210" />
+        <PackageReference Include="DafnyPipeline" Version="3.6.0.40511" />
+        <PackageReference Include="Microsoft.Z3" Version="4.10.1" />
     </ItemGroup>
+    
 </Project>
