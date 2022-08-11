@@ -1,0 +1,6 @@
+/Users/ruijief/Downloads/TypecartStarChange/code/yucca-old/main/dafny/yucca/util/StringUtilsSpec.dfy
+
+// unsupported:
+/Volumes/workspace/typecart/spec-new/datatype_change.dfy
+/Volumes/workspace/typecart/spec-new/datatype_change_new.dfy
+/Volumes/workspace/typecart/spec-new

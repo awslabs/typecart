@@ -3,8 +3,10 @@
 
 namespace TypeInjections.Test
 
+open System.IO
+open System.Reflection
+
 module TestUtils =
-    open Microsoft.Dafny
     open NUnit.Framework
     open System
 
@@ -14,9 +16,7 @@ module TestUtils =
         let wd = Environment.CurrentDirectory
 
         let pd =
-            System
-                .IO
-                .Directory
+            Directory
                 .GetParent(
                     wd
                 )
@@ -24,10 +24,10 @@ module TestUtils =
                 .Parent
                 .FullName
 
-        System.IO.Path.Combine(
+        Path.Combine(
             [| pd
                "Resources"
-               testModule
+              // testModule
                TestContext.CurrentContext.Test.Name |]
         )
 
@@ -40,45 +40,57 @@ module TestUtils =
             Console.WriteLine("Actual")
             Console.WriteLine(actual)
             Assert.Fail()
+            
+    let fileNameFromPath (path : string) =
+        let len = path.Length - 1
+        let mutable i = len 
+        while path[i] <> '/' do
+            i <- i - 1
+        
+        path[i..]
+        
 
     let fileCompare (actualFile: string) (expectedFile: string) =
-        let expected = IO.File.ReadAllText(actualFile)
-
-        let actual = IO.File.ReadAllText(expectedFile)
+        
+        let expectedName = fileNameFromPath expectedFile
+        let actualName = fileNameFromPath actualFile
+        
+        compare expectedName actualName
+        
+        let expected = File.ReadAllText(actualFile)
+        let actual = File.ReadAllText(expectedFile)
 
         compare actual expected
-
-    // By convention, the test's resources are to be stored in directory
-    //   Resources/<test module name>/<test name>
-    let public testRunnerEq
-        (testToRun: TestFormat)
-        (testModule: string)
-        (inputFileName1: string)
-        (inputFileName2: string)
-        (outputFileName: string)
-        (expectedFileName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputFile1 =
-            System.IO.Path.Combine([| pwd; inputFileName1 |])
-
-        let inputFile2 =
-            System.IO.Path.Combine([| pwd; inputFileName2 |])
-
-        let dafnyFile1 = DafnyFile(inputFile1)
-        let dafnyFile2 = DafnyFile(inputFile2)
-
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
-
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
-
-        TypeInjections.Program.testTypeEq dafnyFile1 dafnyFile2 outputFile
-        |> ignore
-
-        testToRun outputFile expectedFile
+        
+    let folderCompare(actualFolder: string) (expectedFolder: string) =
+        
+        
+        // checking subfolders
+        let actualSubs = DirectoryInfo(actualFolder).EnumerateDirectories("*", SearchOption.AllDirectories)
+        let actualSubsName = Collections.Generic.List(List.map (fun (x: DirectoryInfo) -> x.Name) (actualSubs |> Seq.toList))
+        let aSubs = actualSubsName |> Seq.toList
+        
+        let expectedSubs = DirectoryInfo(expectedFolder).EnumerateDirectories("*", SearchOption.AllDirectories)
+        let expectedSubsName = Collections.Generic.List(List.map (fun (x : DirectoryInfo) -> x.Name) (expectedSubs |> Seq.toList))
+        let eSubs = expectedSubsName |> Seq.toList
+        
+        // check subdirectory and file names
+        if eSubs <> aSubs then
+            Console.WriteLine("directory error")
+            Console.WriteLine("Expected")
+            Console.WriteLine(eSubs)
+            Console.WriteLine("Actual")
+            Console.WriteLine(aSubs)
+            Assert.Fail()
+            
+        // get fileInfo dafny files from parent folder and all subdirectories
+        let actualFiles = DirectoryInfo(actualFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
+        let expectedFiles = DirectoryInfo(expectedFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
+        
+        
+        // take sorted list of 'FileInfo' and compare the content of each file with 'fileCompare'
+        List.iter2 (fun (x : FileInfo) (y : FileInfo) -> fileCompare x.FullName y .FullName) (expectedFiles |> Seq.toList) (actualFiles |> Seq.toList)
+        
 
     // Run the tests for generated functions
     // FilePath is synonym for string list
@@ -87,92 +99,25 @@ module TestUtils =
     let public testRunnerGen
         (testToRun: TestFormat)
         (testModule: string)
-        (inputFileName1: string)
-        (inputFileName2: string)
-        (extraFileName: string Option)
-        (outputFileName: string)
-        (expectedFileName: string)
+        (directoryName: string)
+        (outputDirectoryName: string)
+        (expectedDirectoryName: string)
         =
         let pwd = pwd testModule
 
-        let inputFile1 =
-            System.IO.Path.Combine([| pwd; inputFileName1 |])
+        let inputDirectory =
+            System.IO.Path.Combine([| pwd; directoryName |])
 
-        let inputFile2 =
-            System.IO.Path.Combine([| pwd; inputFileName2 |])
+        let outputDirectory =
+            System.IO.Path.Combine([| pwd; outputDirectoryName |])
 
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
+        let expectedDirectory =
+            System.IO.Path.Combine([| pwd; expectedDirectoryName |])
 
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
-
-        TypeInjections.Program.runTypeCart inputFile1 inputFile2 pwd extraFileName false outputFileName
-        |> ignore
-
-        testToRun outputFile expectedFile
-
-    // run the tool to generate only the output file,
-    // does not require an expected output file
-    let public testRunnerOut
-        (testModule: string)
-        (inputFileName1: string)
-        (inputFileName2: string)
-        (extraFileName: string Option)
-        (isInclude: bool)
-        (outputFileName: string)
-        (expectedFileName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputFile1 =
-            System.IO.Path.Combine([| pwd; inputFileName1 |])
-
-        let inputFile2 =
-            System.IO.Path.Combine([| pwd; inputFileName2 |])
-
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
-
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
+        //TypeInjections.Program.foo inputDirectory outputDirectory
+        //TypeInjections.Program.main [|"/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Old"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/New"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Output"|]
+        //|> ignore
+        
+        testToRun outputDirectory expectedDirectory
 
 
-        TypeInjections.Program.runTypeCart inputFile1 inputFile2 pwd extraFileName isInclude outputFileName
-        |> ignore
-
-        fileCompare outputFile expectedFile
-
-    let public testRunnerClass
-        (testToRun: TestFormat)
-        (testModule: string)
-        (inputFileName: string)
-        (outputFileName: string)
-        (expectedFileName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputFile =
-            System.IO.Path.Combine([| pwd; inputFileName |])
-
-        let dafnyFile = DafnyFile(inputFile)
-
-        let outputFile =
-            System.IO.Path.Combine([| pwd; outputFileName |])
-
-        let expectedFile =
-            System.IO.Path.Combine([| pwd; expectedFileName |])
-
-        // Run syntactic check for classes; used for testing
-        // this will be removed later
-        let reporter = TypeInjections.Program.initDafny
-
-        // the main call to dafny, adapted from DafnyDriver.ProcessFiles
-        let programName1 = "test"
-        let mutable dafnyProgram = Unchecked.defaultof<Program>
-        TypeInjections.Program.parseAST dafnyFile programName1 reporter &dafnyProgram
-
-        TypeInjections.InjectionIO.checkClasses dafnyProgram outputFile
-        |> ignore
-
-        testToRun outputFile expectedFile

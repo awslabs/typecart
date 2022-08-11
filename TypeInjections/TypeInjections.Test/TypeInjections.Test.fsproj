@@ -16,10 +16,8 @@
 
     <ItemGroup>
         <Compile Include="TestUtils.fs" />
-        <Compile Include="TypeEqTests.fs" />
-        <Compile Include="GenFunctionTests.fs" />
-        <Compile Include="ClassGenTests.fs" />
-        <Compile Include="DummyMain.fs" />
+        <Compile Include="IOTests.fs" />
+        <Compile Include="Tester.fs" />
         <Content Include="Resources\**\*" />
     </ItemGroup>
 
@@ -28,12 +26,32 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Dafny, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\Dafny.dll</HintPath>
-      </Reference>
-      <Reference Include="DafnyPipeline, Version=3.2.x, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
-      </Reference>
+        <Reference Include="Boogie.Core, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Boogie.Core.dll</HintPath>
+        </Reference>
+        <Reference Include="Dafny, Version=3.6.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Dafny.dll</HintPath>
+        </Reference>
+        <Reference Include="DafnyPipeline, Version=3.6.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\DafnyPipeline.dll</HintPath>
+        </Reference>
+        <Reference Include="Boogie.BaseTypes, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+          <HintPath>..\..\dafny\Boogie.BaseTypes.dll</HintPath>
+        </Reference>
+        <Reference Include="Boogie.ExecutionEngine, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+            <HintPath>..\..\dafny\Boogie.ExecutionEngine.dll</HintPath>
+        </Reference>     
+        <Reference Include="Boogie.CodeContractsExtender, Version=2.15.x, Culture=neutral, PublicKeyToken=null">
+          <HintPath>..\..\dafny\Boogie.CodeContractsExtender.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Resources\IOExamples\New" />
+      <Folder Include="Resources\IOExamples\Output" />
+      <Folder Include="Resources\TestIO\New" />
+      <Folder Include="Resources\SimpleFolderTest\InputDirectory" />
+      <Folder Include="Resources\SimpleFolderTest\OutputDirectory" />
     </ItemGroup>
 
 </Project>
