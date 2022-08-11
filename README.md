@@ -1,4 +1,8 @@
-[![.NET build](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml/badge.svg?branch=dev)](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml)
+TypeCart
+------------
+
+[![.NET build](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml/badge.svg?branch=dev)](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml) 
+
 **typeCart** is an analysis tool for proof evolution to facilitate proof maintenance for continuously integrated software. typeCart is constructed in F# and it
 
 1. reads two Dafny files into Dafny AST,
