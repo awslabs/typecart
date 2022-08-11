@@ -1,6 +1,6 @@
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 
-TOOL_DLL = TypeInjections/TypeInjections/bin/Debug/net5.0/TypeInjections.dll
+TOOL_DLL = TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections.dll
 TOOL_SLN = TypeInjections/TypeInjections.sln
 TOOL_TEST = TypeInjections/TypeInjections.Test/TypeInjections.Test.fsproj
 DAFNY_DIR = dafny
