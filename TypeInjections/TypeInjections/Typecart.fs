@@ -1,6 +1,7 @@
 namespace TypeInjections
 open System
 open System.IO
+open System.Text.RegularExpressions
 
 
 
@@ -32,44 +33,79 @@ module Typecart =
             member this.processCombine(combineYIL: YIL.Program) = write("combine.dfy", combineYIL)
     
 
+    // replace "." with "\." and "/" with "\/" to make specifying regex on filenames easier.
+    let private makeRegex (s: string) = s.Replace(".", "\.").Replace("/", "\/") |> Regex
+
+    
     /// A project defines the directory scope typecart operates on.
     /// Typecart will read in every file in the directory structure of a project,
     /// and produce a diff.
-    type ProjectKind = D of DirectoryInfo | F of FileInfo
-    type TypecartProject(project: ProjectKind) =
+    type TypecartProject(project: Utils.SystemPathKind, ignorePatterns: Regex list) =
+        
+
+        // append .typecartignore file to ignorePatterns list
+        let currDirIgnores =
+                // try to find .typecartignore file in current directory
+                match project with
+                | Utils.D dir ->
+                    let objs = dir.GetFiles() |> List.ofSeq
+                    match List.tryFind (fun (x: FileInfo) -> x.Name.Equals(".typecartignore")) objs with
+                    | Some ignoreFile ->
+                        ignoreFile.OpenText().ReadToEnd().Split(Environment.NewLine)
+                        |> List.ofSeq
+                        |> List.map makeRegex
+                    | None -> []
+                | _ -> []
+        
+        let isFilenameIgnored (fileName: string) =
+            List.fold (fun (ignored: bool) (pattern: Regex) -> (pattern.IsMatch fileName) || ignored) false (ignorePatterns @ currDirIgnores)
+        
+        // constructor that helps read in ignore patterns from file
+        new(project: Utils.SystemPathKind, ignorePatternsFile: string option) =
+            let ign =
+                match ignorePatternsFile with
+                | Some ignoreFile ->
+                    File.ReadLines(ignoreFile)
+                    |> List.ofSeq
+                    |> List.map makeRegex (* every line is turned into a regular expression *)
+                | None -> []
+            TypecartProject(project, ign)
+            
         // when project is just a file
-        new(f: FileInfo) = TypecartProject(F f)
+        new(f: FileInfo, ignorePatterns: Regex list) = TypecartProject(Utils.F f, ignorePatterns)
+        new(f: FileInfo, ignorePatternsFile: string option) = TypecartProject(Utils.F f, ignorePatternsFile)
         // when project is an entire directory structure
-        new(d: DirectoryInfo) = TypecartProject(D d)
+        new(d: DirectoryInfo, ignorePatterns: Regex list) = TypecartProject(Utils.D d, ignorePatterns)
+        new(d: DirectoryInfo, ignorePatternsFile: string option) = TypecartProject(Utils.D d, ignorePatternsFile)
         // generic entrypoint when we don't know whether path is a file or directory
-        new(path: string) =
-            let attr = File.GetAttributes(path)
-            if attr.HasFlag(FileAttributes.Directory) then
-                TypecartProject(DirectoryInfo(path))
-            else
-                TypecartProject(FileInfo(path))
+        new(path: string, ignorePatterns: string option) = TypecartProject(Utils.parseSystemPath(path), ignorePatterns)
                 
         // list of subdirectories of currenct project. Empty when project is just a file.
         member this.subDirectories =
             match project with
-            | D currDir ->
+            | Utils.D currDir ->
                 currDir.GetDirectories()
                 |> List.ofSeq
-                |> List.map TypecartProject
-            | F _ -> []
+                |> List.map (fun d -> TypecartProject(d, ignorePatterns))
+            | Utils.F _ -> []
         
         // list of files of currenct project. singleton list when project is just a file.
         member this.files =
             match project with
-            | D currDir ->
+            | Utils.D currDir ->
                 currDir.GetFiles()
                 |> List.ofSeq
+                // filter out non-dafny files
                 |> List.filter
                        (fun fd ->
                             match fd.Name with
                             | Utils.Suffix ".dfy" _ -> true
                             | _ -> false)
-            | F file -> [ file ]
+                // filter out filenames to be ignored
+                // we filter based on the fully qualified path of the filename, just like the
+                // behavior of .gitignore.
+                |> List.filter (fun fd -> not (isFilenameIgnored fd.FullName))
+            | Utils.F file -> [ file ]
 
         // flattens all the files
         member this.collect() =

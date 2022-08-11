@@ -38,43 +38,4 @@
   }
   
   
-  module Combine.Main {
-    import Joint
-    
-    import Old
-    
-    import New
-    
-    import Util
-    
-    function T_FileTypes(F_O: Joint.Main.FileTypes, F_N: Joint.Main.FileTypes):bool
-     {
-      match (F_O, F_N) {
-        case (Cfg(), Cfg()) => 
-          /* unchanged constructor */ true
-        case (Conf(), Conf()) => 
-          /* unchanged constructor */ true
-        case (Log(), Log()) => 
-          /* unchanged constructor */ true
-        case (Txt(), Txt()) => 
-          /* unchanged constructor */ true
-        case _ => 
-          false
-      }
-      
-    }
-    
-    
-    lemma testAdd()
-      ensures (Joint.Main.testAdd() == Joint.Main.testAdd())
-    
-    
-    lemma testMul()
-      ensures (Joint.Main.testMul() == Joint.Main.testMul())
-    
-    
-    
-  }
-  
-  
   
