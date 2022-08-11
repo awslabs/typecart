@@ -34,7 +34,7 @@ module Tool =
         elif flag.Contains("-r") then
             
             if argvList.Length <> 5 then
-              failwith "usage: program -p OLD NEW OUTPUTFOLDER"
+              failwith "usage: program -r GITHUB_URL OLD_COMMIT NEW_COMMIT OUTPUTFOLDER"
             
             Console.WriteLine("***** remote github")
           
