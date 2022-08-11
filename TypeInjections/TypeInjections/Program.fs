@@ -21,11 +21,6 @@ module Program =
         let oldPath = argvList.Item(0)
         let newPath = argvList.Item(1)
         let outFolder = argvList.Item(2)
-
-        // make sure all input paths exist
-        for a in [oldPath; newPath] do
-            if not (System.IO.File.Exists(a)) then
-                failwith ("file not found: " + a)
         
         //initialise Dafny
         let reporter = Utils.initDafny
