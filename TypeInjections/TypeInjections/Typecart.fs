@@ -1,5 +1,6 @@
 namespace TypeInjections
 open System
+open System.IO
 
 
 
@@ -31,6 +32,57 @@ module Typecart =
             member this.processCombine(combineYIL: YIL.Program) = write("combine.dfy", combineYIL)
     
 
+    /// A project defines the directory scope typecart operates on.
+    /// Typecart will read in every file in the directory structure of a project,
+    /// and produce a diff.
+    type ProjectKind = D of DirectoryInfo | F of FileInfo
+    type TypecartProject(project: ProjectKind) =
+        // when project is just a file
+        new(f: FileInfo) = TypecartProject(F f)
+        // when project is an entire directory structure
+        new(d: DirectoryInfo) = TypecartProject(D d)
+        // generic entrypoint when we don't know whether path is a file or directory
+        new(path: string) =
+            let attr = File.GetAttributes(path)
+            if attr.HasFlag(FileAttributes.Directory) then
+                TypecartProject(DirectoryInfo(path))
+            else
+                TypecartProject(FileInfo(path))
+                
+        // list of subdirectories of currenct project. Empty when project is just a file.
+        member this.subDirectories =
+            match project with
+            | D currDir ->
+                currDir.GetDirectories()
+                |> List.ofSeq
+                |> List.map TypecartProject
+            | F _ -> []
+        
+        // list of files of currenct project. singleton list when project is just a file.
+        member this.files =
+            match project with
+            | D currDir ->
+                currDir.GetFiles()
+                |> List.ofSeq
+                |> List.filter
+                       (fun fd ->
+                            match fd.Name with
+                            | Utils.Suffix ".dfy" _ -> true
+                            | _ -> false)
+            | F file -> [ file ]
+
+        // flattens all the files
+        member this.collect() =
+            this.files @ List.collect (fun (subProject: TypecartProject) -> subProject.collect()) this.subDirectories
+            
+        // turn the directory into a single Dafny AST
+        member this.toDafnyAST(projectName: string, reporter)  =
+            Utils.parseASTs (this.collect()) projectName reporter
+        
+        // turn dafny AST representation of directory into a YIL AST
+        member this.toYILProgram(projectName: string, reporter) =
+            this.toDafnyAST(projectName, reporter) |> DafnyToYIL.program
+    
     /// API entry    
     type Typecart(oldYIL: YIL.Program, newYIL: YIL.Program, logger: (string -> unit) option) =
         

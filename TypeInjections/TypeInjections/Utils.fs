@@ -179,4 +179,3 @@ module Utils =
         if err <> null && err <> "" then
             failwith ("Dafny error: " + err)
         dafnyProgram
-
