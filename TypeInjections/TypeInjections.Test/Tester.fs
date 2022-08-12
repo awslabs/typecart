@@ -23,7 +23,7 @@ module Tester =
                 match d with
                 | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
                 | d -> d
-            {name=prog.name; decls=List.map prD prog.decls}
+            {name=prog.name; decls=List.map prD prog.decls; meta = prog.meta}
         
                 
         let writeFile (prog: YIL.Decl) (folder:string) (prefix:string)  =
@@ -38,7 +38,7 @@ module Tester =
                         | _ -> ".dfy"
                 else
                     prog.meta.position.Value.filename
-            let outputProg = {YIL.name = getName prog; YIL.decls = [prog]}
+            let outputProg = {YIL.name = getName prog; YIL.decls = [prog]; YIL.meta = prog.meta}
             let progP =  prefixTopDecls outputProg prefix
             let endFileName = (addSuffix outputProg.name prefix)
             let s = YIL.printer().prog(progP, YIL.Context(progP))

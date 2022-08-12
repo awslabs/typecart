@@ -54,14 +54,14 @@ module DafnyToYIL =
         let declsRev = List.rev (fromIList decls)
         let ddecls = List.collect decl declsRev
 
-        { name = p.Name; decls = ddecls }
+        { name = p.Name; decls = ddecls; meta = YIL.emptyMeta }
 
     // meta information attached to a named declaration
-    and namedMeta (dcl: Declaration) : Y.Meta = { comment = None; position = Some(position dcl.tok) }
+    and namedMeta (dcl: Declaration) : Y.Meta = { comment = None; position = Some(position dcl.tok); prelude = "" }
 
     // Dafny does not define a common superclass of INamedRegion and IAttributeBearingDeclaration and F# does not support intersection types
     // So we need to duplicate the method here for Declaration and ModuleDefinition
-    and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta = {comment = None; position = Some(position dcl.tok) }
+    and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta = {comment = None; position = Some(position dcl.tok); prelude = "" }
 
     // trivial conversion of Dafny source position to YIL source positions
     and position (t: Microsoft.Boogie.IToken) : Y.Position =

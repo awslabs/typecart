@@ -11,13 +11,14 @@
         <Compile Include="InjectionIO.fs" />
         <Compile Include="YIL.fs" />
         <Compile Include="Traverser.fs" />
-        <Compile Include="Analysis.fs" />
         <Compile Include="DafnyToYIL.fs" />
+        <Compile Include="Analysis.fs" />
         <Compile Include="Diff.fs" />
         <Compile Include="Differ.fs" />
         <Compile Include="Translation.fs" />
         <Compile Include="Typecart.fs" />
         <Compile Include="Program.fs" />
+        <Content Include="Resources\**\*" />
     </ItemGroup>
 
     <ItemGroup>

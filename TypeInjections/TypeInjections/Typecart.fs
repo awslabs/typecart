@@ -153,7 +153,8 @@ module Typecart =
                 Analysis.PrefixTopDecls("Combine")
                 Analysis.ImportInCombine()
                 Analysis.AnalyzeModuleImports()
-                Analysis.DeduplicateImportsIncludes()]
+                Analysis.DeduplicateImportsIncludes()
+                Analysis.GenerateTranslationCode()]
         
         // constructor without a logger instance
         new(oldYIL: YIL.Program, newYIL: YIL.Program) = Typecart(oldYIL, newYIL, None)
@@ -184,7 +185,7 @@ module Typecart =
             this.logger "***** writing output files"
             
             let mk arg = arg |> Analysis.Pipeline
-            
+
             (processJoint joint |> mk).apply(oldYIL) |> outputWriter.processJoint
             (processOld joint |> mk).apply(oldYIL) |> outputWriter.processOld
             (processNew joint |> mk).apply(newYIL) |> outputWriter.processNew

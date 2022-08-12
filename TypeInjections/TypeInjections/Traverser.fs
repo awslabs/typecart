@@ -60,7 +60,8 @@ module Traverser =
             let dsT =
                 List.collect (fun (d: Decl) -> this.decl (ctx, d)) p.decls
             { name = p.name
-              decls = dsT }
+              decls = dsT
+              meta = p.meta }
 
         member this.importType(ctx: Context, e: ImportType) =
             match e with
