@@ -247,25 +247,6 @@ module Analysis =
         member this.declFilter = declFilter
         override this.prog(prog: Program) =
              {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
-
-
-    type NormalizeGhostMethodWithEmptyBody() =
-        inherit Traverser.Identity()
-        
-        override this.decl(ctx: Context, decl: Decl) =
-            match decl with
-            | Method(methodType, name, tpvars, is, os, body, g, isStatic, meta) ->
-                match methodType.map(), body with
-                | IsFunction, None
-                | IsPredicate, None
-                | IsLemma, None
-                | IsFunction, Some (EBlock [])
-                | IsPredicate, Some (EBlock [])
-                | IsLemma, Some (EBlock [])
-                    ->
-                        [ Method(methodType, name, tpvars, is, os, None, g, isStatic, meta)  ]
-                | _ -> this.declDefault(ctx, decl)
-            | _ -> this.declDefault(ctx, decl)
     
     type Pipeline(passes : Traverser.Transform list) =
         member this.passes = passes
