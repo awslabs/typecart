@@ -861,6 +861,8 @@ module DafnyToYIL =
         | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
         | :? AssumeStmt as s ->Y.EAssume(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
+        | :? RevealStmt as s ->
+            Y.EReveal (List.map expr (List.ofSeq s.Exprs))
         // | :? ForallStmt ->
         | _ -> unsupported $"statement {s.ToString()}"
     // ***** qualified names; Dafny has methods for this, but they are a bit confusing and work with .-separated strings

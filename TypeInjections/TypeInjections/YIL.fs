@@ -537,6 +537,7 @@ module YIL =
         | EPrint of exprs: Expr list
         | EAssert of Expr
         | EAssume of Expr
+        | EReveal of Expr list // dafny `reveal ... ;` statement
         | ECommented of string * Expr
         // temporary dummy for missing cases
         | EUnimplemented
@@ -1258,6 +1259,7 @@ module YIL =
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | EAssert e -> "assert " + (expr e) 
             | EAssume e -> "assume " + (expr e) + ";"
+            | EReveal es -> "reveal " + (String.concat ", " (List.map expr es)) + ";"
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 

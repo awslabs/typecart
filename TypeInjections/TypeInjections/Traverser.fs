@@ -259,6 +259,7 @@ module Traverser =
                 | EPrint es -> EPrint (rcEs es)
                 | EAssert e -> EAssert (rcE e)
                 | EAssume e -> EAssume (rcE e)
+                | EReveal es -> EReveal (rcEs es)
                 | ECommented(s,e) -> ECommented(s, rcE e)
                 | EUnimplemented _ -> expr
 
