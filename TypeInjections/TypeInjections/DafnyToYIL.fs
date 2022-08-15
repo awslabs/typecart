@@ -863,7 +863,9 @@ module DafnyToYIL =
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
         | :? RevealStmt as s ->
             Y.EReveal (List.map expr (List.ofSeq s.Exprs |> List.filter (fun e -> e = null)))
-        // | :? ForallStmt ->
+        | :? ForallStmt as s ->
+            // TODO: compile foralls correctly by also considering ensures clause.
+            Y.EQuant(Y.Forall, boundVar @ s.BoundVars, exprO s.Range, if s.Body <> null then statement s.Body else Y.ESKip)
         | _ -> unsupported $"statement {s.ToString()}"
     // ***** qualified names; Dafny has methods for this, but they are a bit confusing and work with .-separated strings
     and pathOfModule (d: ModuleDefinition) : Y.Path =
