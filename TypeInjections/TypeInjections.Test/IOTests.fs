@@ -13,9 +13,12 @@ module IOTests =
     let moduleName = typeof<Marker>.DeclaringType.Name
     // set the module name, alternatively we could look into determining
     // the calling module via reflection in TestUtils
+        
     let testRunner =
-        TestUtils.testRunnerGen TestUtils.folderCompare moduleName
-
+        TestUtils.testRunnerGen
+        
     [<Test>]
     let SimpleFolderTest () =
-        testRunner "InputDirectory" "OutputDirectory" "ExpectedDirectory" 
+        testRunner "InputDirectory" "OutputDirectory"
+        
+        

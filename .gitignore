@@ -3,6 +3,7 @@
 **/Combine.dfy
 **/Output.txt
 **/Combine.txt
+**/OutputDirectory/**
 .idea/
 TypeInjections/TypeInjections/bin
 TypeInjections/TypeInjections/obj

@@ -1,4 +1,9 @@
+
+  include "joint.dfy"
+  
   module New.A {
+    import Joint
+    
     datatype singleNoArgs = A1() {
       
     }
@@ -36,3 +41,6 @@
     
     
   }
+  
+  
+  

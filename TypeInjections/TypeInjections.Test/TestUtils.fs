@@ -4,15 +4,14 @@
 namespace TypeInjections.Test
 
 open System.IO
-open System.Reflection
+open TypeInjections
+open Microsoft.Dafny
 
 module TestUtils =
     open NUnit.Framework
     open System
 
-    type TestFormat = string -> string -> unit
-
-    let pwd (testModule: string) : string =
+    let pwd : string =
         let wd = Environment.CurrentDirectory
 
         let pd =
@@ -27,97 +26,126 @@ module TestUtils =
         Path.Combine(
             [| pd
                "Resources"
-              // testModule
                TestContext.CurrentContext.Test.Name |]
         )
 
-    let compare (actual: string) (expected: string) =
-        if actual.Equals expected then
-            ()
-        else
-            Console.WriteLine("Expected")
-            Console.WriteLine(expected)
-            Console.WriteLine("Actual")
-            Console.WriteLine(actual)
-            Assert.Fail()
+    type DirectoryOutputWriter(outFolderPath: string) =
+        
+        /// prefixes the names of all toplevel modules
+        let prefixTopDecls(prog: YIL.Program)(pref: string): YIL.Program =
+            let prN (n: string) = pref + "." + n
+            let prD (d: YIL.Decl) =
+                match d with
+                | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
+                | d -> d
+            {name=prog.name; decls=List.map prD prog.decls}
+        
+                
+        let writeFile (prog: YIL.Program) (folder:string) (prefix:string)  =
+            let addSuffix (path: string) (ending: string): string =
+                let endPos = path.IndexOf(".dfy")
+                let newName = path.Insert( endPos, ("_" + ending ))
+                newName.ToLower()
+            let getName (x:YIL.Decl) =
+                if x.meta.position.IsNone then
+                    match x with
+                        | YIL.Module (name, _, _) -> name + ".dfy"
+                        | _ -> ".dfy"
+                else
+                    x.meta.position.Value.filename
             
-    let fileNameFromPath (path : string) =
-        let len = path.Length - 1
-        let mutable i = len 
-        while path[i] <> '/' do
-            i <- i - 1
-        
-        path[i..]
-        
-
-    let fileCompare (actualFile: string) (expectedFile: string) =
-        
-        let expectedName = fileNameFromPath expectedFile
-        let actualName = fileNameFromPath actualFile
-        
-        compare expectedName actualName
-        
-        let expected = File.ReadAllText(actualFile)
-        let actual = File.ReadAllText(expectedFile)
-
-        compare actual expected
-        
-    let folderCompare(actualFolder: string) (expectedFolder: string) =
-        
-        
-        // checking subfolders
-        let actualSubs = DirectoryInfo(actualFolder).EnumerateDirectories("*", SearchOption.AllDirectories)
-        let actualSubsName = Collections.Generic.List(List.map (fun (x: DirectoryInfo) -> x.Name) (actualSubs |> Seq.toList))
-        let aSubs = actualSubsName |> Seq.toList
-        
-        let expectedSubs = DirectoryInfo(expectedFolder).EnumerateDirectories("*", SearchOption.AllDirectories)
-        let expectedSubsName = Collections.Generic.List(List.map (fun (x : DirectoryInfo) -> x.Name) (expectedSubs |> Seq.toList))
-        let eSubs = expectedSubsName |> Seq.toList
-        
-        // check subdirectory and file names
-        if eSubs <> aSubs then
-            Console.WriteLine("directory error")
-            Console.WriteLine("Expected")
-            Console.WriteLine(eSubs)
-            Console.WriteLine("Actual")
-            Console.WriteLine(aSubs)
-            Assert.Fail()
             
-        // get fileInfo dafny files from parent folder and all subdirectories
-        let actualFiles = DirectoryInfo(actualFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
-        let expectedFiles = DirectoryInfo(expectedFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
-        
-        
-        // take sorted list of 'FileInfo' and compare the content of each file with 'fileCompare'
-        List.iter2 (fun (x : FileInfo) (y : FileInfo) -> fileCompare x.FullName y .FullName) (expectedFiles |> Seq.toList) (actualFiles |> Seq.toList)
-        
+            let mods = List.filter (fun (x:YIL.Decl) -> x.meta.position.IsSome) prog.decls
+            let rest = List.filter (fun (x:YIL.Decl) -> x.meta.position.IsNone) prog.decls
+            // if YIL.decl is empty, don't write anything
+            if mods.Length = 0 then
+                0 |> ignore
+            else
+                
+                let outputProg = {YIL.name = getName mods.Head; YIL.decls = prog.decls}
+                let endFileName = (addSuffix outputProg.name prefix)
+                let s = YIL.printer().prog(outputProg, YIL.Context(outputProg))
+                let filePath = Path.Combine(folder, endFileName)
+                IO.File.WriteAllText(filePath, s)
+    
+        let writeOut fileName prefix (prog:YIL.Program) =
+            let folder = outFolderPath
+            
+            writeFile prog folder prefix
 
-    // Run the tests for generated functions
-    // FilePath is synonym for string list
-    // the test generator expects multiple output and expected files,
-    // but the tool currently generates only one output file
+        interface Typecart.TypecartOutput with
+            member this.processOld(oldYIL: YIL.Program) = writeOut "old.dfy" "Old" oldYIL 
+            member this.processNew(newYIL: YIL.Program) = writeOut "new.dfy" "New" newYIL
+            member this.processJoint(jointYIL: YIL.Program) = writeOut "joint.dfy" "Joint" jointYIL 
+            member this.processCombine(combineYIL: YIL.Program) = writeOut "combine.dfy" "Combine" combineYIL  
+                           
+    let typeCartAPI (argv: string array) =
+        
+        Utils.log "***** Entering Tester.fs"
+        
+        if argv.Length < 3 then
+            failwith "usage: program OLD NEW OUTPUTFOLDER"
+        let argvList = argv |> Array.toList
+        
+        // get paths to input and outputs
+        let oldFolderPath = argvList.Item(0)
+        let newFolderPath = argvList.Item(1)
+        let outFolderPath = argvList.Item(2)
+        
+        Directory.CreateDirectory(outFolderPath) |> ignore
+        
+        // error handling 
+        for a in [oldFolderPath;newFolderPath;outFolderPath] do
+            if not (Directory.Exists(a)) then
+                failwith("folder not found:" + a)
+                                
+        let oldParentFolder = DirectoryInfo(oldFolderPath)
+        let newParentFolder = DirectoryInfo(newFolderPath)
+        
+        let outputWriter = DirectoryOutputWriter(outFolderPath)
+        
+        let difFolder (oldFolder: DirectoryInfo) (newFolder: DirectoryInfo) =
+            // get all files in "new" and "old" folders
+            let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
+            let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
+            
+            let reporter = Utils.initDafny
+            
+            Utils.logObject "here are oldFiles {0}" oldFiles
+            Utils.logObject "here are newFiles {0}" newFiles
+            
+            let oldDafny = Utils.parseASTs oldFiles "Old" reporter
+            let newDafny = Utils.parseASTs newFiles "New" reporter
+            
+            let newYIL = DafnyToYIL.program newDafny
+            let oldYIL = DafnyToYIL.program oldDafny
+            
+            let typecart = Typecart.typecart(oldYIL, newYIL, Utils.log)
+            
+            typecart.go(outputWriter)
+        
+        List.iter2 (fun (x:DirectoryInfo) (y: DirectoryInfo) -> difFolder x y)
+            ((oldParentFolder.GetDirectories("*", SearchOption.AllDirectories)
+              |> Seq.toList) @ [oldParentFolder])
+            ((newParentFolder.GetDirectories("*", SearchOption.AllDirectories)
+              |> Seq.toList) @ [newParentFolder])
+        
+        0
+        
     let public testRunnerGen
-        (testToRun: TestFormat)
-        (testModule: string)
         (directoryName: string)
         (outputDirectoryName: string)
-        (expectedDirectoryName: string)
         =
-        let pwd = pwd testModule
 
         let inputDirectory =
-            System.IO.Path.Combine([| pwd; directoryName |])
+            Path.Combine([| pwd; directoryName |])
 
-        let outputDirectory =
-            System.IO.Path.Combine([| pwd; outputDirectoryName |])
-
-        let expectedDirectory =
-            System.IO.Path.Combine([| pwd; expectedDirectoryName |])
-
-        //TypeInjections.Program.foo inputDirectory outputDirectory
-        //TypeInjections.Program.main [|"/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Old"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/New"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Output"|]
-        //|> ignore
+        let inputDirectory1 = Path.Combine([|inputDirectory; "Old"|])
+        let inputDirectory2 = Path.Combine([|inputDirectory; "New"|])
         
-        testToRun outputDirectory expectedDirectory
+        let outputDirectory =
+            Path.Combine([| pwd; outputDirectoryName |])
 
-
+        typeCartAPI [|inputDirectory1; inputDirectory2; outputDirectory|] |> ignore 
+        
+        0 |> ignore
