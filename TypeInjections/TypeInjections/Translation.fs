@@ -6,20 +6,20 @@ open YIL
 
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =
-    let rb = Path ["util"; "RelateBuiltinTypes"]
+    let rb = Path ["Combine"; "RelateBuiltinTypes"]
     let rbRec = StaticReceiver {path=rb; tpargs=[]}
     /// given relation t on o*n, the sequences e: seq<n> and f:seq<n> are related
     /// if they have the same length and are related element-wise
-    let seqRel o n t (e,f) = EBool true // EMethodApply(rbRec, rb.child("seq"), [o;n], [t;e;f], false)
+    let seqRel o n t (e,f) = EMethodApply(rbRec, rb.child("seq"), [o;n], [t;e;f], false)
     /// given relation t on o*n, the array e: arr<n> and f:arr<n> are related
     /// if they have the same length and are related element-wise
-    let arrayRel o n t (e,f) = EBool true // EMethodApply(rbRec, rb.child("array"), [o;n], [t;e;f], false)
+    let arrayRel o n t (e,f) = EMethodApply(rbRec, rb.child("array"), [o;n], [t;e;f], false)
     /// given relation t on o*n, the sets e: set<n> and f:set<n> are related
     /// if every element of e is related to an element of f and vice versa
-    let setRel o n t (e,f) = EBool true // EMethodApply(rbRec, rb.child("set"), [o;n], [t;e;f], false)
+    let setRel o n t (e,f) = EMethodApply(rbRec, rb.child("set"), [o;n], [t;e;f], false)
     /// given relations, sT,tT on so*sn and tO*tN, the maps e: map<sO,tO> and f:map<sN,tN> are related
     /// if every pair in e is related a pair in f and vice versa
-    let mapRel sO sN sT tO tN tT (e,f) = EBool true // EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
+    let mapRel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
 
 open DafnyFunctions
 
@@ -546,5 +546,5 @@ module Translation =
     Console.WriteLine(" ***** DEPENDENCY CLOSURE END *****")
     let jointPaths = Utils.listDiff(childPaths, changedClosed) // greatest self-contained set of unchanged declarations
     let tr = Translator(p,pD,jointPaths)
-    let combine = {name = p.name; decls = tr.doProg()} // the Combine part
-    Analysis.ImportInCombine().prog(combine), jointPaths
+    let combine = {name = p.name; decls = tr.doProg(); meta = p.meta} // the Combine part
+    combine, jointPaths

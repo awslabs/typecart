@@ -1,4 +1,8 @@
-[![.NET build](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml/badge.svg?branch=dev)](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml)
+TypeCart
+------------
+
+[![.NET build](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml/badge.svg?branch=dev)](https://github.com/awslabs/typecart/actions/workflows/dotnet.yml) 
+
 **typeCart** is an analysis tool for proof evolution to facilitate proof maintenance for continuously integrated software. typeCart is constructed in F# and it
 
 1. reads two Dafny files into Dafny AST,
@@ -13,7 +17,7 @@ See [examples and features](docs/ExamplesFeatures.md).
 
 ## Build
 
-typeCart builds on [.NET 5.0](https://dotnet.microsoft.com/en-us/download/dotnet/5.0), it supports Dafny 3.3.0 and Z3 4.8.5. The Makefile is configured to install Dafny and Z3 locally in the root directory. After installing .NET 5.0, run in the root directory 
+typeCart builds on [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/5.0), Dafny 3.6.x and Z3 4.8.5. The Makefile is configured to install Dafny and Z3 locally in the root directory. After installing .NET 6.0, run in the root directory 
 ```
 > make
 ```

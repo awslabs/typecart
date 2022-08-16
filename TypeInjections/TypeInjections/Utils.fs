@@ -171,6 +171,8 @@ module Utils =
     
     // Read in and parse a list of Dafny files
     let parseASTs (files: FileInfo list) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+        if List.length files = 0 then
+            failwith "error: list of files supplied to parser is empty"
         let dafnyFiles = List.map (fun (x : FileInfo) -> DafnyFile x.FullName) files
         let mutable dafnyProgram = Unchecked.defaultof<Program>
         log "***** calling dafny parser for multiple files"
@@ -180,3 +182,16 @@ module Utils =
             failwith ("Dafny error: " + err)
         dafnyProgram
 
+    // detects if path is file or directory
+    type SystemPathKind = D of DirectoryInfo | F of FileInfo
+    
+    let parseSystemPath (path: string) =
+        let attr = File.GetAttributes(path)
+        if attr.HasFlag(FileAttributes.Directory) then
+            D (DirectoryInfo(path))
+        else
+            F (FileInfo(path))
+
+
+    
+    

@@ -54,14 +54,14 @@ module DafnyToYIL =
         let declsRev = List.rev (fromIList decls)
         let ddecls = List.collect decl declsRev
 
-        { name = p.Name; decls = ddecls }
+        { name = p.Name; decls = ddecls; meta = YIL.emptyMeta }
 
     // meta information attached to a named declaration
-    and namedMeta (dcl: Declaration) : Y.Meta = { comment = None; position = Some(position dcl.tok) }
+    and namedMeta (dcl: Declaration) : Y.Meta = { comment = None; position = Some(position dcl.tok); prelude = "" }
 
     // Dafny does not define a common superclass of INamedRegion and IAttributeBearingDeclaration and F# does not support intersection types
     // So we need to duplicate the method here for Declaration and ModuleDefinition
-    and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta = {comment = None; position = Some(position dcl.tok) }
+    and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta = {comment = None; position = Some(position dcl.tok); prelude = "" }
 
     // trivial conversion of Dafny source position to YIL source positions
     and position (t: Microsoft.Boogie.IToken) : Y.Position =
@@ -861,7 +861,11 @@ module DafnyToYIL =
         | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
         | :? AssumeStmt as s ->Y.EAssume(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
-        // | :? ForallStmt ->
+        | :? RevealStmt as s ->
+            Y.EReveal (List.map expr (List.ofSeq s.Exprs |> List.filter (fun e -> e = null)))
+        | :? ForallStmt as s ->
+            // TODO: compile foralls correctly by also considering ensures clause.
+            Y.EQuant(Y.Forall, boundVar @ s.BoundVars, exprO s.Range, if s.Body <> null then statement s.Body else Y.ESKip)
         | _ -> unsupported $"statement {s.ToString()}"
     // ***** qualified names; Dafny has methods for this, but they are a bit confusing and work with .-separated strings
     and pathOfModule (d: ModuleDefinition) : Y.Path =

@@ -76,7 +76,7 @@ module YIL =
     // meta-information
     [<CustomEquality;NoComparison>]
     type Meta =
-        { comment: string option; position: Position option }
+        { comment: string option; position: Position option; prelude: string }
         override this.GetHashCode() = 0
         // we make all Meta objects equal so that they are ignored during diffing
         override this.Equals(that: Object) =
@@ -93,7 +93,7 @@ module YIL =
             $"{this.filename}@{this.line.ToString()}:{this.col.ToString()}"
 
     // ***** auxiliary methods
-    let emptyMeta = { comment = None; position = None }
+    let emptyMeta = { comment = None; position = None; prelude = "" }
 
     /// name of nonymous variables
     let anonymous = "_"
@@ -185,7 +185,7 @@ module YIL =
        - We way want to add information here later.
        - It is convenient to have a type of programs and not just a constructor.
     *)
-    type Program = { name: string; decls: Decl list }
+    type Program = { name: string; decls: Decl list; meta: Meta }
 
     (* declarations
        Modules and datatypes are child-bearing, i.e., can contain nested declarations.
@@ -537,6 +537,7 @@ module YIL =
         | EPrint of exprs: Expr list
         | EAssert of Expr
         | EAssume of Expr
+        | EReveal of Expr list // dafny `reveal ... ;` statement
         | ECommented of string * Expr
         // temporary dummy for missing cases
         | EUnimplemented
@@ -882,7 +883,11 @@ module YIL =
             if braced then " {" + s + "\n}\n" else s
         let indentedBraced(s: string) = indented(s,true)
         
-        member this.prog(p: Program, pctx: PrintingContext) = this.declsGeneral(p.decls, pctx, false)
+        member this.prog(p: Program, pctx: PrintingContext) =
+            "\n" +
+            p.meta.prelude
+            + "\n"
+            + this.declsGeneral(p.decls, pctx, false)
 
         member this.tpvar(inDecl: bool) (a: TypeArg) =
             // Only print out variance type info for declaration-level printing.
@@ -1254,6 +1259,7 @@ module YIL =
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | EAssert e -> "assert " + (expr e) 
             | EAssume e -> "assume " + (expr e) + ";"
+            | EReveal es -> "reveal " + (String.concat ", " (List.map expr es)) + ";"
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 

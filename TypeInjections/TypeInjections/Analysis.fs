@@ -1,5 +1,7 @@
 namespace TypeInjections
 
+open System
+open System.IO
 open TypeInjections.YIL
 
 module Analysis =
@@ -111,7 +113,8 @@ module Analysis =
                   | _ -> ctx) (Context(prog)) decls
           let dsT = List.collect (fun (d: Decl) -> this.decl (ctx, d)) prog.decls
           { name = prog.name
-            decls = dsT }
+            decls = dsT
+            meta = prog.meta }
 
   /// Prefixes the names of all toplevel modules
   type PrefixTopDecls(pref: string) =
@@ -124,7 +127,7 @@ module Analysis =
             match d with
             | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
             | d -> d
-        {name=prog.name; decls=List.map prD prog.decls}
+        { name=prog.name; decls=List.map prD prog.decls; meta = prog.meta }
   
   /// Resolve module imports tagged along expressions and declarations.
   /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
@@ -246,26 +249,33 @@ module Analysis =
         inherit Traverser.Identity()
         member this.declFilter = declFilter
         override this.prog(prog: Program) =
-             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
-
-
-    type NormalizeGhostMethodWithEmptyBody() =
+             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls; meta = prog.meta}
+    
+    // MapBuiltinTypes.dfy, RelateBuiltinTypes.dfy
+    type GenerateTranslationCode() =
         inherit Traverser.Identity()
+
+        let resourcePath (file: string) : string =
+            let wd = Environment.CurrentDirectory
+            let pd =
+                Directory
+                    .GetParent(
+                        wd
+                    )
+                    .Parent
+                    .Parent
+                    .FullName
+            Path.Combine(
+                [| pd
+                   "Resources"
+                   file |])
+
+        let relateBuiltinTypes = File.ReadAllLines(resourcePath "RelateBuiltinTypes.dfy") |> String.concat "\n" 
+        let mapBuiltinTypes = File.ReadAllLines(resourcePath "MapBuiltinTypes.dfy") |> String.concat "\n"
         
-        override this.decl(ctx: Context, decl: Decl) =
-            match decl with
-            | Method(methodType, name, tpvars, is, os, body, g, isStatic, meta) ->
-                match methodType.map(), body with
-                | IsFunction, None
-                | IsPredicate, None
-                | IsLemma, None
-                | IsFunction, Some (EBlock [])
-                | IsPredicate, Some (EBlock [])
-                | IsLemma, Some (EBlock [])
-                    ->
-                        [ Method(methodType, name, tpvars, is, os, None, g, isStatic, meta)  ]
-                | _ -> this.declDefault(ctx, decl)
-            | _ -> this.declDefault(ctx, decl)
+        override this.prog(prog: Program) =
+            {prog with meta = {prog.meta with prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes}}
+            
     
     type Pipeline(passes : Traverser.Transform list) =
         member this.passes = passes
