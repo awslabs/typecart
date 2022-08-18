@@ -2,6 +2,7 @@ namespace TypeInjections
 open System
 open System.IO
 open System.Text.RegularExpressions
+open TypeInjections.YIL
 
 
 
@@ -127,7 +128,8 @@ module Typecart =
 
         /// Pipelines for transforming old, new, joint, combine
         let processOld(joint: YIL.Path list): Traverser.Transform list = [
-                Analysis.mkFilter(fun s -> not (List.contains s (jointNames joint)))
+                Analysis.RecursiveFilterTransform("Old",
+                                                  fun p -> not (List.contains p joint))
                 Analysis.PrefixNotFoundImportsWithJoint()
                 Analysis.PrefixTopDecls("Old")
                 Analysis.ImportJointInOldNew()
@@ -135,7 +137,7 @@ module Typecart =
                 Analysis.DeduplicateImportsIncludes()
                 Analysis.CreateEmptyModuleIfNoneExists("Old")]
         let processNew(joint: YIL.Path list): Traverser.Transform list = [
-                Analysis.mkFilter(fun s -> not (List.contains s (jointNames joint)))
+                Analysis.RecursiveFilterTransform("New", fun p -> not (List.contains p joint))
                 Analysis.PrefixNotFoundImportsWithJoint()
                 Analysis.PrefixTopDecls("New")
                 Analysis.ImportJointInOldNew()
@@ -143,14 +145,12 @@ module Typecart =
                 Analysis.DeduplicateImportsIncludes()
                 Analysis.CreateEmptyModuleIfNoneExists("New")]
         let processJoint(joint: YIL.Path list): Traverser.Transform list = [
-                Analysis.mkFilter(fun s -> List.contains s (jointNames joint))
+                Analysis.RecursiveFilterTransform("Joint", fun p -> List.contains p joint)
                 Analysis.PrefixTopDecls("Joint")
                 Analysis.AnalyzeModuleImports()
                 Analysis.DeduplicateImportsIncludes()
                 Analysis.CreateEmptyModuleIfNoneExists("Joint")]
         let processCombine: Traverser.Transform list = [
-                Analysis.mkFilter(fun _ -> true)
-                Analysis.PrefixTopDecls("Combine")
                 Analysis.ImportInCombine()
                 Analysis.AnalyzeModuleImports()
                 Analysis.DeduplicateImportsIncludes()
@@ -173,22 +173,57 @@ module Typecart =
             
             // diff the programs
             this.logger "***** diffing the two programs"
-            let diff = Differ.prog (oldYIL, newYIL)
-            let diffS = (Diff.Printer()).prog diff
-            this.logger diffS
+            let oldDecls = oldYIL.decls
+            let newDecls = newYIL.decls
             
-            // generate translation
-            this.logger "***** generating compatibility code"
-            let combine,joint = Translation.prog(oldYIL, diff)
+            // pair up every toplevel module of the sane name, in Old / New AST. produces list of
+            // pairs (oldModule, newModule).
+            // this is implemented a nested iteration. For larger ASTs, we may want to speed
+            // up by using a set / dict lookup.
+            let oldNewModules =
+                List.fold (fun acc declOld ->
+                    match declOld with
+                    | Module(oN, oD, oM) ->
+                        match List.collect
+                                  (function
+                                    | Module (nN, nD, nM) ->
+                                        if oN.Equals(nN) then [nN, nD, nM] else []
+                                    | _ -> []) newDecls with
+                        | [ n ] -> ((oN, oD, oM), n) :: acc
+                        | _ -> acc
+                    | _ -> acc (* do not diff anything other than modules *)) [] oldDecls
             
-            // write output files
-            this.logger "***** writing output files"
+            // for every pair of old/new modules, transform the pair into a pair of (old module, module Diff)
+            let oldNewDiff =
+                List.fold (fun acc ((oN, oD, oM), (nN, nD, nM)) ->
+                    match Differ.decl ((Module (oN, oD, oM)), (Module (nN, nD, nM))) with
+                    | Some diff ->(Module (oN, oD, oM), diff) :: acc
+                    | None -> acc
+                    ) [] oldNewModules
+            
+            // for every pair (old module, module Diff) in oldNewDiff, produce a translation.
+            // the result of the translation is given as a list of translations produced (in AST form),
+            // and a list of names in the joint module. 
+            let combineDecls, joint =
+                let produceTranslation (old, diff) = Translation.translateModule(Context(oldYIL), old, diff) in
+                    let nestedCombine, nestedJoint = List.map produceTranslation oldNewDiff |> List.unzip
+                    List.collect id nestedCombine, List.collect id nestedJoint // flatten
+            
+            // finally, compose the list of translations produced into a single module, wrapped by a program AST.
+            let combine = {
+                name = oldYIL.name
+                decls = [ Module("Combine", combineDecls, emptyMeta) ]
+                meta = oldYIL.meta
+            }
+            
+            // we are done. do postprocessing (using pass pipeline) to produce output using three ASTs
+            // (old, new, combine) and a list of joint names, used to filter out the joint AST from the old AST.
             
             let mk arg = arg |> Analysis.Pipeline
-
-            (processJoint joint |> mk).apply(oldYIL) |> outputWriter.processJoint
+            
             (processOld joint |> mk).apply(oldYIL) |> outputWriter.processOld
             (processNew joint |> mk).apply(newYIL) |> outputWriter.processNew
+            (processJoint joint |> mk).apply(oldYIL) |> outputWriter.processJoint
             (mk processCombine).apply(combine) |> outputWriter.processCombine
 
     let typecart(oldYIL: YIL.Program, newYIL: YIL.Program, logger: string -> unit) =

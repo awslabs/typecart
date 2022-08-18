@@ -4,7 +4,6 @@ open TypeInjections.YIL
 
 /// diffs two YIL AST items and returns the corresponding AST item in Diff._
 module Differ =
-    open YIL
 
     /// compares two sets (given as lists)
     /// similar(o,n) = true iff n != o but n is updated version of o

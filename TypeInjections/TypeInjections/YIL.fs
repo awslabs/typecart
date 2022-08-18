@@ -307,6 +307,13 @@ module YIL =
             | Datatype (_, _, _, ds, _) -> ds
             | Class (_, _, _, _, ds, _) -> ds
             | _ -> []
+        member this.filterChildren (mustPreserve: Decl -> bool) =
+            let f ds = List.filter (mustPreserve) ds
+            match this with
+            | Module (x, ds, y) -> [ Module (x, f ds, y) ]
+            | Datatype (a, b, c, ds, d) -> [ Datatype (a, b, c, ds, d) ]
+            | Class (a, b, c, d, ds, e) -> [ Class (a, b, c, d, ds, e) ]
+            | _ -> []
     and TypeArg = string * (bool option)  // true/false for co/contravariant
     (* types
        We do not allow module inheritance or Dafny classes.
@@ -704,6 +711,7 @@ module YIL =
             let selectors = List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
             let testers = List.map (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name, TBool, false)) cs
             List.map mkField (List.append (List.distinct selectors) testers)
+        | Module(_, decls, _) -> List.collect implicitChildren decls
         | _ -> []
 
     (* retrieves a declaration in a program by traversing into children, e.g.,
@@ -727,7 +735,7 @@ module YIL =
 
                 match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
                 | Some (d) -> d
-                | None -> error $"{path} not valid in {prog.name}"
+                | None -> error $"Path [{path}] not valid in {prog.name}"
     (* as above, but returns a constructor *)
     let lookupConstructor (prog: Program, path: Path) : DatatypeConstructor =
         match lookupByPath (prog, path.parent) with
@@ -884,9 +892,27 @@ module YIL =
         let indentedBraced(s: string) = indented(s,true)
         
         member this.prog(p: Program, pctx: PrintingContext) =
-            "\n" +
-            p.meta.prelude
+            // Print out includes first because Dafny enforces this.
+            // For future work, consider making includes meta-information instead of
+            // AST information, as this along with the design of Dafny includes as a
+            // preprocessor-level syntax construct.
+            
+            let iPath (p: Path) =
+                let toSysPath (Path plist) =
+                    String.concat "/" plist                
+                "include " + "\"" + toSysPath(p) + "\""
+            
+            let includes =
+                List.collect (function | Include p -> [iPath p] | _ -> []) p.decls
+                |> String.concat "\n"
+                
+            includes
             + "\n"
+            + if not(p.meta.prelude.Equals("")) then
+                "/***** TYPECART PRELUDE START *****/\n"
+                + p.meta.prelude
+                + "\n/***** TYPECART PRELUDE END *****/"
+              else "\n"
             + this.declsGeneral(p.decls, pctx, false)
 
         member this.tpvar(inDecl: bool) (a: TypeArg) =
@@ -922,17 +948,14 @@ module YIL =
             match m with
             | NonStaticMethod mp -> mp.ToString()
             | StaticMethod mp -> "static " + mp.ToString()
-        
+                
         member this.decl(d: Decl, pctx: PrintingContext) =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""
             let decls d = this.decls(d, pctx)
             let expr (f: bool) (e: Expr) : string = this.expr(f)(e)(pctx)
             // comm +
             match d with
-            | Include p ->
-                let toSysPath (Path plist) =
-                    String.concat "/" plist                
-                "include " + "\"" + toSysPath(p) + "\""
+            | Include p -> "" (* includes are printed out first *)
             | Module (n, ds, a) ->
                 "module "
                 + (this.meta a)

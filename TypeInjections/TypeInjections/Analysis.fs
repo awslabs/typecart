@@ -47,7 +47,36 @@ module Analysis =
              ) ds
       List.iter add start
       closure
- 
+  
+  /// recursively get rid of any path not in list of specified paths, in the AST.
+  type RecursiveFilterTransform(name: string, mustPreserve: Path -> bool) =
+      inherit Traverser.Identity()
+        
+      // debugging
+      member this.name = name
+      member this.mustPreserve = mustPreserve
+      
+      // internal nodes must be handled separately from leaf nodes.
+      override this.decl(ctx: Context, decl: Decl) =
+          let childCtx = ctx.enter decl.name
+          if mustPreserve(ctx.currentDecl.child(decl.name)) then
+              let decl' = this.declDefault(ctx, decl)
+              decl' 
+          else
+              let pChildren =
+                List.map (fun (childDecl: Decl) -> this.decl(childCtx, childDecl)) decl.children
+                |> List.collect id
+              match pChildren with
+              | [] -> []
+              | _ (* children preserved *) ->
+                  let fDecl = decl.filterChildren(fun x -> List.contains x pChildren)
+                  fDecl
+          
+              
+      override this.prog(p: Program) =
+          let p' = this.progDefault(p)
+          p'
+  
   /// Import joint, old, new in combine.
   type ImportInCombine() =
       inherit Traverser.Identity()
@@ -245,12 +274,6 @@ module Analysis =
                  {prog with decls = l @ [Module(moduleName, [], emptyMeta)]}
              | _ -> prog
     
-     type Filter(declFilter: Decl -> bool) =
-        inherit Traverser.Identity()
-        member this.declFilter = declFilter
-        override this.prog(prog: Program) =
-             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls; meta = prog.meta}
-    
     // MapBuiltinTypes.dfy, RelateBuiltinTypes.dfy
     type GenerateTranslationCode() =
         inherit Traverser.Identity()
@@ -288,4 +311,3 @@ module Analysis =
             oneRest this.passes prog
 
     
-    let mkFilter(only: string -> bool) = Filter(fun (d: Decl) -> only d.name)

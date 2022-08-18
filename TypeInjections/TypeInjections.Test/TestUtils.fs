@@ -30,17 +30,7 @@ module TestUtils =
         )
 
     type DirectoryOutputWriter(outFolderPath: string) =
-        
-        /// prefixes the names of all toplevel modules
-        let prefixTopDecls(prog: YIL.Program)(pref: string): YIL.Program =
-            let prN (n: string) = pref + "." + n
-            let prD (d: YIL.Decl) =
-                match d with
-                | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
-                | d -> d
-            {name=prog.name; decls=List.map prD prog.decls}
-        
-                
+                        
         let writeFile (prog: YIL.Program) (folder:string) (prefix:string)  =
             let addSuffix (path: string) (ending: string): string =
                 let endPos = path.IndexOf(".dfy")
@@ -62,7 +52,7 @@ module TestUtils =
                 0 |> ignore
             else
                 
-                let outputProg = {YIL.name = getName mods.Head; YIL.decls = prog.decls}
+                let outputProg = {YIL.name = getName mods.Head; YIL.decls = prog.decls; YIL.meta = YIL.emptyMeta}
                 let endFileName = (addSuffix outputProg.name prefix)
                 let s = YIL.printer().prog(outputProg, YIL.Context(outputProg))
                 let filePath = Path.Combine(folder, endFileName)
@@ -81,7 +71,7 @@ module TestUtils =
                            
     let typeCartAPI (argv: string array) =
         
-        Utils.log "***** Entering Tester.fs"
+        Utils.log "***** Entering typecartAPI"
         
         if argv.Length < 3 then
             failwith "usage: program OLD NEW OUTPUTFOLDER"
