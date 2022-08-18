@@ -7,7 +7,7 @@ open YIL
 
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =
-    let rb = Path ["Combine"; "RelateBuiltinTypes"]
+    let rb = Path ["Translations"; "RelateBuiltinTypes"]
     let rbRec = StaticReceiver {path=rb; tpargs=[]}
     /// given relation t on o*n, the sequences e: seq<n> and f:seq<n> are related
     /// if they have the same length and are related element-wise
@@ -34,17 +34,18 @@ module Translation =
   
   /// translates a program, encapsulates global data/state for use during translation
   type Translator(ctx: Context, declsD: Diff.DeclList, jointDecls: Path list) =    
-    /// old, new, and combine path for a path
+    /// old, new, and translations path for a path
     // This is the only place besides functionNames(s) below that uses the literal prefix strings.
     let rec path (p: Path) : Path * Path * Path =
         let prefixRoot (p: Path) (s: string) =
             Path(s :: p.names.Head :: p.names.Tail)
         // joint decls are the same in old and new version
-        // the combine declaration is still generated because e.g., a joint type can be called with non-joint type parameters
+        // the translation declaration is still generated because e.g.,
+        // a joint type can be called with non-joint type parameters
         if List.exists (fun (j:Path) -> j.isAncestorOf p) jointDecls then
-           (prefixRoot p "Joint", prefixRoot p "Joint", prefixRoot p "Combine")
+           (prefixRoot p "Joint", prefixRoot p "Joint", prefixRoot p "Translations")
         else
-           (prefixRoot p "Old", prefixRoot p "New", prefixRoot p "Combine")
+           (prefixRoot p "Old", prefixRoot p "New", prefixRoot p "Translations")
 
     /// s ---> s_old, s_new, s
     // This is the only place that uses the literal names.
@@ -531,13 +532,13 @@ module Translation =
   /// Joint.X ---> Old.X
   ///  |            |
   ///  V            V
-  /// New.X  ---> Combine.X
+  /// New.X  ---> Translations.X
   /// where X is the name of a module in the original program.
   /// Modules Joint.X are shared among old and new program. Modules Old.X and New.X occur
   /// in only one of the two (add or delete) or both (update).
   /// This method
   /// - computes the set of declarations in the Joint part
-  /// - generates the Combine part.
+  /// - generates the Translations part.
   /// A subsequent step is expected to copy the old and new program and prefix the names in all toplevel
   /// declarations with either "Joint." or "New.", resp. "Old.".
   let translateModule(ctx: Context,  m: Decl, pD: Diff.Decl)  =

@@ -77,8 +77,8 @@ module Analysis =
           let p' = this.progDefault(p)
           p'
   
-  /// Import joint, old, new in combine.
-  type ImportInCombine() =
+  /// Import joint, old, new in translations.
+  type ImportInTranslationsModule() =
       inherit Traverser.Identity()
       
       override this.decl(ctx: Context, decl: Decl) =
@@ -167,11 +167,11 @@ module Analysis =
         member this.consumeModulePath(p: Path, modulePath: Path) : Path =
             match p, modulePath with
             // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
-            // We don't do the same for combine, since it is produced from scratch and the fully-qualified
-            // names should include "Combine.".
+            // We don't do the same for translations module, since it is produced from scratch and the fully-qualified
+            // names should include "Translations.".
             // Handle spceical case first: when both paths are in the same module, then we elide both.
             | Path ("Joint" :: t1), Path ("Joint" :: t2) 
-            | Path ("Combine" :: t1), Path ("Combine" :: t2)
+            | Path ("Translations" :: t1), Path ("Translations" :: t2)
             | Path ("New" :: t1), Path ("New" :: t2)
             | Path ("Old" :: t1), Path ("Old" :: t2) -> this.consumeModulePath(Path t1, Path t2)
             | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))

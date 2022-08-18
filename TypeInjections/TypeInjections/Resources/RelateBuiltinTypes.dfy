@@ -1,4 +1,4 @@
-module Combine.RelateBuiltinTypes {
+module Translations.RelateBuiltinTypes {
 
     function Seq<o,n>(t: (o,n) -> bool, e: seq<o>, f: seq<n>) : (ret : bool)
     ensures (|e| == |f| && (forall i : int :: ((0 <= i < |f| && 0 <= i < |e|) ==> t(e[i],f[i]))))

@@ -194,7 +194,7 @@ module YIL =
     *)
     and Decl =
         (* Include "..." is a preprocessor-like intrinsic in dafny that causes dafny to inline the file specified.
-           We need to include it here essentially because combine.dfy can also use types from joint.dfy. *)
+           We need to include it here essentially because translations.dfy can also use types from joint.dfy. *)
         | Include of p: Path
         (* We do not allow module abstraction, inheritance; modules are just namespaces and are not used as types.
            In other words, children of a module are static and globally visible via their qualified identifier.

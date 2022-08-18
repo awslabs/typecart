@@ -1,4 +1,4 @@
-module Combine.MapBuiltinTypes {
+module Translations.MapBuiltinTypes {
 
     function Seq<o,n>(t: o -> n, e: seq<o>) : (f : seq<n>)
     ensures |e| == |f|
