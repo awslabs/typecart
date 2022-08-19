@@ -10,7 +10,8 @@ open Microsoft.Dafny
 module TestUtils =
     open NUnit.Framework
     open System
-
+    module T = Typecart
+    
     let pwd : string =
         let wd = Environment.CurrentDirectory
 
@@ -82,6 +83,11 @@ module TestUtils =
         let newFolderPath = argvList.Item(1)
         let outFolderPath = argvList.Item(2)
         
+        // is there a typecartignore file?
+        let tcIgnore =
+            if argvList.Length > 3 then Some (argvList.Item(3)) else None
+        
+        
         Directory.CreateDirectory(outFolderPath) |> ignore
         
         // error handling 
@@ -89,53 +95,18 @@ module TestUtils =
             if not (Directory.Exists(a)) then
                 failwith("folder not found:" + a)
                                 
-        let oldParentFolder = DirectoryInfo(oldFolderPath)
-        let newParentFolder = DirectoryInfo(newFolderPath)
+        let oldProj = T.TypecartProject(DirectoryInfo(oldFolderPath), tcIgnore)
+        let newProj = T.TypecartProject(DirectoryInfo(newFolderPath), tcIgnore)
         
         let outputWriter = DirectoryOutputWriter(outFolderPath)
         
-        let difFolder (oldFolder: DirectoryInfo) (newFolder: DirectoryInfo) =
-            // get all files in "new" and "old" folders
-            let oldFiles = oldFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
-            let newFiles = newFolder.EnumerateFiles("*.dfy", SearchOption.TopDirectoryOnly) |> Seq.toList
-            
-            let reporter = Utils.initDafny
-            
-            Utils.logObject "here are oldFiles {0}" oldFiles
-            Utils.logObject "here are newFiles {0}" newFiles
-            
-            let oldDafny = Utils.parseASTs oldFiles "Old" reporter
-            let newDafny = Utils.parseASTs newFiles "New" reporter
-            
-            let newYIL = DafnyToYIL.program newDafny
-            let oldYIL = DafnyToYIL.program oldDafny
-            
-            let typecart = Typecart.typecart(oldYIL, newYIL, Utils.log)
-            
-            typecart.go(outputWriter)
+        T.Typecart(oldProj.toYILProgram("Old", Utils.initDafny),
+                   newProj.toYILProgram("New", Utils.initDafny)).go(outputWriter)
         
-        List.iter2 (fun (x:DirectoryInfo) (y: DirectoryInfo) -> difFolder x y)
-            ((oldParentFolder.GetDirectories("*", SearchOption.AllDirectories)
-              |> Seq.toList) @ [oldParentFolder])
-            ((newParentFolder.GetDirectories("*", SearchOption.AllDirectories)
-              |> Seq.toList) @ [newParentFolder])
         
-        0
-        
-    let public testRunnerGen
-        (directoryName: string)
-        (outputDirectoryName: string)
-        =
-
-        let inputDirectory =
-            Path.Combine([| pwd; directoryName |])
-
-        let inputDirectory1 = Path.Combine([|inputDirectory; "Old"|])
-        let inputDirectory2 = Path.Combine([|inputDirectory; "New"|])
-        
-        let outputDirectory =
-            Path.Combine([| pwd; outputDirectoryName |])
-
-        typeCartAPI [|inputDirectory1; inputDirectory2; outputDirectory|] |> ignore 
-        
-        0 |> ignore
+    let public testRunnerGen (directoryName: string) (outputDirectoryName: string) =
+        let inputDirectory = Path.Combine([| pwd; directoryName |])
+        let inputDirectoryOld = Path.Combine([|inputDirectory; "Old"|])
+        let inputDirectoryNew = Path.Combine([|inputDirectory; "New"|])
+        let outputDirectory = Path.Combine([| pwd; outputDirectoryName |])
+        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|] 
