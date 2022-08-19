@@ -128,8 +128,7 @@ module Typecart =
 
         /// Pipelines for transforming old, new, joint, translations
         let processOld(joint: YIL.Path list): Traverser.Transform list = [
-                Analysis.RecursiveFilterTransform("Old",
-                                                  fun p -> not (List.contains p joint))
+                Analysis.RecursiveFilterTransform(fun p -> not (List.contains p joint))
                 Analysis.PrefixNotFoundImportsWithJoint()
                 Analysis.PrefixTopDecls("Old")
                 Analysis.ImportJointInOldNew()
@@ -137,7 +136,7 @@ module Typecart =
                 Analysis.DeduplicateImportsIncludes()
                 Analysis.CreateEmptyModuleIfNoneExists("Old")]
         let processNew(joint: YIL.Path list): Traverser.Transform list = [
-                Analysis.RecursiveFilterTransform("New", fun p -> not (List.contains p joint))
+                Analysis.RecursiveFilterTransform(fun p -> not (List.contains p joint))
                 Analysis.PrefixNotFoundImportsWithJoint()
                 Analysis.PrefixTopDecls("New")
                 Analysis.ImportJointInOldNew()
@@ -145,7 +144,7 @@ module Typecart =
                 Analysis.DeduplicateImportsIncludes()
                 Analysis.CreateEmptyModuleIfNoneExists("New")]
         let processJoint(joint: YIL.Path list): Traverser.Transform list = [
-                Analysis.RecursiveFilterTransform("Joint", fun p -> List.contains p joint)
+                Analysis.RecursiveFilterTransform(fun p -> List.contains p joint)
                 Analysis.PrefixTopDecls("Joint")
                 Analysis.AnalyzeModuleImports()
                 Analysis.DeduplicateImportsIncludes()

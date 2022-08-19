@@ -49,13 +49,9 @@ module Analysis =
       closure
   
   /// recursively get rid of any path not in list of specified paths, in the AST.
-  type RecursiveFilterTransform(name: string, mustPreserve: Path -> bool) =
+  type RecursiveFilterTransform(mustPreserve: Path -> bool) =
       inherit Traverser.Identity()
-        
-      // debugging
-      member this.name = name
-      member this.mustPreserve = mustPreserve
-      
+
       // internal nodes must be handled separately from leaf nodes.
       override this.decl(ctx: Context, decl: Decl) =
           let childCtx = ctx.enter decl.name

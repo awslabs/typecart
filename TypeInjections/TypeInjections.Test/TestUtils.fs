@@ -46,7 +46,6 @@ module TestUtils =
             
             
             let mods = List.filter (fun (x:YIL.Decl) -> x.meta.position.IsSome) prog.decls
-            let rest = List.filter (fun (x:YIL.Decl) -> x.meta.position.IsNone) prog.decls
             // if YIL.decl is empty, don't write anything
             if mods.Length = 0 then
                 0 |> ignore
@@ -67,7 +66,8 @@ module TestUtils =
             member this.processOld(oldYIL: YIL.Program) = writeOut "old.dfy" "Old" oldYIL 
             member this.processNew(newYIL: YIL.Program) = writeOut "new.dfy" "New" newYIL
             member this.processJoint(jointYIL: YIL.Program) = writeOut "joint.dfy" "Joint" jointYIL 
-            member this.processCombine(combineYIL: YIL.Program) = writeOut "combine.dfy" "Combine" combineYIL  
+            member this.processTranslations(translationsYIL: YIL.Program) =
+                writeOut "translations.dfy" "Combine" translationsYIL  
                            
     let typeCartAPI (argv: string array) =
         
