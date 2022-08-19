@@ -1016,6 +1016,7 @@ module YIL =
                 + "\n"
                 + Option.fold (fun _ e -> this.expr false e methodCtx) "" (Option.map block b)
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
+                let methodCtx = pctx.enterMethod(n, NonStaticMethod IsFunction) // bad, fix later
                 "constructor "
                 + (this.meta a)
                 + if n <> "_ctor" then n else ""
@@ -1023,7 +1024,9 @@ module YIL =
                 + this.inputSpec(ins, pctx)
                 + (this.conditions(false, outs, pctx))
                 + "\n"
-                + Option.fold (fun (s: string) (e: Expr) -> expr false e) "{}" b
+                + match b with
+                  | Some e -> this.expr false e methodCtx
+                  | None -> "{}"
             | Import importT -> importT.ToString()
             | Export exportT -> exportT.ToString()
             | DUnimplemented -> UNIMPLEMENTED
@@ -1272,7 +1275,9 @@ module YIL =
                     + (Option.defaultValue "" (Option.map (fun x -> this.update x pctx) uO))
 
                 listToString (List.map doOne ds, ", ")
-            | EUpdate (ns, u) -> listToString (ns, ",") + (this.update u pctx)
+            | EUpdate (ns, u) ->
+                let lhsExprs = List.map expr ns
+                listToString (lhsExprs, ",") + (this.update u pctx)
             | EDeclChoice (ld, e) ->
                 "var "
                 + (this.localDecl ld)
