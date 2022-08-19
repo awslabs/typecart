@@ -1016,7 +1016,6 @@ module YIL =
                 + "\n"
                 + Option.fold (fun _ e -> this.expr false e methodCtx) "" (Option.map block b)
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
-                let methodCtx = pctx.enterMethod(n, NonStaticMethod IsFunction) // bad, fix later
                 "constructor "
                 + (this.meta a)
                 + if n <> "_ctor" then n else ""
@@ -1025,7 +1024,7 @@ module YIL =
                 + (this.conditions(false, outs, pctx))
                 + "\n"
                 + match b with
-                  | Some e -> this.expr false e methodCtx
+                  | Some e -> expr false e
                   | None -> "{}"
             | Import importT -> importT.ToString()
             | Export exportT -> exportT.ToString()
@@ -1072,8 +1071,9 @@ module YIL =
 
         member this.noPrintSep(e: Expr) =
             match e with
-            | EIf (_, _, None) -> true // If-stmt without then-block
-            | EFor _ -> true // no trailing separator after for body-block
+            | EIf _  // If-stmt without then-block
+            | EFor _  // no trailing separator after for body-block
+            | EWhile _ -> true
             | _ -> false
         
         member this.expr(isPattern: bool)(e: Expr)(pctx: PrintingContext) =
@@ -1083,12 +1083,21 @@ module YIL =
             let exprsNoBr p es sep = this.exprsNoBr(p)(es)(sep)(pctx)
             
             // if statements without then-blocks cannot have ";" after them. Afford special treatment for them.
-            // The last statement is the return value in functions, so we do not prefix with ";".
+            // The last statement is the return value in functions, so we do not prefix with ";" except in certain
+            // cases like EAssert, EAssume.
             // To efficiently handle the last statement in a singly linked list, we first reverse the list
             // match on the last which is now the first, and then reverse the list back into the original order.
             let exprsNoBrBlock p es sep =
                 let aux revEs =
                     match revEs with
+                    | EAssert _ :: _ 
+                    | EAssume _ :: _ 
+                    | EBreak _ :: _
+                    | EUpdate _ :: _ ->
+                        List.map (fun e ->
+                            if this.noPrintSep(e) then
+                                (this.expr p e pctx)
+                            else (this.expr p e pctx) + ";") revEs
                     | e :: t ->
                         let ps =
                             if pctx.inForLoopBody() then
@@ -1117,7 +1126,7 @@ module YIL =
                 let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
                 nF
             | EThis -> "this"
-            | ENew (ct, _) -> "new " + this.classType (ct)
+            | ENew (ct, _) -> "new " + this.classType (ct) + "()"
             | ENull _ -> "null"
             | EMemberRef (r, m, _) -> (receiver r) + m.name
             | EBool (v) -> match v with true -> "true" | false -> "false"
@@ -1140,7 +1149,7 @@ module YIL =
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
-            | ESet (_, es) -> "set" + (exprs es)
+            | ESet (_, es) -> "{" + (exprs es) + "}"
             | ESetComp (lds, predicate) ->
                 let ldsStr = List.map this.localDecl lds |> String.concat ", "
                 "set (" + ldsStr + ") | " + (expr predicate)
@@ -1215,7 +1224,7 @@ module YIL =
                     match pctx.inMethod() with
                     | Some (_, methodType) ->
                         match methodType.map() with
-                        | IsMethod -> false
+                        | IsMethod | IsLemma -> false
                         | _ -> true 
                     | _ -> true
                 let elsePart =

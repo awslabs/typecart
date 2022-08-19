@@ -52,8 +52,10 @@ module Translation =
     and name (s: string) = s+"_O", s+"_N", s
     
     // Function name must be distinct from lemma names. So we prefix all function names with "T_".
-    and functionName(s: string) = "T_" + s
+    and functionName(s: string) = "TF_" + s
 
+    and lemmaName(s: string) = "TL_" + s
+    
     /// a --->  a_old, a_new, a: a_old * a_new -> bool
     and typearg (a: TypeArg) : TypeArg * TypeArg * LocalDecl =
         let v = snd a
@@ -223,7 +225,7 @@ module Translation =
             let fieldsRelated = tT (EMemberRef(recO, pO, []), EMemberRef(recN, pN, []))
             [ Method(
                   NonStaticMethod IsLemma,
-                  pT.name,
+                  lemmaName pT.name,
                   [],
                   InputSpec([], []),
                   OutputSpec([], [ fieldsRelated ]),
