@@ -1018,7 +1018,7 @@ module YIL =
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
-                + n
+                + if n <> "_ctor" then n else ""
                 + (this.tpvars false tpvs)
                 + this.inputSpec(ins, pctx)
                 + (this.conditions(false, outs, pctx))

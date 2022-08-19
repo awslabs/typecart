@@ -175,7 +175,7 @@ module Typecart =
             let oldDecls = oldYIL.decls
             let newDecls = newYIL.decls
             
-            // pair up every toplevel module of the sane name, in Old / New AST. produces list of
+            // pair up every toplevel module of the same name, in Old / New AST. produces list of
             // pairs (oldModule, newModule).
             // this is implemented a nested iteration. For larger ASTs, we may want to speed
             // up by using a set / dict lookup.
