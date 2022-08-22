@@ -4,15 +4,15 @@
 namespace TypeInjections.Test
 
 open System.IO
-open System.Reflection
+open TypeInjections
+open Microsoft.Dafny
 
 module TestUtils =
     open NUnit.Framework
     open System
-
-    type TestFormat = string -> string -> unit
-
-    let pwd (testModule: string) : string =
+    module T = Typecart
+    
+    let pwd : string =
         let wd = Environment.CurrentDirectory
 
         let pd =
@@ -27,97 +27,86 @@ module TestUtils =
         Path.Combine(
             [| pd
                "Resources"
-              // testModule
                TestContext.CurrentContext.Test.Name |]
         )
 
-    let compare (actual: string) (expected: string) =
-        if actual.Equals expected then
-            ()
-        else
-            Console.WriteLine("Expected")
-            Console.WriteLine(expected)
-            Console.WriteLine("Actual")
-            Console.WriteLine(actual)
-            Assert.Fail()
+    type DirectoryOutputWriter(outFolderPath: string) =
+                        
+        let writeFile (prog: YIL.Program) (folder:string) (prefix:string)  =
+            let addSuffix (path: string) (ending: string): string =
+                let endPos = path.IndexOf(".dfy")
+                let newName = path.Insert( endPos, ("_" + ending ))
+                newName.ToLower()
+            let getName (x:YIL.Decl) =
+                if x.meta.position.IsNone then
+                    match x with
+                        | YIL.Module (name, _, _) -> name + ".dfy"
+                        | _ -> ".dfy"
+                else
+                    x.meta.position.Value.filename
             
-    let fileNameFromPath (path : string) =
-        let len = path.Length - 1
-        let mutable i = len 
-        while path[i] <> '/' do
-            i <- i - 1
-        
-        path[i..]
-        
-
-    let fileCompare (actualFile: string) (expectedFile: string) =
-        
-        let expectedName = fileNameFromPath expectedFile
-        let actualName = fileNameFromPath actualFile
-        
-        compare expectedName actualName
-        
-        let expected = File.ReadAllText(actualFile)
-        let actual = File.ReadAllText(expectedFile)
-
-        compare actual expected
-        
-    let folderCompare(actualFolder: string) (expectedFolder: string) =
-        
-        
-        // checking subfolders
-        let actualSubs = DirectoryInfo(actualFolder).EnumerateDirectories("*", SearchOption.AllDirectories)
-        let actualSubsName = Collections.Generic.List(List.map (fun (x: DirectoryInfo) -> x.Name) (actualSubs |> Seq.toList))
-        let aSubs = actualSubsName |> Seq.toList
-        
-        let expectedSubs = DirectoryInfo(expectedFolder).EnumerateDirectories("*", SearchOption.AllDirectories)
-        let expectedSubsName = Collections.Generic.List(List.map (fun (x : DirectoryInfo) -> x.Name) (expectedSubs |> Seq.toList))
-        let eSubs = expectedSubsName |> Seq.toList
-        
-        // check subdirectory and file names
-        if eSubs <> aSubs then
-            Console.WriteLine("directory error")
-            Console.WriteLine("Expected")
-            Console.WriteLine(eSubs)
-            Console.WriteLine("Actual")
-            Console.WriteLine(aSubs)
-            Assert.Fail()
             
-        // get fileInfo dafny files from parent folder and all subdirectories
-        let actualFiles = DirectoryInfo(actualFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
-        let expectedFiles = DirectoryInfo(expectedFolder).EnumerateFiles("*.dfy", SearchOption.AllDirectories)
+            let mods = List.filter (fun (x:YIL.Decl) -> x.meta.position.IsSome) prog.decls
+            // if YIL.decl is empty, don't write anything
+            if mods.Length = 0 then
+                0 |> ignore
+            else
+                
+                let outputProg = {YIL.name = getName mods.Head; YIL.decls = prog.decls; YIL.meta = YIL.emptyMeta}
+                let endFileName = (addSuffix outputProg.name prefix)
+                let s = YIL.printer().prog(outputProg, YIL.Context(outputProg))
+                let filePath = Path.Combine(folder, endFileName)
+                IO.File.WriteAllText(filePath, s)
+    
+        let writeOut fileName prefix (prog:YIL.Program) =
+            let folder = outFolderPath
+            
+            writeFile prog folder prefix
+
+        interface Typecart.TypecartOutput with
+            member this.processOld(oldYIL: YIL.Program) = writeOut "old.dfy" "Old" oldYIL 
+            member this.processNew(newYIL: YIL.Program) = writeOut "new.dfy" "New" newYIL
+            member this.processJoint(jointYIL: YIL.Program) = writeOut "joint.dfy" "Joint" jointYIL 
+            member this.processTranslations(translationsYIL: YIL.Program) =
+                writeOut "translations.dfy" "Combine" translationsYIL  
+                           
+    let typeCartAPI (argv: string array) =
+        
+        Utils.log "***** Entering typecartAPI"
+        
+        if argv.Length < 3 then
+            failwith "usage: program OLD NEW OUTPUTFOLDER"
+        let argvList = argv |> Array.toList
+        
+        // get paths to input and outputs
+        let oldFolderPath = argvList.Item(0)
+        let newFolderPath = argvList.Item(1)
+        let outFolderPath = argvList.Item(2)
+        
+        // is there a typecartignore file?
+        let tcIgnore =
+            if argvList.Length > 3 then Some (argvList.Item(3)) else None
         
         
-        // take sorted list of 'FileInfo' and compare the content of each file with 'fileCompare'
-        List.iter2 (fun (x : FileInfo) (y : FileInfo) -> fileCompare x.FullName y .FullName) (expectedFiles |> Seq.toList) (actualFiles |> Seq.toList)
+        Directory.CreateDirectory(outFolderPath) |> ignore
         
-
-    // Run the tests for generated functions
-    // FilePath is synonym for string list
-    // the test generator expects multiple output and expected files,
-    // but the tool currently generates only one output file
-    let public testRunnerGen
-        (testToRun: TestFormat)
-        (testModule: string)
-        (directoryName: string)
-        (outputDirectoryName: string)
-        (expectedDirectoryName: string)
-        =
-        let pwd = pwd testModule
-
-        let inputDirectory =
-            System.IO.Path.Combine([| pwd; directoryName |])
-
-        let outputDirectory =
-            System.IO.Path.Combine([| pwd; outputDirectoryName |])
-
-        let expectedDirectory =
-            System.IO.Path.Combine([| pwd; expectedDirectoryName |])
-
-        //TypeInjections.Program.foo inputDirectory outputDirectory
-        //TypeInjections.Program.main [|"/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Old"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/New"; "/Volumes/workplace/typecart/TypeInjections/TypeInjections.Test/Resources/IOExamples/Output"|]
-        //|> ignore
+        // error handling 
+        for a in [oldFolderPath;newFolderPath;outFolderPath] do
+            if not (Directory.Exists(a)) then
+                failwith("folder not found:" + a)
+                                
+        let oldProj = T.TypecartProject(DirectoryInfo(oldFolderPath), tcIgnore)
+        let newProj = T.TypecartProject(DirectoryInfo(newFolderPath), tcIgnore)
         
-        testToRun outputDirectory expectedDirectory
-
-
+        let outputWriter = DirectoryOutputWriter(outFolderPath)
+        
+        T.Typecart(oldProj.toYILProgram("Old", Utils.initDafny),
+                   newProj.toYILProgram("New", Utils.initDafny)).go(outputWriter)
+        
+        
+    let public testRunnerGen (directoryName: string) (outputDirectoryName: string) =
+        let inputDirectory = Path.Combine([| pwd; directoryName |])
+        let inputDirectoryOld = Path.Combine([|inputDirectory; "Old"|])
+        let inputDirectoryNew = Path.Combine([|inputDirectory; "New"|])
+        let outputDirectory = Path.Combine([| pwd; outputDirectoryName |])
+        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|] 

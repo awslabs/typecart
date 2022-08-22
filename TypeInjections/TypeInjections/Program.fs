@@ -15,32 +15,30 @@ module Program =
         // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
         if argv.Length < 3 then
-            failwith "usage: program OLD NEW OUTPUTFOLDER"
+            failwith "usage: program OLD[FILE|FOLDER] NEW[FILE|FOLDER] OUTPUTFOLDER"
 
         let argvList = argv |> Array.toList
-        let oldFile = argvList.Item(0)
-        let newFile = argvList.Item(1)
+        let oldPath = argvList.Item(0)
+        let newPath = argvList.Item(1)
         let outFolder = argvList.Item(2)
-
-        // make sure all input files exist
-        for a in [oldFile;newFile] do
-            if not (System.IO.File.Exists(a)) then
-                failwith ("file not found: " + a)
+        
+        // path to the file that specifies filenames to ignore when processing change.
+        let ignorePatternsFile =
+            if List.length argvList = 4 then
+                Some (argvList.Item(3))
+            else None
+        
         
         //initialise Dafny
         let reporter = Utils.initDafny
 
         // parse input files into Dafny programs
         Utils.log "***** calling Dafny to parse and type-check old and new file"
-        let oldDafny = Utils.parseAST oldFile "Old" reporter
-        let newDafny = Utils.parseAST newFile "New" reporter
-
-        Utils.log "***** converting to YIL AST"
-        Utils.log ("***** ... the old one ")
-        let oldYIL = DafnyToYIL.program oldDafny
-        Utils.log ("***** ... the new one ")
-        let newYIL = DafnyToYIL.program newDafny
+        let oldProject = Typecart.TypecartProject(oldPath, ignorePatternsFile)
+        let newProject = Typecart.TypecartProject(newPath, ignorePatternsFile)
         
-        Typecart.typecart(oldYIL, newYIL, Utils.log).go(Typecart.DefaultTypecartOutput(outFolder))
+        Utils.log "***** calling typeCart API"
+        Typecart.typecart(oldProject.toYILProgram("Old", reporter), newProject.toYILProgram("New", reporter), Utils.log)
+            .go(Typecart.DefaultTypecartOutput(outFolder))
         0
  

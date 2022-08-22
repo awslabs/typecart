@@ -1,5 +1,7 @@
 namespace TypeInjections
 
+open System
+open System.IO
 open TypeInjections.YIL
 
 module Analysis =
@@ -45,9 +47,34 @@ module Analysis =
              ) ds
       List.iter add start
       closure
- 
-  /// Import joint, old, new in combine.
-  type ImportInCombine() =
+  
+  /// recursively get rid of any path not in list of specified paths, in the AST.
+  type RecursiveFilterTransform(mustPreserve: Path -> bool) =
+      inherit Traverser.Identity()
+
+      // internal nodes must be handled separately from leaf nodes.
+      override this.decl(ctx: Context, decl: Decl) =
+          let childCtx = ctx.enter decl.name
+          if mustPreserve(ctx.currentDecl.child(decl.name)) then
+              let decl' = this.declDefault(ctx, decl)
+              decl' 
+          else
+              let pChildren =
+                List.map (fun (childDecl: Decl) -> this.decl(childCtx, childDecl)) decl.children
+                |> List.collect id
+              match pChildren with
+              | [] -> []
+              | _ (* children preserved *) ->
+                  let fDecl = decl.filterChildren(fun x -> List.contains x pChildren)
+                  fDecl
+          
+              
+      override this.prog(p: Program) =
+          let p' = this.progDefault(p)
+          p'
+  
+  /// Import joint, old, new in translations.
+  type ImportInTranslationsModule() =
       inherit Traverser.Identity()
       
       override this.decl(ctx: Context, decl: Decl) =
@@ -111,7 +138,8 @@ module Analysis =
                   | _ -> ctx) (Context(prog)) decls
           let dsT = List.collect (fun (d: Decl) -> this.decl (ctx, d)) prog.decls
           { name = prog.name
-            decls = dsT }
+            decls = dsT
+            meta = prog.meta }
 
   /// Prefixes the names of all toplevel modules
   type PrefixTopDecls(pref: string) =
@@ -124,7 +152,7 @@ module Analysis =
             match d with
             | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
             | d -> d
-        {name=prog.name; decls=List.map prD prog.decls}
+        { name=prog.name; decls=List.map prD prog.decls; meta = prog.meta }
   
   /// Resolve module imports tagged along expressions and declarations.
   /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
@@ -135,11 +163,11 @@ module Analysis =
         member this.consumeModulePath(p: Path, modulePath: Path) : Path =
             match p, modulePath with
             // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
-            // We don't do the same for combine, since it is produced from scratch and the fully-qualified
-            // names should include "Combine.".
+            // We don't do the same for translations module, since it is produced from scratch and the fully-qualified
+            // names should include "Translations.".
             // Handle spceical case first: when both paths are in the same module, then we elide both.
             | Path ("Joint" :: t1), Path ("Joint" :: t2) 
-            | Path ("Combine" :: t1), Path ("Combine" :: t2)
+            | Path ("Translations" :: t1), Path ("Translations" :: t2)
             | Path ("New" :: t1), Path ("New" :: t2)
             | Path ("Old" :: t1), Path ("Old" :: t2) -> this.consumeModulePath(Path t1, Path t2)
             | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))
@@ -242,30 +270,31 @@ module Analysis =
                  {prog with decls = l @ [Module(moduleName, [], emptyMeta)]}
              | _ -> prog
     
-     type Filter(declFilter: Decl -> bool) =
+    // MapBuiltinTypes.dfy, RelateBuiltinTypes.dfy
+    type GenerateTranslationCode() =
         inherit Traverser.Identity()
-        member this.declFilter = declFilter
-        override this.prog(prog: Program) =
-             {YIL.name = prog.name; YIL.decls = List.filter this.declFilter prog.decls}
 
+        let resourcePath (file: string) : string =
+            let wd = Environment.CurrentDirectory
+            let pd =
+                Directory
+                    .GetParent(
+                        wd
+                    )
+                    .Parent
+                    .Parent
+                    .FullName
+            Path.Combine(
+                [| pd
+                   "Resources"
+                   file |])
 
-    type NormalizeGhostMethodWithEmptyBody() =
-        inherit Traverser.Identity()
+        let relateBuiltinTypes = File.ReadAllLines(resourcePath "RelateBuiltinTypes.dfy") |> String.concat "\n" 
+        let mapBuiltinTypes = File.ReadAllLines(resourcePath "MapBuiltinTypes.dfy") |> String.concat "\n"
         
-        override this.decl(ctx: Context, decl: Decl) =
-            match decl with
-            | Method(methodType, name, tpvars, is, os, body, g, isStatic, meta) ->
-                match methodType.map(), body with
-                | IsFunction, None
-                | IsPredicate, None
-                | IsLemma, None
-                | IsFunction, Some (EBlock [])
-                | IsPredicate, Some (EBlock [])
-                | IsLemma, Some (EBlock [])
-                    ->
-                        [ Method(methodType, name, tpvars, is, os, None, g, isStatic, meta)  ]
-                | _ -> this.declDefault(ctx, decl)
-            | _ -> this.declDefault(ctx, decl)
+        override this.prog(prog: Program) =
+            {prog with meta = {prog.meta with prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes}}
+            
     
     type Pipeline(passes : Traverser.Transform list) =
         member this.passes = passes
@@ -278,4 +307,3 @@ module Analysis =
             oneRest this.passes prog
 
     
-    let mkFilter(only: string -> bool) = Filter(fun (d: Decl) -> only d.name)

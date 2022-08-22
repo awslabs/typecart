@@ -76,7 +76,7 @@ module YIL =
     // meta-information
     [<CustomEquality;NoComparison>]
     type Meta =
-        { comment: string option; position: Position option }
+        { comment: string option; position: Position option; prelude: string }
         override this.GetHashCode() = 0
         // we make all Meta objects equal so that they are ignored during diffing
         override this.Equals(that: Object) =
@@ -93,7 +93,7 @@ module YIL =
             $"{this.filename}@{this.line.ToString()}:{this.col.ToString()}"
 
     // ***** auxiliary methods
-    let emptyMeta = { comment = None; position = None }
+    let emptyMeta = { comment = None; position = None; prelude = "" }
 
     /// name of nonymous variables
     let anonymous = "_"
@@ -185,7 +185,7 @@ module YIL =
        - We way want to add information here later.
        - It is convenient to have a type of programs and not just a constructor.
     *)
-    type Program = { name: string; decls: Decl list }
+    type Program = { name: string; decls: Decl list; meta: Meta }
 
     (* declarations
        Modules and datatypes are child-bearing, i.e., can contain nested declarations.
@@ -194,7 +194,7 @@ module YIL =
     *)
     and Decl =
         (* Include "..." is a preprocessor-like intrinsic in dafny that causes dafny to inline the file specified.
-           We need to include it here essentially because combine.dfy can also use types from joint.dfy. *)
+           We need to include it here essentially because translations.dfy can also use types from joint.dfy. *)
         | Include of p: Path
         (* We do not allow module abstraction, inheritance; modules are just namespaces and are not used as types.
            In other words, children of a module are static and globally visible via their qualified identifier.
@@ -306,6 +306,13 @@ module YIL =
             | Module (_, ds, _) -> ds
             | Datatype (_, _, _, ds, _) -> ds
             | Class (_, _, _, _, ds, _) -> ds
+            | _ -> []
+        member this.filterChildren (mustPreserve: Decl -> bool) =
+            let f ds = List.filter (mustPreserve) ds
+            match this with
+            | Module (x, ds, y) -> [ Module (x, f ds, y) ]
+            | Datatype (a, b, c, ds, d) -> [ Datatype (a, b, c, ds, d) ]
+            | Class (a, b, c, d, ds, e) -> [ Class (a, b, c, d, ds, e) ]
             | _ -> []
     and TypeArg = string * (bool option)  // true/false for co/contravariant
     (* types
@@ -537,6 +544,7 @@ module YIL =
         | EPrint of exprs: Expr list
         | EAssert of Expr
         | EAssume of Expr
+        | EReveal of Expr list // dafny `reveal ... ;` statement
         | ECommented of string * Expr
         // temporary dummy for missing cases
         | EUnimplemented
@@ -703,6 +711,7 @@ module YIL =
             let selectors = List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
             let testers = List.map (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name, TBool, false)) cs
             List.map mkField (List.append (List.distinct selectors) testers)
+        | Module(_, decls, _) -> List.collect implicitChildren decls
         | _ -> []
 
     (* retrieves a declaration in a program by traversing into children, e.g.,
@@ -726,7 +735,7 @@ module YIL =
 
                 match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
                 | Some (d) -> d
-                | None -> error $"{path} not valid in {prog.name}"
+                | None -> error $"Path [{path}] not valid in {prog.name}"
     (* as above, but returns a constructor *)
     let lookupConstructor (prog: Program, path: Path) : DatatypeConstructor =
         match lookupByPath (prog, path.parent) with
@@ -882,7 +891,29 @@ module YIL =
             if braced then " {" + s + "\n}\n" else s
         let indentedBraced(s: string) = indented(s,true)
         
-        member this.prog(p: Program, pctx: PrintingContext) = this.declsGeneral(p.decls, pctx, false)
+        member this.prog(p: Program, pctx: PrintingContext) =
+            // Print out includes first because Dafny enforces this.
+            // For future work, consider making includes meta-information instead of
+            // AST information, as this along with the design of Dafny includes as a
+            // preprocessor-level syntax construct.
+            
+            let iPath (p: Path) =
+                let toSysPath (Path plist) =
+                    String.concat "/" plist                
+                "include " + "\"" + toSysPath(p) + "\""
+            
+            let includes =
+                List.collect (function | Include p -> [iPath p] | _ -> []) p.decls
+                |> String.concat "\n"
+                
+            includes
+            + "\n"
+            + if not(p.meta.prelude.Equals("")) then
+                "/***** TYPECART PRELUDE START *****/\n"
+                + p.meta.prelude
+                + "\n/***** TYPECART PRELUDE END *****/"
+              else "\n"
+            + this.declsGeneral(p.decls, pctx, false)
 
         member this.tpvar(inDecl: bool) (a: TypeArg) =
             // Only print out variance type info for declaration-level printing.
@@ -917,17 +948,14 @@ module YIL =
             match m with
             | NonStaticMethod mp -> mp.ToString()
             | StaticMethod mp -> "static " + mp.ToString()
-        
+                
         member this.decl(d: Decl, pctx: PrintingContext) =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""
             let decls d = this.decls(d, pctx)
             let expr (f: bool) (e: Expr) : string = this.expr(f)(e)(pctx)
             // comm +
             match d with
-            | Include p ->
-                let toSysPath (Path plist) =
-                    String.concat "/" plist                
-                "include " + "\"" + toSysPath(p) + "\""
+            | Include p -> "" (* includes are printed out first *)
             | Module (n, ds, a) ->
                 "module "
                 + (this.meta a)
@@ -990,12 +1018,14 @@ module YIL =
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
-                + n
+                + if n <> "_ctor" then n else ""
                 + (this.tpvars false tpvs)
                 + this.inputSpec(ins, pctx)
                 + (this.conditions(false, outs, pctx))
                 + "\n"
-                + Option.fold (fun (s: string) (e: Expr) -> expr false e) "{}" b
+                + match b with
+                  | Some e -> expr false e
+                  | None -> "{}"
             | Import importT -> importT.ToString()
             | Export exportT -> exportT.ToString()
             | DUnimplemented -> UNIMPLEMENTED
@@ -1041,8 +1071,9 @@ module YIL =
 
         member this.noPrintSep(e: Expr) =
             match e with
-            | EIf (_, _, None) -> true // If-stmt without then-block
-            | EFor _ -> true // no trailing separator after for body-block
+            | EIf _  // If-stmt without then-block
+            | EFor _  // no trailing separator after for body-block
+            | EWhile _ -> true
             | _ -> false
         
         member this.expr(isPattern: bool)(e: Expr)(pctx: PrintingContext) =
@@ -1052,12 +1083,21 @@ module YIL =
             let exprsNoBr p es sep = this.exprsNoBr(p)(es)(sep)(pctx)
             
             // if statements without then-blocks cannot have ";" after them. Afford special treatment for them.
-            // The last statement is the return value in functions, so we do not prefix with ";".
+            // The last statement is the return value in functions, so we do not prefix with ";" except in certain
+            // cases like EAssert, EAssume.
             // To efficiently handle the last statement in a singly linked list, we first reverse the list
             // match on the last which is now the first, and then reverse the list back into the original order.
             let exprsNoBrBlock p es sep =
                 let aux revEs =
                     match revEs with
+                    | EAssert _ :: _ 
+                    | EAssume _ :: _ 
+                    | EBreak _ :: _
+                    | EUpdate _ :: _ ->
+                        List.map (fun e ->
+                            if this.noPrintSep(e) then
+                                (this.expr p e pctx)
+                            else (this.expr p e pctx) + ";") revEs
                     | e :: t ->
                         let ps =
                             if pctx.inForLoopBody() then
@@ -1086,7 +1126,7 @@ module YIL =
                 let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
                 nF
             | EThis -> "this"
-            | ENew (ct, _) -> "new " + this.classType (ct)
+            | ENew (ct, _) -> "new " + this.classType (ct) + "()"
             | ENull _ -> "null"
             | EMemberRef (r, m, _) -> (receiver r) + m.name
             | EBool (v) -> match v with true -> "true" | false -> "false"
@@ -1109,7 +1149,7 @@ module YIL =
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
-            | ESet (_, es) -> "set" + (exprs es)
+            | ESet (_, es) -> "{" + (exprs es) + "}"
             | ESetComp (lds, predicate) ->
                 let ldsStr = List.map this.localDecl lds |> String.concat ", "
                 "set (" + ldsStr + ") | " + (expr predicate)
@@ -1184,7 +1224,7 @@ module YIL =
                     match pctx.inMethod() with
                     | Some (_, methodType) ->
                         match methodType.map() with
-                        | IsMethod -> false
+                        | IsMethod | IsLemma -> false
                         | _ -> true 
                     | _ -> true
                 let elsePart =
@@ -1244,7 +1284,9 @@ module YIL =
                     + (Option.defaultValue "" (Option.map (fun x -> this.update x pctx) uO))
 
                 listToString (List.map doOne ds, ", ")
-            | EUpdate (ns, u) -> listToString (ns, ",") + (this.update u pctx)
+            | EUpdate (ns, u) ->
+                let lhsExprs = List.map expr ns
+                listToString (lhsExprs, ",") + (this.update u pctx)
             | EDeclChoice (ld, e) ->
                 "var "
                 + (this.localDecl ld)
@@ -1254,6 +1296,7 @@ module YIL =
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | EAssert e -> "assert " + (expr e) 
             | EAssume e -> "assume " + (expr e) + ";"
+            | EReveal es -> "reveal " + (String.concat ", " (List.map expr es)) + ";"
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 
