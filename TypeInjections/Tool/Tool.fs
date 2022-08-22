@@ -7,12 +7,12 @@ open LibGit2Sharp
 open System.IO
 open System
 open TypeInjections
+open CommandLine
 
 module Tool =
 
     //NOTE 'location' refers to either the github url OR path to repo on local computer
     let checkoutCommit (hash: string) (location: string) (outputPath: string) : unit =
-        Utils.log $"path to repo is {outputPath}"
 
         Repository.Clone(location, outputPath) |> ignore
         // get Repository object of whatever was cloned above
@@ -21,31 +21,32 @@ module Tool =
         let commitRepo = newRepo.Lookup<Commit>(hash)
         Commands.Checkout(newRepo, commitRepo) |> ignore
 
-    // based off command line flags, create and provide path for input/output folders
-    let interpretFlag (argvList: string list) =
-        let flag = argvList.Item(0)
 
-        // -p [inputPath] [inputPath] [outputPath]
-        if flag.Contains("-p") then
-            Console.WriteLine("***** local project comparison")
+    type options =
+        { [<Option('d', "delete", Required = false, HelpText = "use option to remove the New and Old folders")>] delete: bool
+          [<Option('l', "local", Required = false, HelpText = "[old project path] [new project path] [outputPath]")>] local: seq<string>
+          [<Option('g', "git", Required = false, HelpText = "[old commit] [new commit] [outputPath]")>] git: seq<string>
+          [<Option('r', "remote", Required = false, HelpText = "[github repo url] [new commit] [old commit] [outputPath]")>] remote: seq<string>
+          [<Option(HelpText = "Prints all messages to standard output.")>] verbose: bool
+          }
 
-            if argvList.Length <> 4 then
-                failwith "usage: program -p OLD NEW OUTPUTFOLDER"
+    (* command line parser has group arguments into what option it is associated with
+     (local option has a list of arguments that follow it, as does git and remote).
+     If command line option has arguments, we need to organize arguments and run typeCart on them.
+     Run typeCart only once per command line call (we can't run a remote and local project on same command line call)
+     *)
+    let interpretFlags  (local: string list) (git: string list) (remote: string list) : string * string * string =
 
-        // -l [git commit hash] [git commit hash] [OutputPath]
-        elif flag.Contains("-l") then
-            Console.WriteLine("***** git commit")
-
-            if argvList.Length <> 4 then
-                failwith "usage: program -l OLD_COMMIT NEW_COMMIT OUTPUTFOLDER"
-
+        if not local.IsEmpty then
+            Utils.log "***** local project comparison"
+            local.[0], local.[1], local.[2]
+        elif not git.IsEmpty then
+            Utils.log "***** git commit"
             // location of repo
             let location = Directory.GetCurrentDirectory()
 
-            let commit1 = argvList.Item(1)
-            let commit2 = argvList.Item(2)
-
-            let path = argvList.Item(3)
+            let commit1, commit2 = git.[0], git.[1]
+            let path = git.[2]
             let pathOld = $"{path}/Old"
             let pathNew = $"{path}/New"
 
@@ -57,41 +58,54 @@ module Tool =
             checkoutCommit commit1 location pathOld
             checkoutCommit commit2 location pathNew
 
+            pathOld, pathNew, $"{path}/Output"
 
-        // -r [github repo url] [github commit hash] [github commit hash] [OutputPath]
-        elif flag.Contains("-r") then
+        elif not remote.IsEmpty then
+            Utils.log "***** remote github"
 
-            Console.WriteLine("***** remote github")
-
-            if argvList.Length <> 5 then
-                failwith "usage: program -r GITHUB_URL OLD_COMMIT NEW_COMMIT OUTPUTFOLDER"
-
-            let url = argvList.Item(1)
-
-            let commit1 = argvList.Item(2)
-            let commit2 = argvList.Item(3)
-
-            let path = argvList.Item(4)
+            let path = remote.[3]
             let pathOld = $"{path}/Old"
             let pathNew = $"{path}/New"
+            let url = remote.[0]
+            let commit1 = remote.[1]
+            let commit2 = remote.[2]
 
-            // lib2git requires an empty folder to place repos
             for a in [ pathOld; pathNew ] do
                 if Directory.Exists(a) then
                     Directory.Delete(a, true)
 
-            // grab repos of new and old projects
             checkoutCommit commit1 url pathOld
             checkoutCommit commit2 url pathNew
 
-        else
-            failwith "flag not found please try again"
 
+            pathOld, pathNew, $"{path}/Output"
+
+        else
+            failwith "unable to read flags"
+            
+    // organize arguments with the flag they associated with 
+    let run opt =
+        let local = opt.local |> Seq.toList
+        let git = opt.git |> Seq.toList
+        let remote = opt.remote |> Seq.toList
+        // given the list of arguments associated with each flag, run typeCart
+        let oldFolder, newFolder, outputFolder = interpretFlags local git remote
+
+        Utils.log $"old folder is {oldFolder}, new folder is {newFolder}, output folder is {outputFolder}"
 
     [<EntryPoint>]
     let main (argv: string array) =
 
         Utils.log "***** Entering Tool.fs"
-        let argvList = argv |> Array.toList
-        interpretFlag argvList
+
+        let result =
+            Parser.Default.ParseArguments<options>(argv)
+
+        //TODO get a better understanding of result
+        match result with
+        | :? (Parsed<options>) as parsed -> run parsed.Value
+        | :? (NotParsed<'a>) as notParsed -> Utils.log $"Here is non parsed arguments {notParsed}"
+        | _ as unknown -> Utils.log $"don't understand this argument {unknown}"  
+
+
         0
