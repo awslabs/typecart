@@ -355,7 +355,7 @@ module Translation =
                     // changed body: generate empty proof
                     None
 
-            [ Method(NonStaticMethod IsLemma, pT.name, typeParams, inSpec, outSpec, proof, true, true, emptyMeta) ]
+            [ Method(NonStaticMethod IsLemma, lemmaName pT.name, typeParams, inSpec, outSpec, proof, true, true, emptyMeta) ]
            | _ -> failwith("impossible") // Diff.Method must occur with YIL.Method
 
     // joint code for type declarations
