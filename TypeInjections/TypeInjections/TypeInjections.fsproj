@@ -7,26 +7,25 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Utils.fs" />
-        <Compile Include="InjectionIO.fs" />
-        <Compile Include="YIL.fs" />
-        <Compile Include="Traverser.fs" />
-        <Compile Include="Analysis.fs" />
-        <Compile Include="DafnyToYIL.fs" />
-        <Compile Include="Diff.fs" />
-        <Compile Include="Differ.fs" />
-        <Compile Include="Translation.fs" />
-        <Compile Include="Typecart.fs" />
-        <Compile Include="Program.fs" />
+        <Compile Include="Utils.fs"/>
+        <Compile Include="InjectionIO.fs"/>
+        <Compile Include="YIL.fs"/>
+        <Compile Include="Traverser.fs"/>
+        <Compile Include="Analysis.fs"/>
+        <Compile Include="DafnyToYIL.fs"/>
+        <Compile Include="Diff.fs"/>
+        <Compile Include="Differ.fs"/>
+        <Compile Include="Translation.fs"/>
+        <Compile Include="Typecart.fs"/>
+        <Compile Include="Program.fs"/>
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7" />
-        <PackageReference Include="Boogie.Core" Version="2.15.7" />
-        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.7" />
-        <PackageReference Include="CommandLineParser.FSharp" Version="2.9.2-ci-210" />
-        <PackageReference Include="DafnyPipeline" Version="3.6.0.40511" />
-        <PackageReference Include="Microsoft.Z3" Version="4.10.1" />
+        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7"/>
+        <PackageReference Include="Boogie.Core" Version="2.15.7"/>
+        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.7"/>
+        <PackageReference Include="CommandLineParser.FSharp" Version="2.9.2-ci-210"/>
+        <PackageReference Include="DafnyPipeline" Version="3.6.0.40511"/>
     </ItemGroup>
-    
+
 </Project>
