@@ -17,17 +17,15 @@ See [examples and features](docs/ExamplesFeatures.md).
 
 ## Build
 
-typeCart builds on [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/5.0), Dafny 3.6.x and Z3 4.8.5. The Makefile is configured to install Dafny and Z3 locally in the root directory. After installing .NET 6.0, run in the root directory 
-```
-> make
-```
-to build the project. 
+typeCart builds on [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/5.0). To build typeCart, simply invoke `dotnet build` in the following three project folders:
 
-To run tests, use
-```
-> make test
-```
-Other `make` options: `deps, check_format, clean`
+ - `TypeInjections/TypeInjections`: Main typeCart program. To use typeCart, run the compiled program on two dafny files, two directories containing a dafny project each, with an optional argument being a list of regex dictating what files typeCart should ignore in the directory.  The regexes would match on the ignored filenames, and `.` and `/` needn't be escaped.
+ - `TypeInjections/TypeInjections.Test`: Tests for typeCart
+ - `TypeInjections/Tool`: dotnet CLI tool for typeCart.
+
+
+
+
 
 **Contributions are welcomed!** See [CONTRIBUTING](CONTRIBUTING.md) guidelines for more information.
 
