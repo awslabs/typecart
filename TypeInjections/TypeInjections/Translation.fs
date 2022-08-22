@@ -113,16 +113,20 @@ module Translation =
         let ctxI = context.enter(n)
         match dif with
         | Diff.Class(_,_,_,msD) ->
-            let tvs = declO.tpvars
-            let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
-            let xO, xN = localDeclTerm xtO, localDeclTerm xtN
+            // TODO: for now, do not generate any translation for constituent parts of a class, as it is
+            // syntactically broken
+            // let tvs = declO.tpvars
+            // let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
+            // let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             // We use the strictest possible relation here: only identical objects are related.
             // That is very simple and sufficient for now. 
             // A more general treatment might use some kind of observational equality, possibly using coalgebraic methods.
-            let body = EEqual(xO,xN)
-            let relation = Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
-            let memberLemmas = decls ctxI msD
-            relation :: memberLemmas
+            // let body = EEqual(xO,xN)
+            // let relation = Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            // belongs to the implementation part.
+            // let memberLemmas = decls ctxI msD
+            //[ relation ] :: memberLemmas
+            []
         | Diff.ClassConstructor _ ->
             // Depending on how we treat classes, we could generate a lemma here.
             // With the current minimal treatment of classes, nothing is needed.
@@ -235,10 +239,13 @@ module Translation =
                   emptyMeta
               ) ]
            | _ -> failwith("impossible") // Diff.Field must occur with YIL.Field
-        // methods produce lemmas; lemmas produce nothing
-        | Diff.Method(_, tvsD, insD, outsD, bdD) ->
+        // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
+        | Diff.Method(_, tvsD, insD, outsD, bdD)  ->
            match declO,declN with
-           | Method(methodIs = (NonStaticMethod IsLemma)),_ -> []
+           | Method(methodIs = (NonStaticMethod IsLemma)), _
+           | Method(methodIs = (StaticMethod IsLemma)), _
+           | Method(methodIs = (NonStaticMethod IsMethod)), _
+           | Method(methodIs = (StaticMethod IsMethod)), _ -> []
            | Method (_, _, tvs, ins_o, outs, bodyO, _, isStatic, _),
              Method (_, _, _,   ins_n, _, _, _, _, _) ->
             // we ignore bodyO, i.e., ignore changes in the body

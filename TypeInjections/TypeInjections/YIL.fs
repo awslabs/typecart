@@ -441,8 +441,6 @@ module YIL =
         member this.conditions = match this with | OutputSpec (_, cs) -> cs
 
     (* a reference to a module or class with all its type parameters instantiated
-       Since we do not use classes, this barely comes up, but
-       it is how static methods in a module and the class of a new-operator are referenced.
     *)
     and ClassType = { path: Path; tpargs: Type list }
 
