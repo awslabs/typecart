@@ -238,6 +238,13 @@ module DafnyToYIL =
                    Y.OutputSpec([formal m.Result], ensures)
                 else
                    Y.outputType(tp m.ResultType, ensures)
+            let modifies = [] // functions do not modify
+            let reads =
+                List.ofSeq m.Reads
+                |> List.map (fun (e: FrameExpression) -> expr e.E)
+            let decreases =
+                List.ofSeq m.Decreases.Expressions
+                |> List.map expr
             let body =
                 if (m.Body = null) then
                     None
@@ -246,7 +253,7 @@ module DafnyToYIL =
             let mName = m.Name
             let meta = namedMeta m
             let yilMethodType = resolveDafnyMethodType((match m.ByMethodDecl with null -> false | _ -> true), m.FunctionDeclarationKeywords)
-            Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
+            Y.Method(yilMethodType, mName, tpvars, input, output, modifies, reads, decreases, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
@@ -256,6 +263,13 @@ module DafnyToYIL =
             let outs = formal @ m.Outs
             let ens = condition @ m.Ens
             let output = Y.OutputSpec(outs, ens)
+            let modifies =
+                m.Mod.Expressions
+                |> List.ofSeq
+                |> List.map (fun (e: FrameExpression) -> expr e.E)
+            
+            let decreases = m.Decreases.Expressions |> List.ofSeq |> List.map expr
+            
             let body =
                 if (m.Body = null) then
                     None
@@ -270,7 +284,7 @@ module DafnyToYIL =
                 | _, :? Lemma -> Y.NonStaticMethod Y.IsLemma 
                 | true, _ -> Y.StaticMethod Y.IsMethod
                 | false, _ -> Y.NonStaticMethod Y.IsMethod
-            Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, namedMeta m)
+            Y.Method(yilMethodType, mName, tpvars, input, output, modifies, [], decreases, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m

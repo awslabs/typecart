@@ -153,7 +153,7 @@ module Translation =
                     // otherwise, call relation of supertype
                     let _, _, superT = tp super
                     superT (xO, xN)
-            [ Method(NonStaticMethod IsFunction, functionName pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
+            [ Method(NonStaticMethod IsFunction, functionName pT.name, typeParams, inSpec, outSpec, [], [], [], Some body, false, true, context.currentMeta()) ]
             | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
 
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
@@ -211,7 +211,7 @@ module Translation =
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             let tO, tN = localDeclType xtO, localDeclType xtN
             let body = EMatch(ETuple [ xO; xN ], TTuple [ tO; tN ], List.collect mkCase ctrsD.elements, Some dflt)
-            let relation = Method(NonStaticMethod IsFunction,  functionName pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            let relation = Method(NonStaticMethod IsFunction, functionName pT.name, typeParams, inSpec, outSpec, [], [], [], Some body, false, true, emptyMeta)
             let memberLemmas = decls ctxI msD
             relation :: memberLemmas
         // immutable fields with initializer yield a lemma, mutable fields yield nothing
@@ -233,6 +233,7 @@ module Translation =
                   [],
                   InputSpec([], []),
                   OutputSpec([], [ fieldsRelated ]),
+                  [], [], [],
                   None,
                   true,
                   true,
@@ -240,14 +241,14 @@ module Translation =
               ) ]
            | _ -> failwith("impossible") // Diff.Field must occur with YIL.Field
         // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-        | Diff.Method(_, tvsD, insD, outsD, bdD)  ->
+        | Diff.Method(_, tvsD, insD, outsD, modifiesD, readsD, decreasesD, bdD)  ->
            match declO,declN with
            | Method(methodIs = (NonStaticMethod IsLemma)), _
            | Method(methodIs = (StaticMethod IsLemma)), _
            | Method(methodIs = (NonStaticMethod IsMethod)), _
            | Method(methodIs = (StaticMethod IsMethod)), _ -> []
-           | Method (_, _, tvs, ins_o, outs, bodyO, _, isStatic, _),
-             Method (_, _, _,   ins_n, _, _, _, _, _) ->
+           | Method (_, _, tvs, ins_o, outs, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _),
+             Method (_, _, _,   ins_n, _, modifiesN, readsN, decreasesN, _, _, _, _) ->
             // we ignore bodyO, i.e., ignore changes in the body
             if not tvsD.isSame then
                 failwith (unsupported "change in type parameters: " + p.ToString())
@@ -257,6 +258,8 @@ module Translation =
                 failwith (unsupported "update to individual inputs: " + p.ToString())
             if not outsD.decls.isSame then
                 failwith (unsupported "change in outputs: " + p.ToString())
+            // if modifies, reads, decreases clauses change, throw an error
+            // TODO here
             // as "methods", we only consider pure functions here
             // a more general approach might also generate two-state lemmas for method invocations on class instances
             // (i.e., calling corresponding methods with related arguments on related objects yields related values and

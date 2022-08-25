@@ -66,7 +66,8 @@ module Diff =
         | ClassConstructor of Name * TypeArgList * InputSpec * ConditionList * ExprO
         | TypeDef of Name * TypeArgList * Type * ExprO
         | Field of Name * Type * ExprO
-        | Method of Name * TypeArgList * InputSpec * OutputSpec * ExprO
+        | Method of Name * TypeArgList * InputSpec * OutputSpec *
+            modifies: ExprO list * reads: ExprO list * decreases: ExprO list * ExprO
         | Import of importT: YIL.ImportType
         | Export of exportT: YIL.ExportType
         | DUnimplemented
@@ -78,7 +79,7 @@ module Diff =
             | ClassConstructor(n,_,_,_,_) -> n
             | TypeDef(n,_,_,_) -> n
             | Field(n,_,_) -> n
-            | Method(n,_,_,_,_) -> n
+            | Method(n,_,_,_,_,_,_,_) -> n
             // these should be impossible but it's more convenient to make the function total
             | DUnimplemented -> SameName "DUnimplemented"
             | Import _ -> SameName "IMPORT"
@@ -152,7 +153,7 @@ module Diff =
         | YIL.ClassConstructor(_,_,ins,outs,bd,_) -> ClassConstructor(nD,tvsD, idInputSpec ins, idList outs, SameExprO bd)
         | YIL.TypeDef(_,_,sp,pr,_,_) -> TypeDef(nD, tvsD, SameType sp, SameExprO (Option.map snd pr))
         | YIL.Field(_,t,d,_,_,_,_) -> Field(nD, SameType t, SameExprO d)
-        | YIL.Method(_,_,_,ins,outs,bd,_,_,_) -> Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
+        | YIL.Method(_,_,_,ins,outs,mods,reads,decrs,bd,_,_,_) -> Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, mods, reads, decrs, SameExprO bd)
     and idList<'y,'d>(ys: 'y list): List<'y,'d> = UpdateList(List.map Same ys)
     and idConstructor(ctr: YIL.DatatypeConstructor) = DatatypeConstructor(SameName ctr.name, idList ctr.ins)
     and idInputSpec(ins: YIL.InputSpec) = InputSpec(idList ins.decls, idList ins.conditions)

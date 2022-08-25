@@ -108,7 +108,7 @@ module Differ =
         | ClassConstructor (nO, tsO, insO, outsO, bO, _), ClassConstructor (nN, tsN, insN, outsN, bN, _) -> nO = nN
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) ->
             nO = nN && gO = gN && sO = sN && mO = mN
-        | Method (lO, nO, tsO, iO, oO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, bN, gN, sN, _) ->
+        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) ->
             nO = nN && lO = lN && gO = gN && sO = sN
         | _ -> false
 
@@ -129,10 +129,14 @@ module Differ =
                                        conditions(outsO, outsN), exprO (bO, bN)))
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) when gO = gN && sO = sN && mO = mN ->
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
-        | Method (lO, nO, tsO, iO, oO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, bN, gN, sN, _) when
+        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) when
             lO = lN && gO = gN && sO = sN ->
             Some(
-                Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec(iO, iN), outputSpec (oO, oN), exprO (bO, bN))
+                Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec(iO, iN), outputSpec (oO, oN),
+                            List.zip modO modN |> List.map expr,
+                            List.zip readO readN |> List.map expr,
+                            List.zip decrO decrN |> List.map expr,
+                            exprO (bO, bN))
             )
         | TypeDef(nO, tsO, spO, prO, isNO, _), TypeDef(nN, tsN, spN, prN, isNN, _) when
            // changing variable name (fst pr) not supported
@@ -200,7 +204,10 @@ module Differ =
                 Diff.UpdateExpr n
         | Some o, None -> Diff.DeleteExpr o
         | None, Some n -> Diff.AddExpr n
-
+    /// diffs two expressions
+    and expr (old: Expr, nw: Expr) =
+        if old = nw then Diff.SameExprO (Some old)
+        else Diff.UpdateExpr nw
     /// diffs two types, no recursion: types are either equal or not
     and tp (old: Type, nw: Type) =
         if old = nw then

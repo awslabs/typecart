@@ -134,10 +134,18 @@ module YIL =
         member this.reveals = reveals
         override this.ToString() =
             let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> p.name), ", "))
-            "export \n"
-                + "   provides " + (lts this.provides)
-                + "\n"
-                + "   reveals " + (lts this.reveals)
+            match this.provides, this.reveals with
+            | [], [] -> ""
+            | _ -> 
+                "export \n"
+                    + (match this.provides with
+                       | [] -> ""
+                       | _ -> "   provides " + (lts this.provides))
+                    + "\n"
+                    + (match this.reveals with
+                       | [] -> ""
+                       | _ -> "   reveals " + (lts this.reveals))
+                    
         
         
         override this.Equals(that) =
@@ -256,6 +264,9 @@ module YIL =
             tpvars: TypeArg list *
             ins: InputSpec *
             out: OutputSpec *
+            modifies: Expr list *
+            reads: Expr list *
+            decreases: Expr list *
             body: Expr option *
             ghost: bool *
             isStatic: bool *
@@ -269,7 +280,7 @@ module YIL =
             | Module (_, _, meta) -> meta
             | Datatype (_, _, _, _, meta) -> meta
             | Class (_, _, _, _, _, meta) -> meta
-            | Method (_, _, _, _, _, _, _, _, meta) -> meta
+            | Method (_, _, _, _, _, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
             | TypeDef (_, _, _, _, _, meta) -> meta
             | _ -> emptyMeta
@@ -280,7 +291,7 @@ module YIL =
             | Datatype (n, _, _, _, _) -> n
             | Class (n, _, _, _, _, _) -> n
             | ClassConstructor (n, _, _, _, _, _) -> n
-            | Method (_, n, _, _, _, _, _, _, _) -> n
+            | Method (_, n, _, _, _, _, _, _, _, _, _, _) -> n
             | Field (n, _, _, _, _, _, _) -> n
             | TypeDef (n, _, _, _, _, _) -> n
             | Import _ 
@@ -295,7 +306,7 @@ module YIL =
             | Class (_, _, tpvs, _, _, _) -> tpvs
             | TypeDef (_, tpvs, _, _, _, _) -> tpvs
             | Field _ -> []
-            | Method (_, _, tpvs, _, _, _, _, _, _) -> tpvs
+            | Method (_, _, tpvs, _, _, _, _, _, _, _, _, _) -> tpvs
             | ClassConstructor (_, tpvs, _, _, _, _) -> tpvs
             | Import _ -> []
             | Export _ -> []
@@ -995,7 +1006,7 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + this.exprO(false)(eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, b, _, _, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, _, _, _, _) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
@@ -1009,6 +1020,15 @@ module YIL =
                    | IsLemma | IsPredicate | IsPredicateMethod -> ""
                    | IsMethod -> " returns " + outputsS
                    | _ -> ":" + outputsS)
+                + (match modifies with
+                   | [] -> ""
+                   | _ -> "modifies " + (List.map (expr false) modifies |> String.concat "\n") + "\n")
+                + (match reads with
+                   | [] -> ""
+                   | _ -> "reads " + (List.map (expr false) reads |> String.concat "\n") + "\n")
+                + (match decreases with
+                   | [] -> ""
+                   | _ -> "decreases " + (List.map (expr false) decreases |> String.concat "\n") + "\n")
                 + (this.conditions(true, ins.conditions, methodCtx))
                 + (this.conditions(false, outs.conditions, methodCtx))
                 + "\n"
