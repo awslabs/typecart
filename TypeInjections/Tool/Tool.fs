@@ -3,6 +3,7 @@
 
 namespace Tool
 
+open System.Collections.Generic
 open LibGit2Sharp
 open System.IO
 open System
@@ -11,8 +12,8 @@ open CommandLine
 
 module Tool =
 
-
-    [<Verb("local", HelpText = "typecart local [old project path] [new project path] [outputPath]")>]
+    //TODO add 'entryPoint' option to local and git
+    [<Verb("local", IsDefault = true, HelpText = "typecart local [old project path] [new project path] [outputPath]")>]
     type LocalOptions =
         { [<Option('o', "old", Required = false, HelpText = "folder path of old project")>]
           oldFolder: string
@@ -31,21 +32,44 @@ module Tool =
           newHash: string
           [<Option('p', "output", Required = true, HelpText = "path of folder to place typeCart files")>]
           outputFolder: string
-          [<Option('e', "entrypoint", Required = false, HelpText = "specify the filename(s) you want to run typeCart on")>]
-          file: seq<string>
           [<Option('c', "clone", Required = false, HelpText = "input a git URL")>]
           url: string
           [<Option('f', "force", Required = false, HelpText = "overwrite the Old and New folders in the Output folder")>]
           force: bool }
 
+    let checkInputs (paths: string list) =
+        for a in paths do
+            // ensure folders are in computer
+            if Directory.Exists(a) = false then
+                failwith $"{a} is not found"
+            // make sure folder has at least 1 dafny file
+            // (typeCart is already smart enough to ignore non-dafy files)
+            let dafFiles = Directory.GetFiles(a, "*.dfy")
+
+            if dafFiles.Length = 0 then
+                failwith $"{a} does not contain any dafny files"
+
     //NOTE 'location' refers to either the github url OR path to repo on local computer
     let checkoutCommit (hash: string) (location: string) (outputPath: string) : unit =
-        Repository.Clone(location, outputPath) |> ignore
-        // get Repository object of whatever was cloned above
+        //Clone = copies a repo (using a git url or local repo path) to the output directory
+
+        try
+            Repository.Clone(location, outputPath) |> ignore
+        with :? LibGit2SharpException ->
+            if Directory.Exists(location) then
+                failwith "this location does not contain git repository"
+            else
+                failwith "bad URL, private or nonexistent repo"
+        // get Repository object of repository copied to output directory
         let newRepo = new Repository(outputPath)
-        // checkout repo at given commit
+        // try to find commit user inputted in git logs
         let commitRepo = newRepo.Lookup<Commit>(hash)
+        // checkout repo at given commit
         Commands.Checkout(newRepo, commitRepo) |> ignore
+        // ensure checked out repo has dafny file(s)
+        checkInputs [ outputPath ]
+
+
 
     let runGit (git: GitOptions) : unit =
         Utils.log "***** git commit"
@@ -60,7 +84,9 @@ module Tool =
             // empty git url means user wants to run typeCart in current directory
             | 0 -> Directory.GetCurrentDirectory()
             // if there is a repo URL, use it
-            | _ -> Utils.log $"Path to repo is {path}"; git.url
+            | _ ->
+                Utils.log $"Path to repo is {path}"
+                git.url
 
         // lib2git needs an empty folder to store the repo clones
         for a in [ pathOld; pathNew ] do
@@ -76,32 +102,67 @@ module Tool =
         checkoutCommit commit1 location pathOld
         checkoutCommit commit2 location pathNew
 
+        checkInputs [ pathNew; pathOld ]
+
+        Program.main [| pathOld
+                        pathNew
+                        $"{path}/Output" |]
+        |> ignore
+
         Utils.log $"{pathOld}, {pathNew}, {path}/Output"
 
 
     let runLocal (local: LocalOptions) : unit =
 
         Utils.log "***** local project comparison"
+
+        checkInputs [ local.oldFolder
+                      local.newFolder ]
+
+        if Directory.Exists(local.outputFolder) = false then
+            failwith "Could not find directory"
+
         Utils.log $"{local.oldFolder}, {local.newFolder}, {local.outputFolder}"
+
+        Program.main [| local.oldFolder
+                        local.newFolder
+                        local.outputFolder |]
+        |> ignore
+
 
 
     [<EntryPoint>]
     let main (argv: string array) =
 
-        Utils.log "***** Entering Tool.fs"
+        // command line parser stores the error in IEnumerable, need to extract
+        let getError (errors: IEnumerable<Error>) : Error =
+            (errors |> Seq.cast<Error> |> Seq.toList).Head
 
+        (* ParseArguments trys to connect user input to a "verb"
+         after matching to verb, returns a dictionary of option names and values
+         throws error message (and returns NotParsed<obj>) for two reasons:
+         1. unable to identify verb
+         2. if user asks for help, method prints help message (called helperErrorMessage)
+        *)
         let result =
             Parser.Default.ParseArguments<LocalOptions, GitOptions> argv
 
-
+        // if verb found, result = Parsed<obj> = map of options and values
+        // if no verb found or help asked for, result = NotParsed<obj> = list of error messages
         match result with
         | :? (Parsed<obj>) as command ->
             match command.Value with
             | :? LocalOptions as opts -> runLocal opts
             | :? GitOptions as opts -> runGit opts
             | _ -> ()
-
-        | :? (NotParsed<obj>) as value -> ()
+        // nothing to do if result=NotParsed<obj> because helpful error message
+        // was already thrown by ParseArgument
+        | :? (NotParsed<obj>) as errors ->
+            // see what the error is
+            match (getError errors.Errors) with
+            | :? BadVerbSelectedError -> failwith $"bad verb"
+            | :? HelpRequestedError -> failwith "user just wanted help!"
+            | _ -> failwith "unknown error, need to investigate"
         | _ -> ()
 
 

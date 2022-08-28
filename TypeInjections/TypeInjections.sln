@@ -8,8 +8,6 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Tool", "Tool\Tool.fsproj", 
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Tool.Test", "Tool.Test\Tool.Test.fsproj", "{8A4F91FD-2D0E-4505-9C08-0C78BD6C48B3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Template.Test", "Template.Test\Template.Test.fsproj", "{FE767FFA-CFC3-4AE6-A63F-BD4ED3298697}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
