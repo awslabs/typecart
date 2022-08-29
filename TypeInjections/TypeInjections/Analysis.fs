@@ -2,6 +2,7 @@ namespace TypeInjections
 
 open System
 open System.IO
+open System.Reflection
 open TypeInjections.YIL
 
 module Analysis =
@@ -274,23 +275,15 @@ module Analysis =
     type GenerateTranslationCode() =
         inherit Traverser.Identity()
 
-        let resourcePath (file: string) : string =
-            let wd = Environment.CurrentDirectory
-            let pd =
-                Directory
-                    .GetParent(
-                        wd
-                    )
-                    .Parent
-                    .Parent
-                    .FullName
-            Path.Combine(
-                [| pd
-                   "Resources"
-                   file |])
+        let retrieveResource (filename: string) : string =
+            let asmb = Assembly.GetExecutingAssembly();
+            // to check all assembly base names, use asmb.GetManifestResourceNames()
+            let stream = asmb.GetManifestResourceStream($"TypeInjections.Resources.{filename}")
+            let reader = new StreamReader(stream)
+            reader.ReadToEnd()
 
-        let relateBuiltinTypes = File.ReadAllLines(resourcePath "RelateBuiltinTypes.dfy") |> String.concat "\n" 
-        let mapBuiltinTypes = File.ReadAllLines(resourcePath "MapBuiltinTypes.dfy") |> String.concat "\n"
+        let relateBuiltinTypes = retrieveResource "RelateBuiltinTypes.dfy"
+        let mapBuiltinTypes = retrieveResource "MapBuiltinTypes.dfy"
         
         override this.prog(prog: Program) =
             {prog with meta = {prog.meta with prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes}}

@@ -1,5 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <TargetFramework>net6.0</TargetFramework>
@@ -7,6 +6,15 @@
     </PropertyGroup>
 
     <ItemGroup>
+
+        <Content Include="Resources\UsingResources.txt"/>
+        <EmbeddedResource Include="Resources\MapBuiltinTypes.dfy">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Resources\RelateBuiltinTypes.dfy">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </EmbeddedResource>
+        
         <Compile Include="Utils.fs"/>
         <Compile Include="InjectionIO.fs"/>
         <Compile Include="YIL.fs"/>
@@ -19,7 +27,6 @@
         <Compile Include="Typecart.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
-
     <ItemGroup>
         <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7"/>
         <PackageReference Include="Boogie.Core" Version="2.15.7"/>
@@ -27,5 +34,4 @@
         <PackageReference Include="CommandLineParser.FSharp" Version="2.9.2-ci-210"/>
         <PackageReference Include="DafnyPipeline" Version="3.6.0.40511"/>
     </ItemGroup>
-
 </Project>
