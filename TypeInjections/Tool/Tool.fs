@@ -4,6 +4,7 @@
 namespace Tool
 
 open System.Collections.Generic
+open System.Text.RegularExpressions
 open LibGit2Sharp
 open System.IO
 open System
@@ -22,8 +23,10 @@ module Tool =
           newFolder: string
           [<Option('p', "output", Required = false, HelpText = "path of folder to place typeCart files")>]
           outputFolder: string
-          [<Option('f', "file", Required = false, HelpText = "specify filename(s) you want to run typeCart on")>]
-          file: seq<string> }
+          [<Option('i', "ignore", Required = false, HelpText = "specify filename(s) you want to ignore")>]
+          ignore: seq<string>
+          }
+        
 
     [<Verb("git", HelpText = "typecart git [old commit] [new commit] [outputPath]")>]
     type GitOptions =
@@ -36,7 +39,16 @@ module Tool =
           [<Option('c', "clone", Required = false, HelpText = "input a git URL")>]
           url: string
           [<Option('f', "force", Required = false, HelpText = "overwrite the Old and New folders in the Output folder")>]
-          force: bool }
+          force: bool
+          [<Option('i', "ignore", Required = false, HelpText = "specify filename(s) you want to ignore")>]
+          ignore: seq<string>}
+        
+    (* TypecartProject's 2nd argument can be:
+    1. the absolute path to .typecartignore file
+    2. a list of regex values *)
+    let handleIgnore(ignores: seq<string> ) : Regex list =
+        let li = ignores |> Seq.toList
+        List.map (fun (x:string)  -> x |> Regex) li 
 
     let checkInputs (paths: string list) =
         for a in paths do
@@ -44,7 +56,7 @@ module Tool =
             if Directory.Exists(a) = false then
                 failwith $"{a} is not found"
             // make sure folder has at least 1 dafny file
-            // (typeCart is already smart enough to ignore non-dafy files)
+            // (typeCart is already smart enough to ignore non-dafny files)
             let dafFiles = Directory.GetFiles(a, "*.dfy")
 
             if dafFiles.Length = 0 then
@@ -70,7 +82,7 @@ module Tool =
         // ensure checked out repo has dafny file(s)
         checkInputs [ outputPath ]
 
-    let runGit (git: GitOptions) : string * string * string =
+    let runGit (git: GitOptions) : string * string * string * Regex list =
         Utils.log "***** git commit"
 
         let commit1, commit2 = git.oldHash, git.newHash
@@ -104,9 +116,9 @@ module Tool =
         checkInputs [ pathNew; pathOld ]
 
         Utils.log $"{pathOld}, {pathNew}, {path}/Output"
-        pathOld, pathNew, $"{path}/Output"
+        pathOld, pathNew, $"{path}/Output", handleIgnore git.ignore
 
-    let runLocal (local: LocalOptions) : string * string * string =
+    let runLocal (local: LocalOptions) : string * string * string * Regex list =
 
         Utils.log "***** local project comparison"
 
@@ -114,7 +126,7 @@ module Tool =
                       local.newFolder ]
 
         Utils.log $"{local.oldFolder}, {local.newFolder}, {local.outputFolder}"
-        local.oldFolder, local.newFolder, local.outputFolder
+        local.oldFolder, local.newFolder, local.outputFolder, handleIgnore local.ignore
 
 
     [<EntryPoint>]
@@ -137,13 +149,13 @@ module Tool =
         // if no verb found or help asked for, result = NotParsed<obj> = list of error messages
 
         // have runGit or runLocal change value of these variables
-        let pathOld, pathNew, outFolder =
+        let pathOld, pathNew, outFolder, ignores =
             match result with
             | :? (Parsed<obj>) as command ->
                 match command.Value with
                 | :? LocalOptions as opts -> runLocal opts
                 | :? GitOptions as opts -> runGit opts
-                | _ -> "", "", ""
+                | _ -> "", "", "", []
             // nothing to do if result=NotParsed<obj> because helpful error message
             // was already thrown by ParseArgument
             | :? (NotParsed<obj>) as errors ->
@@ -152,12 +164,15 @@ module Tool =
                 | :? BadVerbSelectedError -> failwith $"bad verb"
                 | :? HelpRequestedError -> failwith "user just wanted help!"
                 | _ -> failwith "unknown error, need to investigate"
-            | _ -> "", "", ""
+            | _ -> "", "", "", []
+            
+        
 
         if pathOld.Length > 0 then
             let reporter = Utils.initDafny
-            let oldProject = TypecartProject(pathOld, None)
-            let newProject = TypecartProject(pathNew, None)
+
+            let oldProject = TypecartProject(DirectoryInfo(pathOld), ignores )
+            let newProject = TypecartProject(DirectoryInfo(pathNew), ignores )
 
             typecart(oldProject.toYILProgram ("Old", reporter), newProject.toYILProgram ("New", reporter), Utils.log)
                 .go (DefaultTypecartOutput(outFolder))
