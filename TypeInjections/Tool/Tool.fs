@@ -9,6 +9,7 @@ open System.IO
 open System
 open TypeInjections
 open CommandLine
+open TypeInjections.Typecart
 
 module Tool =
 
@@ -69,9 +70,7 @@ module Tool =
         // ensure checked out repo has dafny file(s)
         checkInputs [ outputPath ]
 
-
-
-    let runGit (git: GitOptions) : unit =
+    let runGit (git: GitOptions) : string * string * string =
         Utils.log "***** git commit"
 
         let commit1, commit2 = git.oldHash, git.newHash
@@ -104,31 +103,18 @@ module Tool =
 
         checkInputs [ pathNew; pathOld ]
 
-        Program.main [| pathOld
-                        pathNew
-                        $"{path}/Output" |]
-        |> ignore
-
         Utils.log $"{pathOld}, {pathNew}, {path}/Output"
+        pathOld, pathNew, $"{path}/Output"
 
-
-    let runLocal (local: LocalOptions) : unit =
+    let runLocal (local: LocalOptions) : string * string * string =
 
         Utils.log "***** local project comparison"
 
         checkInputs [ local.oldFolder
                       local.newFolder ]
 
-        if Directory.Exists(local.outputFolder) = false then
-            failwith "Could not find directory"
-
         Utils.log $"{local.oldFolder}, {local.newFolder}, {local.outputFolder}"
-
-        Program.main [| local.oldFolder
-                        local.newFolder
-                        local.outputFolder |]
-        |> ignore
-
+        local.oldFolder, local.newFolder, local.outputFolder
 
 
     [<EntryPoint>]
@@ -149,21 +135,31 @@ module Tool =
 
         // if verb found, result = Parsed<obj> = map of options and values
         // if no verb found or help asked for, result = NotParsed<obj> = list of error messages
-        match result with
-        | :? (Parsed<obj>) as command ->
-            match command.Value with
-            | :? LocalOptions as opts -> runLocal opts
-            | :? GitOptions as opts -> runGit opts
-            | _ -> ()
-        // nothing to do if result=NotParsed<obj> because helpful error message
-        // was already thrown by ParseArgument
-        | :? (NotParsed<obj>) as errors ->
-            // see what the error is
-            match (getError errors.Errors) with
-            | :? BadVerbSelectedError -> failwith $"bad verb"
-            | :? HelpRequestedError -> failwith "user just wanted help!"
-            | _ -> failwith "unknown error, need to investigate"
-        | _ -> ()
 
+        // have runGit or runLocal change value of these variables
+        let pathOld, pathNew, outFolder =
+            match result with
+            | :? (Parsed<obj>) as command ->
+                match command.Value with
+                | :? LocalOptions as opts -> runLocal opts
+                | :? GitOptions as opts -> runGit opts
+                | _ -> "", "", ""
+            // nothing to do if result=NotParsed<obj> because helpful error message
+            // was already thrown by ParseArgument
+            | :? (NotParsed<obj>) as errors ->
+                // see what the error is
+                match (getError errors.Errors) with
+                | :? BadVerbSelectedError -> failwith $"bad verb"
+                | :? HelpRequestedError -> failwith "user just wanted help!"
+                | _ -> failwith "unknown error, need to investigate"
+            | _ -> "", "", ""
+
+        if pathOld.Length > 0 then
+            let reporter = Utils.initDafny
+            let oldProject = TypecartProject(pathOld, None)
+            let newProject = TypecartProject(pathNew, None)
+
+            typecart(oldProject.toYILProgram ("Old", reporter), newProject.toYILProgram ("New", reporter), Utils.log)
+                .go (DefaultTypecartOutput(outFolder))
 
         0
