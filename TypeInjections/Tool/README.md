@@ -1,10 +1,24 @@
 ## typeCart features
-typeCart offers multiple ways to compare two projects
+typeCart CLI offers two ways to compare projects:
 - projects on local computer:
-    * `$ typecart -p [OldFolderPath] [NewFolderPath] [OutputPath]`
-- git commits on a remote repository:
-    * `$ typecart -r https://gitub.com/[org]/[repo].git [old git commit SHA1] [new git commit SHA1] [OutputPath]`
-- compare git commits on local repostory:
-    * `$ typcart -l [old git commit SHA1] [new git commit SHA1] [OutputPath]`
+  `$ typecart local [--old <path>] [--new <path>] [--print <path>] [--file <names>]`
+    * Required Options
+      * `-o` `--old` Give the absolute path of old project
+      * `-n` `--new` Give the absolute path of new project
+      * `-p` `--print` Tell typeCart which folder to print out generated files
+  * Additional Options
+    * (coming soon) `-e` `--entrypoint` Specify certain file(s) to run typeCart on 
+- git commits in repository: `$ typecart git [--old <commit>]  [--new <commit>] [--print <path>] [--clone <git URL>] [--file <names>]`
+  * Required options 
+    * `-o` `--old` Give the absolute path of old project
+    * `-n` `--new` Give the absolute path of new project
+    * `-p` `--print` Tell typeCart which folder to print out generated files
+  * Additional Options
+    * `-c` `--clone` Provide git URL to checkout commits 
+    * `-e` `--entrypoint` Specify certain file(s) to run typeCart on
 
-Future feature: Allow user to specify `Head` as the new git commit
+External Libraries used in Tool project
+* [CommandLineParser.fsharp](https://github.com/commandlineparser/commandline) Popular .NET command line parsing library
+* [Lib2GitSharp](https://github.com/libgit2/libgit2sharp/wiki) and [Lib2Git Manual](https://libgit2.org/docs/guides/101-samples/) Easy to use .NET wrapper for git commands 
+ 
+
