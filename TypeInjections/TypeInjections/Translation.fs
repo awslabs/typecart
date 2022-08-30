@@ -241,7 +241,7 @@ module Translation =
               ) ]
            | _ -> failwith("impossible") // Diff.Field must occur with YIL.Field
         // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-        | Diff.Method(_, tvsD, insD, outsD, modifiesD, readsD, decreasesD, bdD)  ->
+        | Diff.Method(_, tvsD, insD, outsD, bdD)  ->
            match declO,declN with
            | Method(methodIs = (NonStaticMethod IsLemma)), _
            | Method(methodIs = (StaticMethod IsLemma)), _
@@ -358,7 +358,7 @@ module Translation =
                     // changed body: generate empty proof
                     None
 
-            [ Method(NonStaticMethod IsLemma, lemmaName pT.name, typeParams, inSpec, outSpec, proof, true, true, emptyMeta) ]
+            [ Method(NonStaticMethod IsLemma, lemmaName pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
            | _ -> failwith("impossible") // Diff.Method must occur with YIL.Method
 
     // joint code for type declarations

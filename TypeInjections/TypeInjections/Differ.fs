@@ -129,15 +129,9 @@ module Differ =
                                        conditions(outsO, outsN), exprO (bO, bN)))
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) when gO = gN && sO = sN && mO = mN ->
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
-        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) when
+        | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) when
             lO = lN && gO = gN && sO = sN ->
-            Some(
-                Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec(iO, iN), outputSpec (oO, oN),
-                            List.zip modO modN |> List.map expr,
-                            List.zip readO readN |> List.map expr,
-                            List.zip decrO decrN |> List.map expr,
-                            exprO (bO, bN))
-            )
+            Some(Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec(iO, iN), outputSpec (oO, oN), exprO (bO, bN)))
         | TypeDef(nO, tsO, spO, prO, isNO, _), TypeDef(nN, tsN, spN, prN, isNN, _) when
            // changing variable name (fst pr) not supported
            isNO = isNN && (prO.IsNone && prN.IsNone || (fst prO.Value) = (fst prN.Value)) ->

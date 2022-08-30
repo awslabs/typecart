@@ -1006,7 +1006,7 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + this.exprO(false)(eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, _, _, _, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, _, _) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
