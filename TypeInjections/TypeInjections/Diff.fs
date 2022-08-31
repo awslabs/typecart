@@ -308,10 +308,10 @@ module Diff =
 
         member this.exprO(eO: ExprO) =
             match eO with
-            | SameExprO e -> UNC + (YIL.printer().exprO false (e, "", YIL.emptyPrintingContext))
-            | UpdateExpr e -> UPD + (YIL.printer().expr false e YIL.emptyPrintingContext)
+            | SameExprO e -> UNC + (YIL.printer().exprO (e, "", YIL.emptyPrintingContext))
+            | UpdateExpr e -> UPD + (YIL.printer().expr e YIL.emptyPrintingContext)
             | DeleteExpr _ -> DEL
-            | AddExpr e -> ADD + (YIL.printer().expr false e YIL.emptyPrintingContext)
+            | AddExpr e -> ADD + (YIL.printer().expr e YIL.emptyPrintingContext)
 
         member this.localDecls(lds: LocalDeclList) =
             this.List(lds, P().localDecl, this.localDecl, "(", ", ", ")")

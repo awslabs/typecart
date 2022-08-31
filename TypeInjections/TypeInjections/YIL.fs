@@ -950,7 +950,7 @@ module YIL =
         member this.decls(ds: Decl list, pctx: PrintingContext) =
                 this.declsGeneral(ds, pctx, true) 
         // array dimensions/indices
-        member this.dims(ds: Expr list, pctx: PrintingContext) = "[" + this.exprsNoBr false ds ", " pctx + "]"
+        member this.dims(ds: Expr list, pctx: PrintingContext) = "[" + this.exprsNoBr ds ", " pctx + "]"
         member this.meta(_: Meta) = ""
         
         member this.methodType(m: MethodType) =
@@ -961,10 +961,10 @@ module YIL =
         member this.decl(d: Decl, pctx: PrintingContext) =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""
             let decls d = this.decls(d, pctx)
-            let expr (f: bool) (e: Expr) : string = this.expr(f)(e)(pctx)
+            let expr (e: Expr) : string = this.expr e pctx
             // comm +
             match d with
-            | Include p -> "" (* includes are printed out first *)
+            | Include _ -> "" (* includes are printed out first *)
             | Module (n, ds, a) ->
                 "module "
                 + (this.meta a)
@@ -997,7 +997,7 @@ module YIL =
                 + (this.tpvars true tpvs)
                 + " = "
                 + (match predO with
-                   | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr false p pctx)
+                   | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr p pctx)
                    | None -> this.tp sup)
             | Field (n, t, eO, _, _, _, a) ->
                 "const "
@@ -1005,7 +1005,7 @@ module YIL =
                 + n
                 + ": "
                 + (this.tp t)
-                + this.exprO(false)(eO, " := ", pctx)
+                + this.exprO (eO, " := ", pctx)
             | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, _, _) ->
                 let outputsS =
                     match outs.outputType with
@@ -1022,17 +1022,21 @@ module YIL =
                    | _ -> ":" + outputsS)
                 + (match modifies with
                    | [] -> ""
-                   | _ -> "modifies " + (List.map (expr false) modifies |> String.concat "\n") + "\n")
+                   | _ -> "modifies " + (List.map expr modifies |> String.concat "\n") + "\n")
                 + (match reads with
                    | [] -> ""
-                   | _ -> "reads " + (List.map (expr false) reads |> String.concat "\n") + "\n")
+                   | _ -> "reads " + (List.map expr reads |> String.concat "\n") + "\n")
                 + (match decreases with
                    | [] -> ""
-                   | _ -> "decreases " + (List.map (expr false) decreases |> String.concat "\n") + "\n")
+                   | _ -> "decreases " + (List.map expr decreases |> String.concat "\n") + "\n")
                 + (this.conditions(true, ins.conditions, methodCtx))
                 + (this.conditions(false, outs.conditions, methodCtx))
                 + "\n"
-                + Option.fold (fun _ e -> this.expr false e methodCtx) "" (Option.map block b)
+                + Option.fold (fun _ e ->
+                    match methodType.map() with
+                    | IsLemma
+                    | IsMethod -> this.statement e methodCtx
+                    | _ -> this.expr e methodCtx) "" (Option.map block b)
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
@@ -1042,7 +1046,7 @@ module YIL =
                 + (this.conditions(false, outs, pctx))
                 + "\n"
                 + match b with
-                  | Some e -> expr false e
+                  | Some e -> expr e
                   | None -> "{}"
             | Import importT -> importT.ToString()
             | Export exportT -> exportT.ToString()
@@ -1065,7 +1069,7 @@ module YIL =
 
         member this.condition(require: bool, c: Condition, pctx: PrintingContext) =
             let kw = if require then "requires" else "ensures"
-            kw + " " + this.expr false c pctx
+            kw + " " + (this.expr c pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: PrintingContext) = c.name + (this.localDecls c.ins)
 
@@ -1079,13 +1083,13 @@ module YIL =
 
         member this.tp(t: Type) = t.ToString()
 
-        member this.exprsNoBr(isPattern: bool)(es: Expr list)(sep: string)(pctx: PrintingContext) =
-            listToString (List.map (fun e -> this.expr isPattern e pctx) es, sep)
+        member this.exprsNoBr (es: Expr list)(sep: string)(pctx: PrintingContext) =
+            listToString (List.map (fun e -> this.expr e pctx) es, sep)
 
-        member this.exprs(isPattern: bool)(es: Expr list)(pctx: PrintingContext) = "(" + (this.exprsNoBr isPattern es ", " pctx) + ")"
+        member this.exprs (es: Expr list) (pctx: PrintingContext) = "(" + (this.exprsNoBr es ", " pctx) + ")"
 
-        member this.exprO(isPattern: bool)(eO: Expr option, sep: string, pctx: PrintingContext) =
-            Option.defaultValue ("") (Option.map (fun e -> sep + (this.expr isPattern e pctx)) eO)
+        member this.exprO (eO: Expr option, sep: string, pctx: PrintingContext) : string =
+            Option.defaultValue "" (Option.map (fun e -> sep + (this.expr e pctx)) eO)
 
         member this.noPrintSep(e: Expr) =
             match e with
@@ -1094,45 +1098,106 @@ module YIL =
             | EWhile _ -> true
             | _ -> false
         
-        member this.expr(isPattern: bool)(e: Expr)(pctx: PrintingContext) =
-            let expr e = this.expr(isPattern)(e)(pctx)
-            let exprs es = this.exprs(isPattern)(es)(pctx)
-            let exprO (e, sep) = this.exprO(isPattern)(e, sep, pctx)
-            let exprsNoBr p es sep = this.exprsNoBr(p)(es)(sep)(pctx)
+        member this.statement (e: Expr) (pctx: PrintingContext) =
+            let expr e = this.expr e pctx
+            let exprsNoBr es sep = this.exprsNoBr es sep pctx 
+            match e with
+            | EAssert e -> "assert(" + (expr e) + ");"
+            | EAssume e -> "assume(" + (expr e) + ");"
+            | EBlock es ->
+                let sts = List.map (fun x -> this.statement x pctx) es
+                indentedBraced(String.concat "\n" sts)
+            | EBreak l ->
+                let label =
+                   match l with
+                   | Some l -> sprintf " %s" l
+                   | None -> ""
+                $"break %s{label};"
+            (* CalcStmt *)
+            (* ExpectStmt *)
+            | EQuant(Forall as q, lds, r, b) ->
+                "(forall" + q.ToString()
+                + " "
+                + this.localDeclsBr (lds,false)
+                + " :: "
+                + (match r with
+                   | Some e -> expr e + (if q = Forall then " ==> " else " && ")
+                   | None -> "")
+                + (expr b) + ");"
+            | EIf(c, t, e) ->
+                let elsePart =
+                    match e with
+                    | None -> "" // avoid using exprO which prints out ";".
+                    | Some e -> " else " + this.statement e pctx
+                "if "
+                + "(" + (expr c) + ") "
+                + (this.statement t pctx)
+                + elsePart
+            | EMatch(e, t, cases, dfltO) ->
+                let defCase =
+                    match dfltO with
+                    | None -> []
+                    | Some e -> [{vars = []; pattern = EWildcard; body = e}] // case _ => e
+                let csS =
+                    List.map (fun (c: Case) -> this.case c pctx) (cases @ defCase)
+                "match "
+                + (expr e)
+                + indentedBraced(listToString(csS, "\n"))
+            (* ModifyStmt *)
+            | EPrint es -> "print" + (String.concat ", " (List.map expr es)) + ";"
+            | EReturn es -> "return " + (exprsNoBr es ", ") + ";"
+            | EReveal es ->  "reveal " + (String.concat ", " (List.map expr es)) + ";"
+            (* SkeletonStmt *)
+            | EUpdate (ns, u) ->
+                let lhsExprs = List.map expr ns
+                listToString (lhsExprs, ",") + (this.update u pctx) + ";"
+            (* UpdateFailureStmt *)
+            | EVar n ->
+                let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
+                nF + ";"
+            | EMemberRef (r, m, _) -> this.receiver(r, pctx) + m.name + ";"
+            | EWhile (c, e, l) ->
+                let label =
+                    match l with
+                    | Some l -> sprintf "%s: " l
+                    | None -> ""
+
+                sprintf "%swhile (%s)%s" label (expr c) (expr e)
+            | EFor (index, init, last, up, body) ->
+                let d =
+                    EDecls [ (index, Some(plainUpdate init)) ]
+                let forInitCtx = pctx.enterForLoopInitializer()
+                let forBodyCtx = pctx.enterForLoopBody()
+                "for "
+                + this.expr d forInitCtx
+                + (if up then " to " else " downto ")
+                + (expr last)
+                + " "
+                + this.statement body forBodyCtx
+            | ELet (n, t, d, e) ->
+                "var "
+                + n
+                + ":"
+                + (this.tp t)
+                + ":="
+                + (expr d)
+                + "; "
+                + (this.statement e pctx)
+            | EDeclChoice (ld, e) ->
+                "var "
+                + (this.localDecl ld)
+                + " where "
+                + (expr e)
+            (* YieldStmt *)
+            | _ as b -> failwith "encountered non-statement in statement: " + (b.ToString())
             
-            // if statements without then-blocks cannot have ";" after them. Afford special treatment for them.
-            // The last statement is the return value in functions, so we do not prefix with ";" except in certain
-            // cases like EAssert, EAssume.
-            // To efficiently handle the last statement in a singly linked list, we first reverse the list
-            // match on the last which is now the first, and then reverse the list back into the original order.
-            let exprsNoBrBlock p es sep =
-                let aux revEs =
-                    match revEs with
-                    | EAssert _ :: _ 
-                    | EAssume _ :: _ 
-                    | EBreak _ :: _
-                    | EUpdate _ :: _ ->
-                        List.map (fun e ->
-                            if this.noPrintSep(e) then
-                                (this.expr p e pctx)
-                            else (this.expr p e pctx) + ";") revEs
-                    | e :: t ->
-                        let ps =
-                            if pctx.inForLoopBody() then
-                                match e with
-                                | EReturn _ -> "" // We already print out ";" after an EReturn, printing twice causes dafny to complain.
-                                | _ -> sep
-                            else ""
-                        let pctx = if pctx.inForLoopBody() then pctx.leaveForLoopBody() else pctx
-                        (this.expr p e pctx) + ps ::
-                        (List.map
-                          (fun e ->
-                            if this.noPrintSep(e) then
-                                this.expr p e pctx
-                            else (this.expr p e pctx) + sep) t)
-                    | [] -> []
-                aux (List.rev es) |> List.rev |> String.concat ""
-            
+        
+        member this.expr (e: Expr) (pctx: PrintingContext) : string =
+            let expr e = this.expr e pctx
+            let exprs es = this.exprs es pctx
+            let exprO e sep = this.exprO (e, sep, pctx)
+            let exprsNoBr es sep = this.exprsNoBr es sep pctx
+                        
             let dims ds = this.dims(ds, pctx)
             let receiver r = this.receiver(r, pctx)
             let case c = this.case c pctx
@@ -1151,7 +1216,7 @@ module YIL =
             | EChar (v) -> "'" + v.ToString() + "'"
             | EString (v) -> "\"" + v.ToString() + "\""
             // EToString compile from sequence display expressions of char sequences.
-            | EToString (es) -> "[" + (exprsNoBr false es ", ") + "]"
+            | EToString (es) -> "[" + (exprsNoBr es ", ") + "]"
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToString()
             | EQuant (q, lds, r, b) ->
@@ -1175,19 +1240,19 @@ module YIL =
             | EStringRange (s, f, t) ->
                 (expr s)
                 + "["
-                + exprO (f, "")
+                + exprO f ""
                 + ".."
-                + exprO (t, "")
+                + exprO t ""
                 + "]"
-            | ESeq (_, es) -> "[" + (exprsNoBr isPattern es ", ") + "]"
+            | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
             | ESeqConstr(_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
             | ESeqAt (s, i) -> (expr s) + "[" + (expr i) + "]"
             | ESeqRange (s, f, t) ->
                 (expr s)
                 + "["
-                + exprO (f, "")
+                + exprO f ""
                 + ".."
-                + exprO (t, "")
+                + exprO t ""
                 + "]"
             | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] := " + (expr e)
             | EArray (t, d) -> "new " + t.ToString() + dims (d)
@@ -1195,9 +1260,9 @@ module YIL =
             | EArrayRange (a, f, t) ->
                 (expr a)
                 + "["
-                + exprO (f, "")
+                + exprO f ""
                 + ".."
-                + exprO (t, "")
+                + exprO t ""
                 + "]"
             | EArrayUpdate (a, i, e) -> (expr a) + dims (i) + " := " + (expr e)
             | EMapAt (m, e) -> (expr m) + (dims [ e ])
@@ -1225,7 +1290,7 @@ module YIL =
             | EBlock es ->
                 // throw out empty blocks; these are usually artifacts of the processing
                 let notEmptyBlock e = match e with | EBlock [] | ECommented(_,EBlock[]) -> false | _ -> true
-                let esS = exprsNoBrBlock false (List.filter notEmptyBlock es) ";\n"
+                let esS = exprs (List.filter notEmptyBlock es)
                 let s = indentedBraced(esS)
                 s
             | ELet (n, t, d, e) ->
@@ -1238,13 +1303,6 @@ module YIL =
                 + "; "
                 + (expr e)
             | EIf (c, t, e) ->
-                let printThen =
-                    match pctx.inMethod() with
-                    | Some (_, methodType) ->
-                        match methodType.map() with
-                        | IsMethod | IsLemma -> false
-                        | _ -> true 
-                    | _ -> true
                 let elsePart =
                     match e with
                     | None -> "" // avoid using exprO which prints out ";".
@@ -1252,7 +1310,7 @@ module YIL =
                 let s =
                     "if "
                     + (expr c)
-                    + (if printThen then " then " else "")
+                    + " then "
                     + (expr t)
                     + elsePart
                 s
@@ -1262,11 +1320,11 @@ module YIL =
                 let forInitCtx = pctx.enterForLoopInitializer()
                 let forBodyCtx = pctx.enterForLoopBody()
                 "for "
-                + this.expr(isPattern)(d)(forInitCtx)
+                + this.expr d forInitCtx
                 + (if up then " to " else " downto ")
                 + (expr last)
                 + " "
-                + this.expr(isPattern)(body)(forBodyCtx)
+                + this.expr body forBodyCtx
             | EWhile (c, e, l) ->
                 let label =
                     match l with
@@ -1274,15 +1332,14 @@ module YIL =
                     | None -> ""
 
                 sprintf "%swhile (%s)%s" label (expr c) (expr e)
-            | EReturn (es) ->
-                "return " + (exprsNoBr false es ", ") + ";"
+            | EReturn (es) -> (exprsNoBr es ", ")
             | EBreak l ->
                 let label =
                     match l with
                     | Some l -> sprintf " %s" l
                     | None -> ""
 
-                sprintf "break%s" label
+                sprintf "break %s" label
             | EMatch (e, t, cases, dfltO) ->
                 let defCase =
                     match dfltO with
@@ -1347,7 +1404,7 @@ module YIL =
 
         member this.update(u: UpdateRHS)(pctx: PrintingContext) =
             let op = if u.monadic.IsSome then ":-" else ":="
-            " " + op + " " + (this.expr false u.df pctx)
+            " " + op + " " + (this.expr u.df pctx)
 
         member this.localDecl(ld: LocalDecl) = ld.name + ": " + (this.tp ld.tp)
         
@@ -1362,13 +1419,15 @@ module YIL =
                 | _ -> s + "."
             match rcv with
             | StaticReceiver (ct) -> this.classType(ct) |> dot // ClassType --> path, tpargs
-            | ObjectReceiver (e) -> this.expr false e pctx |> dot
+            | ObjectReceiver (e) -> this.expr e pctx |> dot
 
         member this.case(case: Case)(pctx: PrintingContext) =
-            "case " + this.expr true case.pattern pctx
+            "case " + this.expr case.pattern pctx
             + " => "
-            + indented(this.expr false case.body pctx, false)
+            + indented(this.expr case.body pctx, false)
 
+    
+    
     // shortcut to create a fresh printer
     let printer () = Printer()
     
