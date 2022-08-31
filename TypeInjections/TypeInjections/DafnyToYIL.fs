@@ -873,13 +873,15 @@ module DafnyToYIL =
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
         | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
-        | :? AssumeStmt as s ->Y.EAssume(expr s.Expr)
+        | :? AssumeStmt as s -> Y.EAssume(expr s.Expr)
+        | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
         | :? RevealStmt as s ->
             Y.EReveal (List.map expr (List.ofSeq s.Exprs |> List.filter (fun e -> e = null)))
         | :? ForallStmt as s ->
             // TODO: compile foralls correctly by also considering ensures clause.
             Y.EQuant(Y.Forall, boundVar @ s.BoundVars, exprO s.Range, if s.Body <> null then statement s.Body else Y.ESKip)
+        | :? SkeletonStatement -> Y.EUnimplemented (* '...;' skeleton statements *)
         | _ -> unsupported $"statement {s.ToString()}"
     // ***** qualified names; Dafny has methods for this, but they are a bit confusing and work with .-separated strings
     and pathOfModule (d: ModuleDefinition) : Y.Path =

@@ -553,10 +553,11 @@ module YIL =
         | EPrint of exprs: Expr list
         | EAssert of Expr
         | EAssume of Expr
+        | EExpect of Expr  // dafny expect statement
         | EReveal of Expr list // dafny `reveal ... ;` statement
         | ECommented of string * Expr
         // temporary dummy for missing cases
-        | EUnimplemented
+        | EUnimplemented // dafny skeleton statement
 
     (* Dafny methods may return multiple outputs, and these may be named.
        This may seem awkward but is practical for specifications and proofs.
@@ -1104,6 +1105,7 @@ module YIL =
             match e with
             | EAssert e -> "assert(" + (expr e) + ");"
             | EAssume e -> "assume(" + (expr e) + ");"
+            | EExpect e -> "expect(" + (expr e) + ");"
             | EBlock es ->
                 let sts = List.map (fun x -> this.statement x pctx) es
                 indentedBraced(String.concat "\n" sts)
@@ -1189,6 +1191,7 @@ module YIL =
                 + " where "
                 + (expr e)
             (* YieldStmt *)
+            | EUnimplemented (* skeleton statement *) -> "...;"
             | _ as b -> failwith "encountered non-statement in statement: " + (b.ToString())
             
         
@@ -1370,8 +1373,9 @@ module YIL =
             | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | EAssert e -> "assert " + (expr e) 
-            | EAssume e -> "assume " + (expr e) + ";"
-            | EReveal es -> "reveal " + (String.concat ", " (List.map expr es)) + ";"
+            | EAssume e -> "assume " + (expr e) 
+            | EExpect e -> "expect " + (expr e)
+            | EReveal es -> "reveal " + (String.concat ", " (List.map expr es)) 
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 

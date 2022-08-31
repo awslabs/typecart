@@ -266,8 +266,9 @@ module Traverser =
                 | EAssert e -> EAssert (rcE e)
                 | EAssume e -> EAssume (rcE e)
                 | EReveal es -> EReveal (rcEs es)
+                | EExpect e -> EExpect (rcE e)
                 | ECommented(s,e) -> ECommented(s, rcE e)
-                | EUnimplemented _ -> expr
+                | EUnimplemented -> expr
 
         // methods for auxiliary types
 
