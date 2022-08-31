@@ -515,10 +515,12 @@ module YIL =
         | EMethodApply of receiver: Receiver * method: Path * tpargs: Type list * args: Expr list * ghost: bool
         // anonymous functions; maybe we want to forbid these eventually
         | EAnonApply of fn: Expr * args: Expr list
-        // datatype constructors
+        /// datatype constructors
         | EConstructorApply of cons: Path * tpargs: Type list * args: Expr list
-        // type conversion
+        /// type conversion (e as t)
         | ETypeConversion of expr: Expr * toType: Type
+        /// type test (e is t)
+        | ETypeTest of Expr * Type
         // *** control flow etc.
         | EBlock of exprs: Expr list
         | ELet of var: string * tp: Type * df: Expr * body: Expr
@@ -552,12 +554,12 @@ module YIL =
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
         | EAssert of Expr
-        | EAssume of Expr
-        | EExpect of Expr  // dafny expect statement
-        | EReveal of Expr list // dafny `reveal ... ;` statement
+        | EExpect of Expr  // dafny expect statement (non-ghost variant of assert statement)
+        | EAssume of Expr  // dafny implication introduction
+        | EReveal of Expr list // dafny `reveal ... ;` proof directive
         | ECommented of string * Expr
         // temporary dummy for missing cases
-        | EUnimplemented // dafny skeleton statement
+        | EUnimplemented
 
     (* Dafny methods may return multiple outputs, and these may be named.
        This may seem awkward but is practical for specifications and proofs.
@@ -1183,13 +1185,16 @@ module YIL =
                 + (expr d)
                 + "; "
                 + (this.statement e pctx)
+                
+            | EDecls _ | EMethodApply _ as e -> expr e
             | EDeclChoice (ld, e) ->
                 "var "
                 + (this.localDecl ld)
                 + " where "
                 + (expr e)
+            | ECommented(c,e) -> "/* " + c + " */" + this.statement e pctx 
             (* YieldStmt *)
-            | EUnimplemented (* skeleton statement *) -> "...;"
+            | EUnimplemented -> "/* UNIMPLEMENTED */"
             | _ as b -> failwith "encountered non-statement in statement: " + (b.ToString())
             
         
@@ -1368,7 +1373,8 @@ module YIL =
                 + (this.localDecl ld)
                 + " where "
                 + (expr e)
-            | ETypeConversion (e, toType) -> (expr e) + " as " + (tp toType)
+            | ETypeConversion (e, t) -> (expr e) + " as " + (tp t)
+            | ETypeTest(e,t) -> (expr e) + " is " + (tp t)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | EAssert e -> "assert " + (expr e) 
             | EAssume e -> "assume " + (expr e) 
