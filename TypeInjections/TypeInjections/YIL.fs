@@ -1022,13 +1022,13 @@ module YIL =
                    | _ -> ":" + outputsS)
                 + (match modifies with
                    | [] -> ""
-                   | _ -> "modifies " + (List.map expr modifies |> String.concat "\n") + "\n")
+                   | _ -> "\n\tmodifies " + (List.map expr modifies |> String.concat ", "))
                 + (match reads with
                    | [] -> ""
-                   | _ -> "reads " + (List.map expr reads |> String.concat "\n") + "\n")
+                   | _ -> "\n\treads " + (List.map expr reads |> String.concat ", "))
                 + (match decreases with
                    | [] -> ""
-                   | _ -> "decreases " + (List.map expr decreases |> String.concat "\n") + "\n")
+                   | _ -> "\n\tdecreases " + (List.map expr decreases |> String.concat ", "))
                 + (this.conditions(true, ins.conditions, methodCtx))
                 + (this.conditions(false, outs.conditions, methodCtx))
                 + "\n"
@@ -1046,7 +1046,7 @@ module YIL =
                 + (this.conditions(false, outs, pctx))
                 + "\n"
                 + match b with
-                  | Some e -> expr e
+                  | Some e -> this.statement e pctx
                   | None -> "{}"
             | Import importT -> importT.ToString()
             | Export exportT -> exportT.ToString()
@@ -1290,7 +1290,7 @@ module YIL =
             | EBlock es ->
                 // throw out empty blocks; these are usually artifacts of the processing
                 let notEmptyBlock e = match e with | EBlock [] | ECommented(_,EBlock[]) -> false | _ -> true
-                let esS = exprs (List.filter notEmptyBlock es)
+                let esS = exprsNoBr (List.filter notEmptyBlock es) "; "
                 let s = indentedBraced(esS)
                 s
             | ELet (n, t, d, e) ->
