@@ -1149,11 +1149,9 @@ module YIL =
             | EPrint es -> "print" + (String.concat ", " (List.map expr es)) + ";"
             | EReturn es -> "return " + (exprsNoBr es ", ") + ";"
             | EReveal es ->  "reveal " + (String.concat ", " (List.map expr es)) + ";"
-            (* SkeletonStmt *)
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map expr ns
                 listToString (lhsExprs, ",") + (this.update u pctx) + ";"
-            (* UpdateFailureStmt *)
             | EVar n ->
                 let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
                 nF + ";"

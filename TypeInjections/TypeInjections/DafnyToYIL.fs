@@ -850,7 +850,6 @@ module DafnyToYIL =
                     | :? NameSegment as l -> Y.EVar(l.Name)
                     | _ -> unsupported "Non-atomic LHS of :- statement"
                 | _ -> unsupported "Multiple LHSs in :- statement"
-
             Y.EUpdate([ n ], u)
         | :? IfStmt as s ->
             if s.IsBindingGuard then
