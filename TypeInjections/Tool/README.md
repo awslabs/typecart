@@ -8,7 +8,7 @@ typeCart CLI offers two ways to compare projects:
       * `-p` `--print` Tell typeCart which folder to print out generated files
   * Additional Options
     * `-i` `--ignore` Give list of filenames to ignore when running typeCart
-    * (coming soon) `-e` `--entrypoint` Specify certain file(s) to run typeCart on 
+    * `-t` `--typecartignore` Input the absolute path to .typecartignore file 
 - git commits in repository: `$ typecart git [--old <commit>]  [--new <commit>] [--print <path>] [--clone <git URL>] [--ignore <names>]`
   * Required options 
     * `-o` `--old` Give the absolute path of old project
@@ -17,6 +17,7 @@ typeCart CLI offers two ways to compare projects:
   * Additional Options
     * `-c` `--clone` Provide git URL to checkout commits 
     * `-i` `--ignore` Give list of filenames to ignore when running typeCart 
+    * `-t` `--typecartignore` Input the absolute path to .typecartignore file
     * (coming soon) `-e` `--entrypoint` Specify certain file(s) to run typeCart on
 
 External Libraries used in Tool project
