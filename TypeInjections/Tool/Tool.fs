@@ -4,7 +4,6 @@
 namespace Tool
 
 open System.Collections.Generic
-open System.Text.RegularExpressions
 open LibGit2Sharp
 open System.IO
 open System
@@ -25,10 +24,8 @@ module Tool =
           outputFolder: string
           [<Option('i', "ignore", Required = false, HelpText = "specify filename(s) you want to ignore")>]
           ignore: seq<string>
-          [<Option('t', "typecartignore", Required = false, HelpText= "give path of .typecartignore file")>]
-          typecartignore: string
-          }
-        
+          [<Option('t', "typecartignore", Required = false, HelpText = "give path of .typecartignore file")>]
+          typecartignore: string }
 
     [<Verb("git", HelpText = "typecart git [old commit] [new commit] [outputPath]")>]
     type GitOptions =
@@ -44,10 +41,14 @@ module Tool =
           force: bool
           [<Option('i', "ignore", Required = false, HelpText = "specify filename(s) you want to ignore")>]
           ignore: seq<string>
-          [<Option('t', "typecartignore", Required = false, HelpText= "give path of .typecartignore file")>]
-          typecartignore: string}
-        
+          }
 
+    type parsedOption(oldFolder: string, newFolder: string, outFolder: string, ignore: string list) =
+        member this.oldPath = oldFolder
+        member this.newPath = newFolder
+        member this.outPath = outFolder
+        member this.ignore = ignore
+        
 
     //NOTE 'location' refers to either the github url OR path to repo on local computer
     let checkoutCommit (hash: string) (location: string) (outputPath: string) : unit =
@@ -67,7 +68,7 @@ module Tool =
         // checkout repo at given commit
         Commands.Checkout(newRepo, commitRepo) |> ignore
 
-    let runGit (git: GitOptions) : string * string * string * string option =
+    let runGit (git: GitOptions) : parsedOption =
         Utils.log "***** git commit"
 
         let commit1, commit2 = git.oldHash, git.newHash
@@ -99,15 +100,21 @@ module Tool =
         checkoutCommit commit2 location pathNew
 
         Utils.log $"{pathOld}, {pathNew}, {path}/Output"
-        let tci = if git.typecartignore = null then None else Some(git.typecartignore)
-        pathOld, pathNew, $"{path}/Output", tci
 
-    let runLocal (local: LocalOptions) : string * string * string * string option =
+        parsedOption (pathOld, pathNew, $"{path}/Output", git.ignore |> Seq.toList)
+
+    let runLocal (local: LocalOptions) : parsedOption =
         Utils.log "***** local project comparison"
 
         Utils.log $"{local.oldFolder}, {local.newFolder}, {local.outputFolder}"
-        let tci = if local.typecartignore = null then None else Some(local.typecartignore)
-        local.oldFolder, local.newFolder, local.outputFolder, tci
+
+        let tci =
+            if local.typecartignore = null then
+                None
+            else
+                Some(local.typecartignore)
+
+        parsedOption (local.oldFolder, local.newFolder, local.outputFolder, local.ignore |> Seq.toList)
 
     [<EntryPoint>]
     let main (argv: string array) =
@@ -129,13 +136,13 @@ module Tool =
         // if no verb found or help asked for, result = NotParsed<obj> = list of error messages
 
         // have runGit or runLocal change value of these variables
-        let pathOld, pathNew, outFolder, ignores =
+        let input =
             match result with
             | :? (Parsed<obj>) as command ->
                 match command.Value with
                 | :? LocalOptions as opts -> runLocal opts
                 | :? GitOptions as opts -> runGit opts
-                | _ -> "", "", "", None
+                | _ -> parsedOption ("", "", "", [])
             // nothing to do if result=NotParsed<obj> because helpful error message
             // was already thrown by ParseArgument
             | :? (NotParsed<obj>) as errors ->
@@ -144,20 +151,23 @@ module Tool =
                 | :? BadVerbSelectedError -> failwith $"bad verb"
                 | :? HelpRequestedError -> failwith "user just wanted help!"
                 | _ -> failwith "unknown error, need to investigate"
-            | _ -> "", "", "", None
-            
-        
+            | _ -> parsedOption ("", "", "", [])
 
-        if pathOld.Length > 0 then
+
+
+        if input.oldPath.Length > 0 then
             let reporter = Utils.initDafny
-            
+
             (* TypecartProject's 2nd argument can be:
             1. the absolute path to .typecartignore file
             2. a list of regex values *)
-            let oldProject = TypecartProject(DirectoryInfo(pathOld), ignores )
-            let newProject = TypecartProject(DirectoryInfo(pathNew), ignores )
+            let oldProject =
+                TypecartProject(input.oldPath, input.ignore)
+
+            let newProject =
+                TypecartProject(input.newPath, input.ignore)
 
             typecart(oldProject.toYILProgram ("Old", reporter), newProject.toYILProgram ("New", reporter), Utils.log)
-                .go (DefaultTypecartOutput(outFolder))
+                .go (DefaultTypecartOutput(input.outPath))
 
         0
