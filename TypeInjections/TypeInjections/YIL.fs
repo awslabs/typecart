@@ -1164,7 +1164,7 @@ module YIL =
                     | Some l -> sprintf "%s: " l
                     | None -> ""
 
-                sprintf "%swhile (%s)%s" label (expr c) (expr e)
+                sprintf "%s while (%s) %s" label (expr c) (this.statement e pctx)
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
@@ -1185,7 +1185,6 @@ module YIL =
                 + (expr d)
                 + "; "
                 + (this.statement e pctx)
-                
             | EDecls _ | EMethodApply _ as e -> expr e
             | EDeclChoice (ld, e) ->
                 "var "
@@ -1193,7 +1192,6 @@ module YIL =
                 + " where "
                 + (expr e)
             | ECommented(c,e) -> "/* " + c + " */" + this.statement e pctx 
-            (* YieldStmt *)
             | EUnimplemented -> "/* UNIMPLEMENTED */"
             | _ as b -> failwith "encountered non-statement in statement: " + (b.ToString())
             
