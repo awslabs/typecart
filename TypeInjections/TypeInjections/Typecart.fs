@@ -165,6 +165,32 @@ module Typecart =
             | None -> ()
             | Some logger -> logger s
         
+        // (old) run typecart on oldYIL and newYIL and perform program-level diffing with module granularity
+        member this.goDiffModules(outputWriter: TypecartOutput) =
+            // tests the transformation code
+            Traverser.test(oldYIL)
+            
+            // diff the programs
+            this.logger "***** diffing the two programs"
+            let diff = Differ.prog (oldYIL, newYIL)
+            let diffS = (Diff.Printer()).prog diff
+            this.logger diffS
+            
+            // generate translation
+            this.logger "***** generating compatibility code"
+            let combine,joint = Translation.prog(oldYIL, diff)
+            
+            // write output files
+            this.logger "***** writing output files"
+            
+            let mk arg = arg |> Analysis.Pipeline
+            
+            (processJoint joint |> mk).apply(oldYIL) |> outputWriter.processJoint
+            (processOld joint |> mk).apply(oldYIL) |> outputWriter.processOld
+            (processNew joint |> mk).apply(newYIL) |> outputWriter.processNew
+            (mk processTranslations).apply(combine) |> outputWriter.processTranslations
+        
+        // current main-entry for module-level diffing.
         // run typecart on oldYIL and newYIL and call outputWriter to get output
         member this.go(outputWriter: TypecartOutput) =
             // tests the transformation code
