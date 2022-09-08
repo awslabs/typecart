@@ -36,7 +36,7 @@ $ dotnet tool install --global --add-source ./nupkg typecart
         * Copy API Key
     - (While still in directory with `.fsproj`) publish nupkg file
     ```zsh
-    $ dotnet nuget push typecart.[VERSION_HERE].nupkg --api-key [API_KEY_HERE] --source https://api.nuget.org/v3/index.json
+    $ dotnet nuget push nupkg/typecart.[VERSION_HERE].nupkg --api-key [API_KEY_HERE] --source https://api.nuget.org/v3/index.json
     ```
 ## How users can download tool to use
 1. If user has .NET SDK installed: go to [typeCart's Nuget Package](https://www.nuget.org/packages/typecart) page and run terminal command
