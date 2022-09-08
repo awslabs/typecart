@@ -3,6 +3,8 @@
 
 namespace TypeInjections.Test
 
+open TypeInjections
+
 module IOTests =
     open NUnit.Framework
 
@@ -17,8 +19,16 @@ module IOTests =
     let testRunner =
         TestUtils.testRunnerGen
         
+
+        
     [<Test>]
-    let SimpleFolderTest () =
+    let SimpleDatatypeTest () =
         testRunner "InputDirectory" "OutputDirectory"
+        TestUtils.testYILCmp "new.dfy"
+        
+        
+        
+        
+    
         
         

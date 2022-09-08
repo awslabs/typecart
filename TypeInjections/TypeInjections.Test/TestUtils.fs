@@ -10,9 +10,14 @@ open Microsoft.Dafny
 module TestUtils =
     open NUnit.Framework
     open System
-    module T = Typecart
     
-    let pwd : string =
+    type Output =
+    | Joint = 0
+    | New = 1
+    | Old = 1
+    | Translations = 3
+    
+    let testDir : string =
         let wd = Environment.CurrentDirectory
 
         let pd =
@@ -29,84 +34,27 @@ module TestUtils =
                "Resources"
                TestContext.CurrentContext.Test.Name |]
         )
-
-    type DirectoryOutputWriter(outFolderPath: string) =
-                        
-        let writeFile (prog: YIL.Program) (folder:string) (prefix:string)  =
-            let addSuffix (path: string) (ending: string): string =
-                let endPos = path.IndexOf(".dfy")
-                let newName = path.Insert( endPos, ("_" + ending ))
-                newName.ToLower()
-            let getName (x:YIL.Decl) =
-                if x.meta.position.IsNone then
-                    match x with
-                        | YIL.Module (name, _, _) -> name + ".dfy"
-                        | _ -> ".dfy"
-                else
-                    x.meta.position.Value.filename
-            
-            
-            let mods = List.filter (fun (x:YIL.Decl) -> x.meta.position.IsSome) prog.decls
-            // if YIL.decl is empty, don't write anything
-            if mods.Length = 0 then
-                0 |> ignore
-            else
-                
-                let outputProg = {YIL.name = getName mods.Head; YIL.decls = prog.decls; YIL.meta = YIL.emptyMeta}
-                let endFileName = (addSuffix outputProg.name prefix)
-                let s = YIL.printer().prog(outputProg, YIL.Context(outputProg))
-                let filePath = Path.Combine(folder, endFileName)
-                IO.File.WriteAllText(filePath, s)
+        
+    let testYILCmp (filename:string)=
+        let oldProj = Path.Combine([|testDir; "ExpectedDirectory"; filename|])
+        let newProj = Path.Combine([|testDir; "OutputDirectory"; filename|])
+        let reporter = Utils.initDafny
+        let oDaf = Utils.parseAST oldProj "project" reporter
+        let nDaf = Utils.parseAST newProj "project" reporter
+        let oYIL = DafnyToYIL.program oDaf
+        let nYIL = DafnyToYIL.program nDaf
+        Utils.log $"\n\n\nold and new yil should be equal, is this true? {oYIL = nYIL}"
     
-        let writeOut fileName prefix (prog:YIL.Program) =
-            let folder = outFolderPath
-            
-            writeFile prog folder prefix
-
-        interface Typecart.TypecartOutput with
-            member this.processOld(oldYIL: YIL.Program) = writeOut "old.dfy" "Old" oldYIL 
-            member this.processNew(newYIL: YIL.Program) = writeOut "new.dfy" "New" newYIL
-            member this.processJoint(jointYIL: YIL.Program) = writeOut "joint.dfy" "Joint" jointYIL 
-            member this.processTranslations(translationsYIL: YIL.Program) =
-                writeOut "translations.dfy" "Combine" translationsYIL  
-                           
-    let typeCartAPI (argv: string array) =
+    // runs the typeCart API and produces files in the "OutputDirectory"
+    let public testRunnerGen (inputDir: string) (outDir: string) =
+        let reporter = Utils.initDafny
+        let inputDirectory = Path.Combine([| testDir; inputDir |])
+        let oldPath = Path.Combine([|inputDirectory; "Old"|])
+        let newPath = Path.Combine([|inputDirectory; "New"|])
+        let outFolder = Path.Combine([| testDir; outDir |])
         
-        Utils.log "***** Entering typecartAPI"
+        let oldProject = Typecart.TypecartProject(oldPath, None)
+        let newProject = Typecart.TypecartProject(newPath, None)
         
-        if argv.Length < 3 then
-            failwith "usage: program OLD NEW OUTPUTFOLDER"
-        let argvList = argv |> Array.toList
-        
-        // get paths to input and outputs
-        let oldFolderPath = argvList.Item(0)
-        let newFolderPath = argvList.Item(1)
-        let outFolderPath = argvList.Item(2)
-        
-        // is there a typecartignore file?
-        let tcIgnore =
-            if argvList.Length > 3 then Some (argvList.Item(3)) else None
-        
-        
-        Directory.CreateDirectory(outFolderPath) |> ignore
-        
-        // error handling 
-        for a in [oldFolderPath;newFolderPath;outFolderPath] do
-            if not (Directory.Exists(a)) then
-                failwith("folder not found:" + a)
-                                
-        let oldProj = T.TypecartProject(DirectoryInfo(oldFolderPath), tcIgnore)
-        let newProj = T.TypecartProject(DirectoryInfo(newFolderPath), tcIgnore)
-        
-        let outputWriter = DirectoryOutputWriter(outFolderPath)
-        
-        T.Typecart(oldProj.toYILProgram("Old", Utils.initDafny),
-                   newProj.toYILProgram("New", Utils.initDafny)).go(outputWriter)
-        
-        
-    let public testRunnerGen (directoryName: string) (outputDirectoryName: string) =
-        let inputDirectory = Path.Combine([| pwd; directoryName |])
-        let inputDirectoryOld = Path.Combine([|inputDirectory; "Old"|])
-        let inputDirectoryNew = Path.Combine([|inputDirectory; "New"|])
-        let outputDirectory = Path.Combine([| pwd; outputDirectoryName |])
-        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|] 
+        Typecart.typecart(oldProject.toYILProgram("Old", reporter), newProject.toYILProgram("New", reporter), Utils.log)
+            .go(Typecart.DefaultTypecartOutput(outFolder))
