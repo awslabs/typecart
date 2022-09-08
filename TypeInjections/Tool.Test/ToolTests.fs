@@ -21,23 +21,7 @@ module IOTests =
         |> ignore
     //TODO assert type of error is correct
 
-    [<Test>]
-    // no dafny files given in input
-    let NoDafnyTest () =
-        // folder has only txt file
-        let argsTxt =
-            [ $"{resourcePath}/Local/NoDafnyTest/OnlyText" ]
-
-        Assert.Catch(fun () -> Tool.checkInputs argsTxt)
-        |> ignore
-        //TODO assert type of error is correct
-
-        // folder is empty
-        let argsEmpty =
-            [ $"{resourcePath}/Local/NoDafnyTest/Empty" ]
-
-        Assert.Catch(fun () -> Tool.checkInputs argsEmpty) |> ignore
-    //TODO assert type of error is correct
+    //TODO assert that folder without dafny gives proper error
 
     [<Test>]
     // with correct inputs, typecart local works

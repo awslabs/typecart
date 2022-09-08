@@ -59,6 +59,7 @@ module Typecart =
                 | _ -> []
         
         let isFilenameIgnored (fileName: string) =
+            let test = ignorePatterns @ currDirIgnores
             List.fold (fun (ignored: bool) (pattern: Regex) -> (pattern.IsMatch fileName) || ignored) false (ignorePatterns @ currDirIgnores)
         
         // constructor that helps read in ignore patterns from file
@@ -80,7 +81,7 @@ module Typecart =
         new(d: DirectoryInfo, ignorePatternsFile: string option) = TypecartProject(Utils.D d, ignorePatternsFile)
         // generic entrypoint when we don't know whether path is a file or directory
         new(path: string, ignorePatterns: string option) = TypecartProject(Utils.parseSystemPath(path), ignorePatterns)
-                
+        new(path: string, ignorePatterns: string list) = TypecartProject(Utils.parseSystemPath(path), List.map makeRegex ignorePatterns)
         // list of subdirectories of currenct project. Empty when project is just a file.
         member this.subDirectories =
             match project with
