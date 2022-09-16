@@ -534,8 +534,10 @@ module Translation =
     // alternate constructor for diffing two programs at once with module-level granularity
     new(prog: Program, progD: Diff.Program, jointDecls: Path list) =
         Translator(Context(prog), progD.decls, jointDecls)
-        
+    
+    // entry for doing translation at the declarations-level
     member this.doTranslate() = decls ctx declsD
+  
   
   /// entry point to call translator on a module
   /// assumes the module is at the program toplevel
@@ -576,6 +578,20 @@ module Translation =
           tr.doTranslate(), jointPaths
       | _ -> failwith "declaration to be translated is not a module"
   
- 
+  // (old) entry for translating a program
+  let prog (p: Program, pD: Diff.Program) : Program * Path list =
+    let ctx = Context(p)
+    let pathOf(d: Decl) = ctx.currentDecl.child(d.name)
+    let childPaths = List.map pathOf p.decls // toplevel paths of p
+    let sameChildren = List.map pathOf (pD.decls.getSame())  // the unchanged ones among those
+    let changedChildren = Utils.listDiff(childPaths, sameChildren) // the changed ones
+    let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren) // dependency closure of the changed ones
+    Console.WriteLine(" ***** DEPENDENCY CLOSURE *****")
+    List.iter (fun (Path x) -> Console.WriteLine(String.concat ", " x)) changedClosed
+    Console.WriteLine(" ***** DEPENDENCY CLOSURE END *****")
+    let jointPaths = Utils.listDiff(childPaths, changedClosed) // greatest self-contained set of unchanged declarations
+    let tr = Translator(p,pD,jointPaths)
+    let translations = {name = p.name; decls = tr.doTranslate(); meta = emptyMeta}
+    translations, jointPaths
 
 

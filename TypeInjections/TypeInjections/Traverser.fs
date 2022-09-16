@@ -269,6 +269,7 @@ module Traverser =
                 | EReveal es -> EReveal (rcEs es)
                 | EExpect e -> EExpect (rcE e)
                 | ECommented(s,e) -> ECommented(s, rcE e)
+                | ETypeTest(e, t) -> ETypeTest(rcE e, rcT t)
                 | EUnimplemented -> expr
 
         // methods for auxiliary types
