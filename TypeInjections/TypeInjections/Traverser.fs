@@ -233,7 +233,8 @@ module Traverser =
                 | EUnOpApply (op, e) -> EUnOpApply(op, rcE e)
                 | EBinOpApply (op, e1, e2) -> EBinOpApply(op, rcE e1, rcE e2)
                 | ELet(n,tp,df,bd) -> ELet(n, rcT tp, rcE df, this.expr(ctx.add(n,tp), bd))
-                | ETypeConversion (e, toType) -> ETypeConversion (rcE e, rcT toType)
+                | ETypeConversion (e, t) -> ETypeConversion (rcE e, rcT t)
+                | ETypeTest (e, t) -> ETypeTest (rcE e, rcT t)
                 | EBlock es ->
                     let esT = this.exprList (ctx, es)
                     EBlock esT
@@ -443,6 +444,35 @@ module Traverser =
         let sub = SubstituteExprs(f,t, subs)
         sub.expr (Context(f.prog), e)
 
+    /// transformation to apply basic term normalization
+    /// topOnly: reduce only one step at toplevel (if any)
+    type Reduce(topOnly:bool) =
+        inherit Identity()
+        override this.expr(ctx: Context, e: Expr) =
+          let eR =
+           match e with
+           | EProj(ETuple(ts),i) ->
+               // beta-reduction for tuples: (t_1,...,t_n).i --->  t_i
+               ts.Item i
+           | ETuple(es) ->
+               let isEtaExp = List.indexed es |> List.forall fun (i,e) -> e = EProj(E)
+           | EAnonApply(EFun(lds,_,b), es) when lds.Length = es.Length ->
+               // beta-reduction: (fun x_1,...,x_n -> b) e_1 ... e_n ---> b[x_1/e_1,...,x_n/e_n] 
+               let subs = (List.zip lds es) |> List.map (fun (ld,e) -> ld.name,e)
+               substituteExprs(ctx.add(lds), ctx, subs, b)
+           | EFun(lds,_,EAnonApply(EVar(f), args)) when lds.Length = args.Length ->
+               // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
+               // covers only special case where f is variable
+               let isEtaExp = List.zip lds args |> List.forall (fun (ld,a) -> a = EVar(ld.name))
+               if isEtaExp then EVar(f) else e
+           | _ -> e
+          if topOnly then
+             eR
+          else
+             if e = eR then this.exprDefault(ctx, e) else this.expr(ctx, e)
+    /// basic term normalization
+    let reduce(ctx: Context, e: Expr) = Reduce(true).expr(ctx,e)
+    
     /// test the traverser class by running a deep identity transformation on a program
     let test(p: Program) =
         let id = Identity()

@@ -397,8 +397,8 @@ module DafnyToYIL =
                         | "string31" -> Y.TString Y.Bound31 
                         | "seq31" when args.Length = 1 -> Y.TSeq(Y.Bound31, args.Head) 
                         | "arr31" when args.Length = 1 -> Y.TArray(Y.Bound31, args.Head) 
-                        | "map31" when args.Length = 2 -> Y.TMap (Y.Bound31, args.Head, args.Tail.Head)
-                        | "set31" when args.Length = 1 -> Y.TSet (Y.Bound31, args.Head)
+                        | "map31" when args.Length = 2 -> Y.TMap(Y.Bound31, args.Head, args.Tail.Head)
+                        | "set31" when args.Length = 1 -> Y.TSet(Y.Bound31, args.Head)
                         | "Option" when args.Length = 1 -> makeTApply()
                         // types in CommonTypes.dfy are included in JavaLib.dfy.
                         | _ -> tpCommon t n args ("unknown type in JavaLib")
@@ -608,6 +608,7 @@ module DafnyToYIL =
                 Y.EConstructorApply(path, tpargs, args)
         // others
         | :? ConversionExpr as e -> Y.ETypeConversion(expr e.E, tp e.ToType)
+        | :? TypeTestExpr as e -> Y.ETypeTest(expr e.E, tp e.ToType)
         | :? StmtExpr as e ->
             // S;E
             Y.EBlock([ statement e.S; expr e.E ])
