@@ -563,7 +563,7 @@ module Translation =
     
     // alternate constructor for diffing two programs at once with module-level granularity
     new(prog: Program, progD: Diff.Program, jointDecls: Path list) =
-        Translator(Context(prog), progD.decls, jointDecls, false)
+        Translator(Context(prog), progD.decls, jointDecls, true)
     // entry for doing translation at the declarations-level
     member this.doTranslate() = decls ctx declsD
   
@@ -603,7 +603,7 @@ module Translation =
           Console.WriteLine($" ***** JOINT PATHS FOR {m.name} *****")          
           List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
           Console.WriteLine($" ***** JOINT PATHS FOR {m.name} END *****")
-          let tr = Translator(ctx, declD, jointPaths, false)
+          let tr = Translator(ctx, declD, jointPaths, true)
           tr.doTranslate(), jointPaths
       | _ -> failwith "declaration to be translated is not a module"
   
