@@ -319,8 +319,6 @@ module DafnyToYIL =
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
             | _ ->
-                // TODO: find a less hacky way of handling all the user-defined types?
-                // ^ currently we need to look at the path to determine Java/Rust/common types, this isn't too ideal.
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
                 // the default treatment
@@ -372,7 +370,11 @@ module DafnyToYIL =
                         Y.TObject
                     else
                         unsupported $"built-in type {n}"
-                elif p.names.Head = "TypeUtil" then
+                else
+                    makeTApply()
+                (* we used to have all this special treatment for DafnyLib types, which was removed
+                   code is kept while migrating to the new solution
+                 elif p.names.Head = "TypeUtil" then
                     // Legacy: types defined by Yucca in TypeUtil.dfy
                     // This is only for legacy support, can be removed later if we don't run typeCart on a
                     // legacy diff.
@@ -424,9 +426,7 @@ module DafnyToYIL =
                     (p, if p.names.Item(1).StartsWith("Option") then
                             makeTApply()
                         else tpCommon t (p.names.Item(1)) args ("unknown type in CommonTypes"))
-                    |> Y.TApplyPrimitive
-                else
-                    makeTApply()
+                    |> Y.TApplyPrimitive *)
         | :? BoolType -> Y.TBool
         | :? CharType -> Y.TChar
         | :? IntType -> Y.TInt Y.NoBound
@@ -526,39 +526,10 @@ module DafnyToYIL =
             let vars = boundVar @ e.BoundVars
             Y.EFun(vars, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e ->
-            let s = expr e.Seq
-            let e0 = exprO e.E0
-            let e1 = exprO e.E1
-            let t = tp (e.Seq.Resolved.Type)
-            // Dafny syntax merges several cases here that YIL distinguishes, so we need the type to distinguish
-            let handler t =
-                match (t, e.SelectOne) with
-                | (Y.TSeq _, true) -> Y.ESeqAt(s, Option.get e0)
-                | (Y.TSeq _, false) -> Y.ESeqRange(s, e0, e1)
-                | (Y.TString _, true) -> Y.ECharAt(s, Option.get e0) // Dafny strings are character arrays
-                | (Y.TString _, false) -> Y.EStringRange(s, e0, e1)
-                | (Y.TArray _, true) -> Y.EArrayAt(s, [ Option.get e0 ])
-                | (Y.TArray _, false) -> Y.EArrayRange(s, e0, e1)
-                | (Y.TMap _, true) -> Y.EMapAt(s, Option.get e0)
-                // User-defined type alias
-                | (Y.TApply _, true) ->
-                    // TODO: can we use this approach without resorting to `tp`?
-                    match e.Seq.Resolved.Type.AsCollectionType with
-                    | :? MapType -> Y.EMapAt(s, Option.get e0)
-                    | :? SeqType -> Y.ESeqRange(s, e0, e1)
-                    | _ ->
-                       unsupported (
-                            sprintf
-                                "Type of sequence in sequence access: %s"
-                                (e.Seq.Resolved.Type.AsCollectionType.ToString())
-                       )
-                | _ -> unsupported (sprintf "Type of sequence in sequence access: %s" (t.ToString()))
-            match t with
-            | Y.TApplyPrimitive(_, t) -> handler t
-            | _ as t -> handler t
+            Y.ESeqSelect(expr e, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays
-            Y.EArrayAt(expr e.Array, expr @ e.Indices)
+            Y.EMultiSelect(expr e.Array, expr @ e.Indices)
         | :? SeqDisplayExpr as e ->
             let elems = expr @ e.Elements
             match tp e.Type with

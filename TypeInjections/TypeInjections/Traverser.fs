@@ -159,7 +159,6 @@ module Traverser =
             | TBitVector _
             | TVar _ -> tp
             | TApply (op, args) -> TApply(this.path(ctx,op), rcL args)
-            | TApplyPrimitive (op, t) -> TApplyPrimitive(this.path(ctx, op), rc t)
             | TTuple ts -> TTuple (rcL ts)
             | TSeq(b,t) -> TSeq (b, rc t)
             | TSet(b,t) -> TSet (b, rc t)
@@ -206,17 +205,12 @@ module Traverser =
                     ESetComp (this.localDeclList (ctx, lds), pT)
                 | ESeq (t, es) -> ESeq (rcT t, rcEs es)
                 | ESeqConstr(t, l, i) -> ESeqConstr(rcT t, rcE l, rcE i)
-                | ESeqAt (s, i) -> ESeqAt (rcE s, rcE i)
-                | ESeqRange (s, f, t) -> ESeqRange (rcE s, rcEo f, rcEo t)
+                | ESeqSelect (s, t, elem, frI, toI) -> ESeqSelect (rcE s, rcT t, elem, rcEo frI, rcEo toI)
                 | ESeqUpdate (s, i, e) -> ESeqUpdate (rcE s, rcE i, rcE e)
-                | ECharAt (s, i) -> ECharAt (rcE s, rcE i)
-                | EStringRange (s, f, t) -> EStringRange (rcE s, rcEo f, rcEo t)
                 | EToString es -> EToString (rcEs es)
                 | EArray (t, dim) -> EArray (rcT t, dim)
-                | EArrayAt (a, i) -> EArrayAt (rcE a, i)
-                | EArrayRange (a, f, t) -> EArrayRange (rcE a, rcEo f, rcEo t)
+                | EMultiSelect(a, i) -> EMultiSelect(rcE a, i)
                 | EArrayUpdate (a, i, e) -> EArrayUpdate (rcE a, i ,rcE e)
-                | EMapAt (m, a) -> EMapAt (rcE m, a)
                 | EMapKeys m -> EMapKeys (rcE m)
                 | EMapDisplay kvs ->
                     (List.fold (fun l (eKey, eVal) -> (rcE eKey, rcE eVal) :: l) [] kvs)
@@ -269,7 +263,6 @@ module Traverser =
                 | EReveal es -> EReveal (rcEs es)
                 | EExpect e -> EExpect (rcE e)
                 | ECommented(s,e) -> ECommented(s, rcE e)
-                | ETypeTest(e, t) -> ETypeTest(rcE e, rcT t)
                 | EUnimplemented -> expr
 
         // methods for auxiliary types
@@ -456,7 +449,16 @@ module Traverser =
                // beta-reduction for tuples: (t_1,...,t_n).i --->  t_i
                ts.Item i
            | ETuple(es) ->
-               let isEtaExp = List.indexed es |> List.forall fun (i,e) -> e = EProj(E)
+               let mutable vars = [] 
+               let isEtaExp = List.indexed es |> List.forall (fun (i,e) ->
+                   match e with
+                   | EProj(EVar(n),j) when i = j -> vars <- n::vars; true
+                   | _ -> false
+                   )
+               if isEtaExp && (List.distinct vars).Length = 1 then
+                   EVar(vars.Head)
+               else
+                   e
            | EAnonApply(EFun(lds,_,b), es) when lds.Length = es.Length ->
                // beta-reduction: (fun x_1,...,x_n -> b) e_1 ... e_n ---> b[x_1/e_1,...,x_n/e_n] 
                let subs = (List.zip lds es) |> List.map (fun (ld,e) -> ld.name,e)

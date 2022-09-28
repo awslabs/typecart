@@ -44,12 +44,6 @@ module YIL =
             match List.rev this.names with
             | _ :: t -> List.rev t
             | [] -> []
-        member this.transformLast(name': string) =
-            match List.rev this.names with
-            | [] -> failwith "cannot transform last of an empty path"
-            | _ :: t -> name' :: t
-            |> List.rev
-            |> Path
         /// this is prefix of that (reflexive)
         member this.isAncestorOf(p: Path) =
             let l = this.names.Length
@@ -96,93 +90,7 @@ module YIL =
     let emptyMeta = { comment = None; position = None; prelude = "" }
 
     /// name of nonymous variables
-    let anonymous = "_"
-    
-    /// Three Dafny method types. This is going to matter when pretty-printing, since
-    /// Dafny distinguishes the set of syntaxes allowed when printing different methods.
-    type MethodTypePayload =
-        | IsMethod
-        | IsFunctionMethod
-        | IsFunction
-        | IsLemma
-        | IsPredicate
-        | IsPredicateMethod
-        member this.isGhost() =
-            match this with
-            | IsMethod | IsFunctionMethod | IsPredicateMethod -> false
-            | IsFunction | IsLemma | IsPredicate -> true
-        
-        override this.ToString() =
-            match this with
-            | IsMethod -> "method"
-            | IsFunctionMethod -> "function method"
-            | IsPredicateMethod -> "predicate method"
-            | IsFunction -> "function"
-            | IsLemma -> "lemma"
-            | IsPredicate -> "predicate"
-    
-    type MethodType =
-        | NonStaticMethod of m: MethodTypePayload
-        | StaticMethod of m: MethodTypePayload
-        member this.map() =
-            match this with
-            | NonStaticMethod m | StaticMethod m -> m
-    
-    type ExportType(provides: Path list, reveals: Path list) =
-        new() = ExportType([], [])
-        member this.provides = provides
-        member this.reveals = reveals
-        override this.ToString() =
-            let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> p.name), ", "))
-            match this.provides, this.reveals with
-            | [], [] -> ""
-            | _ -> 
-                "export \n"
-                    + (match this.provides with
-                       | [] -> ""
-                       | _ -> "   provides " + (lts this.provides))
-                    + "\n"
-                    + (match this.reveals with
-                       | [] -> ""
-                       | _ -> "   reveals " + (lts this.reveals))
-                    
-        
-        
-        override this.Equals(that) =
-            match that with
-            | :? ExportType as that ->
-                this.provides.Equals(that.provides) && this.reveals.Equals(that.reveals)
-            | _ -> false
-    
-        override this.GetHashCode() = this.ToString().GetHashCode()
-    
-    type ImportType =
-        | ImportDefault of Path
-        | ImportOpened of Path
-        | ImportEquals of lhsDir: Path * rhsDir: Path
-        override this.ToString() =
-            match this with
-            | ImportDefault p -> "import " + p.ToString()
-            | ImportOpened p -> "import opened " + p.ToString()
-            | ImportEquals (lhs, rhs) -> "import " + lhs.ToString() + " = " + rhs.ToString()
-        // for ImportEquals, compare rhsDir since it is the given name to the import.
-        member this.pathEquals(p': Path) =
-            match this with
-            | ImportDefault p
-            | ImportOpened p
-            | ImportEquals (_, p) -> p.Equals(p')
-        // return path of import. For ImportEquals, return path of rhs
-        member this.getPath() =
-            match this with
-            | ImportDefault p
-            | ImportOpened p
-            | ImportEquals (_, p) -> p
-        member this.prefix(pre: string) =
-            match this with
-            | ImportDefault p -> ImportDefault (p.prefix(pre))
-            | ImportOpened p -> ImportOpened (p.prefix(pre))
-            | ImportEquals (lhs, p) -> ImportEquals (lhs, p.prefix(pre))
-        
+    let anonymous = "_"        
     
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
@@ -326,6 +234,90 @@ module YIL =
             | Class (a, b, c, d, ds, e) -> [ Class (a, b, c, d, ds, e) ]
             | _ -> []
     and TypeArg = string * (bool option)  // true/false for co/contravariant
+    /// Three Dafny method types. This is going to matter when pretty-printing, since
+    /// Dafny distinguishes the set of syntaxes allowed when printing different methods.
+    and MethodTypePayload =
+        | IsMethod
+        | IsFunctionMethod
+        | IsFunction
+        | IsLemma
+        | IsPredicate
+        | IsPredicateMethod
+        member this.isGhost() =
+            match this with
+            | IsMethod | IsFunctionMethod | IsPredicateMethod -> false
+            | IsFunction | IsLemma | IsPredicate -> true
+        
+        override this.ToString() =
+            match this with
+            | IsMethod -> "method"
+            | IsFunctionMethod -> "function method"
+            | IsPredicateMethod -> "predicate method"
+            | IsFunction -> "function"
+            | IsLemma -> "lemma"
+            | IsPredicate -> "predicate"
+    
+    and MethodType =
+        | NonStaticMethod of m: MethodTypePayload
+        | StaticMethod of m: MethodTypePayload
+        member this.map() =
+            match this with
+            | NonStaticMethod m | StaticMethod m -> m
+    
+    and ExportType(provides: Path list, reveals: Path list) =
+        new() = ExportType([], [])
+        member this.provides = provides
+        member this.reveals = reveals
+        override this.ToString() =
+            let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> p.name), ", "))
+            match this.provides, this.reveals with
+            | [], [] -> ""
+            | _ -> 
+                "export \n"
+                    + (match this.provides with
+                       | [] -> ""
+                       | _ -> "   provides " + (lts this.provides))
+                    + "\n"
+                    + (match this.reveals with
+                       | [] -> ""
+                       | _ -> "   reveals " + (lts this.reveals))
+                    
+        
+        
+        override this.Equals(that) =
+            match that with
+            | :? ExportType as that ->
+                this.provides.Equals(that.provides) && this.reveals.Equals(that.reveals)
+            | _ -> false
+    
+        override this.GetHashCode() = this.ToString().GetHashCode()
+    
+    and ImportType =
+        | ImportDefault of Path
+        | ImportOpened of Path
+        | ImportEquals of lhsDir: Path * rhsDir: Path
+        override this.ToString() =
+            match this with
+            | ImportDefault p -> "import " + p.ToString()
+            | ImportOpened p -> "import opened " + p.ToString()
+            | ImportEquals (lhs, rhs) -> "import " + lhs.ToString() + " = " + rhs.ToString()
+        // for ImportEquals, compare rhsDir since it is the given name to the import.
+        member this.pathEquals(p': Path) =
+            match this with
+            | ImportDefault p
+            | ImportOpened p
+            | ImportEquals (_, p) -> p.Equals(p')
+        // return path of import. For ImportEquals, return path of rhs
+        member this.getPath() =
+            match this with
+            | ImportDefault p
+            | ImportOpened p
+            | ImportEquals (_, p) -> p
+        member this.prefix(pre: string) =
+            match this with
+            | ImportDefault p -> ImportDefault (p.prefix(pre))
+            | ImportOpened p -> ImportOpened (p.prefix(pre))
+            | ImportEquals (lhs, p) -> ImportEquals (lhs, p.prefix(pre))
     (* types
        We do not allow module inheritance or Dafny classes.
        Therefore, there is no subtyping except for numbers.
@@ -351,7 +343,6 @@ module YIL =
         | TNullable of Type
         // identifiers
         | TApply of op: Path * args: Type list
-        | TApplyPrimitive of op: Path * underlyingType: Type
         | TVar of string
         // dummy for missing cases
         | TUnimplemented
@@ -372,14 +363,6 @@ module YIL =
             | TBitVector (w) -> "bv" + w.ToString()
             | TVar (n) -> n
             | TApply (op, args) -> (String.concat "." op.names) + (tps args)
-            | TApplyPrimitive (op, t) ->
-                match t with
-                | TApply _ -> t.ToString()
-                | _ ->
-                    let pathUntil = op.namesWithoutLast()
-                    match pathUntil with
-                    | [] -> t.ToString()
-                    | _ -> (String.concat "." pathUntil) + "." + (t.ToString())
             | TTuple (ts) -> product ts
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
             | TSeq (b,t) -> "seq" + b.ToString() + (tps [ t ])
@@ -490,21 +473,21 @@ module YIL =
         | ESetComp of lds: LocalDecl list * p: Expr // set comprehension. {x in lds | p(lds)}
         | ESeq of tp: Type * elems: Expr list
         | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
-        | EMapAt of mp: Expr * arg: Expr
         | EMapKeys of map: Expr
         | EMapDisplay of map : (Expr * Expr) list // explicit map represented as a list
         // map comprehension where tL is an expression over the preimage and tR is an expression mapping preimage to
         // image. If tL = Some tLF, generates the map tLF(p(lds)) -> tR(p(lds)). Otherwise, generates the map
         // p(lds) -> tR(p(lds)).
         | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr
-        | ESeqAt of seq: Expr * index: Expr
-        | ESeqRange of seq: Expr * beginIndex: Expr option * endIndex: Expr option
+        /// Dafny's ad hoc polymorphic selection expression
+        /// expr can be anything sequence-like, e.g., sequence, map, string
+        /// returns element or slice depending on which indices are given; redundantly stored in 'element'
+        /// these are disambiguated into separate constructors in the YuccaCompiler
+        | ESeqSelect of expr: Expr * tp: Type * element: bool * fromIndex: Expr option * toIndex: Expr option
+        /// multi-dim array access
+        | EMultiSelect of expr: Expr * indices: Expr list
         | ESeqUpdate of seq: Expr * index: Expr * df: Expr
-        | EArrayAt of array: Expr * index: Expr list
-        | EArrayRange of array: Expr * beginIndex : Expr option * endIndex: Expr option
         | EArrayUpdate of array: Expr * index: Expr list * value: Expr // in-place array update
-        | ECharAt of str: Expr * index: Expr
-        | EStringRange of str: Expr * beginIndex: Expr option * endIndex: Expr option
         // *** various forms of function applications
         // built-in unary and binary operators
         | EUnOpApply of op: string * arg: Expr
@@ -1240,36 +1223,22 @@ module YIL =
             | ESetComp (lds, predicate) ->
                 let ldsStr = List.map this.localDecl lds |> String.concat ", "
                 "set (" + ldsStr + ") | " + (expr predicate)
-            | ECharAt (s, i) -> (expr s) + dims ([ i ])
-            | EStringRange (s, f, t) ->
-                (expr s)
-                + "["
-                + exprO f ""
-                + ".."
-                + exprO t ""
-                + "]"
             | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
             | ESeqConstr(_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
-            | ESeqAt (s, i) -> (expr s) + "[" + (expr i) + "]"
-            | ESeqRange (s, f, t) ->
-                (expr s)
-                + "["
-                + exprO f ""
-                + ".."
-                + exprO t ""
-                + "]"
+            | ESeqSelect (s, _, elem, f, t) ->
+                if elem then
+                    (expr s) + "[" + (expr (Option.get f)) + "]"
+                else
+                    (expr s)
+                    + "["
+                    + exprO f ""
+                    + ".."
+                    + exprO t ""
+                    + "]"
             | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] := " + (expr e)
             | EArray (t, d) -> "new " + t.ToString() + dims (d)
-            | EArrayAt (a, i) -> (expr a) + dims (i)
-            | EArrayRange (a, f, t) ->
-                (expr a)
-                + "["
-                + exprO f ""
-                + ".."
-                + exprO t ""
-                + "]"
+            | EMultiSelect(a, i) -> (expr a) + dims (i)
             | EArrayUpdate (a, i, e) -> (expr a) + dims (i) + " := " + (expr e)
-            | EMapAt (m, e) -> (expr m) + (dims [ e ])
             | EMapKeys (e) -> (expr e) + ".Keys"
             | EMapDisplay (elts) ->
                 let str = List.fold (fun l (k, v) -> (String.concat " := " [expr k; expr v]) :: l) [] elts

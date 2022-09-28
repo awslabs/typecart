@@ -227,7 +227,6 @@ module Analysis =
             let doPath p = this.doPathForType(p, currModulePath, imports)
             match t with
             | TApply (p, ts) -> TApply(doPath(p), List.map (fun x -> this.tp (ctx, x)) ts)
-            | TApplyPrimitive (p, t) -> TApplyPrimitive(doPath(p), this.tp(ctx, t))
             | _ -> this.tpDefault(ctx, t)
 
      type DeduplicateImportsIncludes() =
