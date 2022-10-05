@@ -3,15 +3,13 @@
 
 namespace TypeInjections
 
-open Microsoft.Dafny
-open System
+open Typecart
 
 module Program =
     
     [<EntryPoint>]
     let main (argv: string array) =
-        // for now, typeCart requires fully qualified paths of files
-        // TODO: update to read Dafny project folder
+        // for now, typeCart requires fully qualified paths of input files or folders
         // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
         if argv.Length < 3 then
@@ -26,19 +24,18 @@ module Program =
         let ignorePatternsFile =
             if List.length argvList = 4 then
                 Some (argvList.Item(3))
-            else None
-        
+            else None 
         
         //initialise Dafny
         let reporter = Utils.initDafny
 
         // parse input files into Dafny programs
         Utils.log "***** calling Dafny to parse and type-check old and new file"
-        let oldProject = Typecart.TypecartProject(oldPath, ignorePatternsFile)
-        let newProject = Typecart.TypecartProject(newPath, ignorePatternsFile)
+        let oldProject = TypecartProject(oldPath, ignorePatternsFile)
+        let newProject = TypecartProject(newPath, ignorePatternsFile)
         
         Utils.log "***** calling typeCart API"
-        Typecart.typecart(oldProject.toYILProgram("Old", reporter), newProject.toYILProgram("New", reporter), Utils.log)
-            .go(Typecart.DefaultTypecartOutput(outFolder))
+        typecart(oldProject.toYILProgram("Old", reporter), newProject.toYILProgram("New", reporter), Utils.log)
+            .go(DefaultTypecartOutput(outFolder))
         0
  
