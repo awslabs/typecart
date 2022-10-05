@@ -26,7 +26,7 @@ module Program =
                 Some (argvList.Item(3))
             else None 
         
-        //initialise Dafny
+        // initialise Dafny
         let reporter = Utils.initDafny
 
         // parse input files into Dafny programs
