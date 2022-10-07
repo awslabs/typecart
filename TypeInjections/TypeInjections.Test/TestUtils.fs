@@ -12,6 +12,8 @@ module TestUtils =
     open System
     module T = Typecart
     
+    type TestFormat = string -> string -> unit
+    
     let pwd : string =
         let wd = Environment.CurrentDirectory
 
@@ -102,11 +104,36 @@ module TestUtils =
         
         T.Typecart(oldProj.toYILProgram("Old", Utils.initDafny),
                    newProj.toYILProgram("New", Utils.initDafny)).go(outputWriter)
-        
-        
+       
     let public testRunnerGen (directoryName: string) (outputDirectoryName: string) =
         let inputDirectory = Path.Combine([| pwd; directoryName |])
         let inputDirectoryOld = Path.Combine([|inputDirectory; "Old"|])
         let inputDirectoryNew = Path.Combine([|inputDirectory; "New"|])
         let outputDirectory = Path.Combine([| pwd; outputDirectoryName |])
-        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|] 
+        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|]   
+    
+    (* 
+    let public testRunnerGen
+        (testToRun: TestFormat)
+        (inputFileName1: string)
+        (inputFileName2: string)
+        (outputFileName: string)
+        (expectedFileName: string)
+        =
+        let inputFile1 =
+            Path.Combine([| pwd; inputFileName1 |])
+
+        let inputFile2 =
+            Path.Combine([| pwd; inputFileName2 |])
+
+        let outputFile =
+            Path.Combine([| pwd; outputFileName |])
+
+        let expectedFile =
+            Path.Combine([| pwd; expectedFileName |])
+
+        TypeInjections.Program.runTypeCart inputFile1 inputFile2 pwd extraFileName false outputFileName
+        |> ignore
+
+        testToRun outputFile expectedFile
+    *)

@@ -9,12 +9,57 @@ module GenFunctionTests =
     type internal Marker =
         interface
         end
-
-    let moduleName = typeof<Marker>.DeclaringType.Name
-    // set the module name, alternatively we could look into determining
-    // the calling module via reflection in TestUtils
         
     let testRunner =
         TestUtils.testRunnerGen
+        
+    [<Test>]
+    let SimpleDatatypeTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+        
+    [<Test>]
+    let RecursiveDatatypeTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let DatatypeRefTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let GenericDatatypeTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let ResultTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let SeqTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let SetTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let MapTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let CollectionsTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let NewtypeTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let SubsetSynTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
+    [<Test>]
+    let LimitTest () =
+        testRunner "InputDirectory" "OutputDirectory"
+
         
         
