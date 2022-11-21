@@ -139,7 +139,6 @@ module Utils =
         let mutable dafnyProgram = Unchecked.defaultof<Program>
         logObject "***** calling Dafny parser and checker for {0}" file
         let dafnyFiles = [ dafnyFile ]
-
         let err =
             Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
 

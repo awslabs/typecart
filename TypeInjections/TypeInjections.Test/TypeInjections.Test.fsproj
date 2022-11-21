@@ -27,11 +27,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.7" />
-        <PackageReference Include="Boogie.Core" Version="2.15.7" />
-        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.7" />
+        <PackageReference Include="Boogie.BaseTypes" Version="2.15.6" />
+        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.6" />
+        <PackageReference Include="Boogie.Core" Version="2.15.6" />
+        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.6" />
+        <PackageReference Include="DafnyPipeline" Version="3.7.3.40719" />
         <PackageReference Include="CommandLineParser.FSharp" Version="2.9.2-ci-210" />
-        <PackageReference Include="DafnyPipeline" Version="3.6.0.40511" />
     </ItemGroup>
-
 </Project>

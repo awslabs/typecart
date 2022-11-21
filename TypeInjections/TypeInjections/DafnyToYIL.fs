@@ -43,7 +43,8 @@ module DafnyToYIL =
     let DafnyPartialFun = "_#PartialFunc"
     let DafnyMap = "map"
     let DafnyKeys = "Keys"
-
+    let DafnyReads = "reads" // the special 'reads' member of a function
+    
     // ***** the mutually recursive functions
 
     (* a program concatenates the input file with all its dependencies, in reverse dependency order
@@ -501,6 +502,9 @@ module DafnyToYIL =
                 elif p.names.Item(1) = DafnyMap
                      && p.names.Item(2) = DafnyKeys then
                     Y.EMapKeys(e)
+                elif p.names.Item(1).StartsWith(DafnyFun)
+                     && p.names.Item(2) = DafnyReads then
+                    Y.EMemberRef(r, p, [])
                 else
                     unsupported $"Unknown member {p}"
             else
@@ -526,7 +530,7 @@ module DafnyToYIL =
             let vars = boundVar @ e.BoundVars
             Y.EFun(vars, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e ->
-            Y.ESeqSelect(expr e, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
+            Y.ESeqSelect(expr e.Seq, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays
             Y.EMultiSelect(expr e.Array, expr @ e.Indices)

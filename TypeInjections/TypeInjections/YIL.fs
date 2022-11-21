@@ -480,7 +480,7 @@ module YIL =
         // p(lds) -> tR(p(lds)).
         | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr
         /// Dafny's ad hoc polymorphic selection expression
-        /// expr can be anything sequence-like, e.g., sequence, map, string
+        /// expr can be anything sequence-like, e.g., sequence, map, string, tp stores its type
         /// returns element or slice depending on which indices are given; redundantly stored in 'element'
         /// these are disambiguated into separate constructors in the YuccaCompiler
         | ESeqSelect of expr: Expr * tp: Type * element: bool * fromIndex: Expr option * toIndex: Expr option
