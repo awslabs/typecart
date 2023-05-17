@@ -9,11 +9,11 @@ open TypeInjections.YIL
 module Typecart =
 
     // interface for handling how typeCart writes out the diffed files
-    type TypecartOutput =
+    type TypecartOutputProcessor =
         abstract member processOld : oldYIL: Program -> unit
         abstract member processNew : newYIL: Program -> unit
         abstract member processJoint : jointYIL: Program -> unit
-        abstract member processTranslations : translationsYIL: Program -> unit
+        abstract member processCombine : translationsYIL: Program -> unit
 
     // Sample output-writing interface for diffing two files
     type DefaultTypecartOutput(outFolder: string) =
@@ -27,13 +27,11 @@ module Typecart =
             let s = YIL.printer().prog (p, YIL.Context(p))
             IO.File.WriteAllText(f, s)
 
-        interface TypecartOutput with
+        interface TypecartOutputProcessor with
             member this.processOld(oldYIL: YIL.Program) = write ("old.dfy", oldYIL)
             member this.processNew(newYIL: YIL.Program) = write ("new.dfy", newYIL)
             member this.processJoint(jointYIL: YIL.Program) = write ("joint.dfy", jointYIL)
-
-            member this.processTranslations(translationsYIL: YIL.Program) =
-                write ("translations.dfy", translationsYIL)
+            member this.processCombine(translationsYIL: YIL.Program) = write ("combine.dfy", translationsYIL)
 
 
     // replace "." with "\." and "/" with "\/" to make specifying regex on filenames easier
@@ -131,33 +129,26 @@ module Typecart =
 
     // API entry
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =
+        let oldOrNewPrefix(old: bool) = if old then "Old" else "New"
+        let jointPrefix = "Joint"
         // pipelines for transforming old, new, joint, translations
-        let processOld (joint: YIL.Path list) : Traverser.Transform list =
+        let oldOrNewPipeline(joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.RecursiveFilterTransform(fun p -> not (List.contains p joint))
               Analysis.PrefixNotFoundImportsWithJoint()
-              Analysis.PrefixTopDecls("Old")
+              Analysis.PrefixTopDecls(oldOrNewPrefix(old))
               Analysis.ImportJointInOldNew()
               Analysis.AnalyzeModuleImports()
               Analysis.DeduplicateImportsIncludes()
-              Analysis.CreateEmptyModuleIfNoneExists("Old") ]
+              Analysis.CreateEmptyModuleIfNoneExists(oldOrNewPrefix(old)) ]
 
-        let processNew (joint: YIL.Path list) : Traverser.Transform list =
-            [ Analysis.RecursiveFilterTransform(fun p -> not (List.contains p joint))
-              Analysis.PrefixNotFoundImportsWithJoint()
-              Analysis.PrefixTopDecls("New")
-              Analysis.ImportJointInOldNew()
-              Analysis.AnalyzeModuleImports()
-              Analysis.DeduplicateImportsIncludes()
-              Analysis.CreateEmptyModuleIfNoneExists("New") ]
-
-        let processJoint (joint: YIL.Path list) : Traverser.Transform list =
+        let jointPipeline(joint: YIL.Path list) : Traverser.Transform list =
             [ Analysis.RecursiveFilterTransform(fun p -> List.contains p joint)
-              Analysis.PrefixTopDecls("Joint")
+              Analysis.PrefixTopDecls(jointPrefix)
               Analysis.AnalyzeModuleImports()
               Analysis.DeduplicateImportsIncludes()
-              Analysis.CreateEmptyModuleIfNoneExists("Joint") ]
+              Analysis.CreateEmptyModuleIfNoneExists(jointPrefix) ]
 
-        let processTranslations : Traverser.Transform list =
+        let combinePipeline : Traverser.Transform list =
             [ Analysis.ImportInTranslationsModule()
               Analysis.AnalyzeModuleImports()
               Analysis.DeduplicateImportsIncludes()
@@ -174,118 +165,32 @@ module Typecart =
             | Some logger -> logger s
 
         // (old) run typecart on oldYIL and newYIL and perform program-level diffing with module granularity
-        member this.goDiffModules(outputWriter: TypecartOutput) =
-            // tests the transformation code
-            Traverser.test oldYIL
+        member this.go(outputWriter: TypecartOutputProcessor) =
+            // for debugging: tests the transformation code
+            // Traverser.test oldYIL
 
+            // for debugging/loggin
+            
+            
             // diff the programs
             this.logger "***** diffing the two programs"
-
             let diff = Differ.prog (oldYIL, newYIL)
             let diffS = (Diff.Printer()).prog diff
             this.logger diffS
 
             // generate translation
             this.logger "***** generating compatibility code"
-            let combine, joint = Translation.prog (oldYIL, diff)
+            let combineYIL, jointPaths = Translation.prog(oldYIL, diff)
 
             // write output files
             this.logger "***** writing output files"
-
-            let mk arg = arg |> Analysis.Pipeline
-
-            (processJoint joint |> mk).apply oldYIL
+            Analysis.Pipeline(jointPipeline jointPaths).apply newYIL
             |> outputWriter.processJoint
-
-            (processOld joint |> mk).apply oldYIL
+            Analysis.Pipeline(oldOrNewPipeline(jointPaths, true)).apply oldYIL
             |> outputWriter.processOld
-
-            (processNew joint |> mk).apply newYIL
+            Analysis.Pipeline(oldOrNewPipeline(jointPaths, false)).apply oldYIL
             |> outputWriter.processNew
-
-            (mk processTranslations).apply combine
-            |> outputWriter.processTranslations
-
-        // current main-entry for module-level diffing.
-        // run typecart on oldYIL and newYIL and call outputWriter to get output
-        member this.go(outputWriter: TypecartOutput) =
-            // tests the transformation code
-            Traverser.test (oldYIL)
-
-            // diff the programs
-            this.logger "***** diffing the two programs"
-
-            let oldDecls = oldYIL.decls
-            let newDecls = newYIL.decls
-
-            // pair up every toplevel module of the same name, in Old / New AST. produces list of
-            // pairs (oldModule, newModule).
-            // this is implemented a nested iteration. For larger ASTs, we may want to speed
-            // up by using a set / dict lookup.
-            let oldNewModules =
-                List.fold
-                    (fun acc declOld ->
-                        match declOld with
-                        | Module (oN, oD, oM) ->
-                            match List.collect
-                                      (function
-                                      | Module (nN, nD, nM) ->
-                                          if oN.Equals(nN) then
-                                              [ nN, nD, nM ]
-                                          else
-                                              []
-                                      | _ -> [])
-                                      newDecls with
-                            | [ n ] -> ((oN, oD, oM), n) :: acc
-                            | _ -> acc
-                        | _ -> acc (* do not diff anything other than modules *) )
-                    []
-                    oldDecls
-
-            // for every pair of old/new modules, transform the pair into a pair of (old module, module Diff)
-            let oldNewDiff =
-                List.fold
-                    (fun acc ((oN, oD, oM), (nN, nD, nM)) ->
-                        match Differ.decl ((Module(oN, oD, oM)), (Module(nN, nD, nM))) with
-                        | Some diff -> (Module(oN, oD, oM), diff) :: acc
-                        | None -> acc)
-                    []
-                    oldNewModules
-
-            // for every pair (old module, module Diff) in oldNewDiff, produce a translation.
-            // the result of the translation is given as a list of translations produced (in AST form),
-            // and a list of names in the joint module.
-            let translationDecls, joint =
-                let produceTranslation (old, diff) =
-                    Translation.translateModule (Context(oldYIL), old, diff) in
-
-                let translationDeclsNested, nestedJoint =
-                    List.map produceTranslation oldNewDiff
-                    |> List.unzip
-
-                List.collect id translationDeclsNested, List.collect id nestedJoint // flatten
-
-            // finally, compose the list of translations produced into a single module, wrapped by a program AST.
-            let translations =
-                { name = oldYIL.name
-                  decls = [ Module("Translations", translationDecls, emptyMeta) ]
-                  meta = oldYIL.meta }
-
-            // we are done. do postprocessing (using pass pipeline) to produce output using three ASTs
-            // (old, new, translations) and a list of joint names, used to filter out the joint AST from the old AST.
-
-            let mk arg = arg |> Analysis.Pipeline
-
-            (processOld joint |> mk).apply oldYIL
-            |> outputWriter.processOld
-
-            (processNew joint |> mk).apply newYIL
-            |> outputWriter.processNew
-
-            (processJoint joint |> mk).apply oldYIL
-            |> outputWriter.processJoint
-
-            (mk processTranslations).apply translations
-            |> outputWriter.processTranslations
+            Analysis.Pipeline(combinePipeline).apply combineYIL
+            |> outputWriter.processCombine
 
     let typecart (oldYIL: Program, newYIL: Program, logger: string -> unit) = Typecart(oldYIL, newYIL, logger)

@@ -88,7 +88,7 @@ module YIL =
 
     // ***** auxiliary methods
     let emptyMeta = { comment = None; position = None; prelude = "" }
-
+    
     /// name of nonymous variables
     let anonymous = "_"        
     
@@ -590,6 +590,8 @@ module YIL =
             ModuleImports(this.modulePath, importType :: this.imports)
     
     // auxiliary methods
+    /// dummy program
+    let emptyProgram = {name = ""; decls = []; meta = emptyMeta}
     
     /// wrapping lists of expressions in a block
     let listToExpr (es: Expr list) : Expr =
@@ -709,60 +711,45 @@ module YIL =
         | Module(_, decls, _) -> List.collect implicitChildren decls
         | _ -> []
 
+    (* retrieves all nested declarations in a program that lead to a given one
+       precondition: name must exist
+       postcondition: not empty
+    *)
+    let rec lookupAncestorsByPath (prog: Program, path: Path) : Decl list =
+        if path.isRoot then
+            [Module(prog.name, prog.decls, emptyMeta)]
+        else
+            // TODO copy over lookup code from YuccaDafnyCompiler to look up in parent classes
+            let ancestorDecls = lookupAncestorsByPath (prog, path.parent)
+            let parentDecl = ancestorDecls.Head
+            let children = parentDecl.children
+
+            match List.tryFind (fun (x: Decl) -> x.name = path.name) children with
+            | Some d -> [d]
+            | None ->
+                let implChildren = (implicitChildren parentDecl)
+                match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
+                | Some d -> d :: ancestorDecls
+                | None -> error $"Path [{path}] not valid in {prog.name}"
     (* retrieves a declaration in a program by traversing into children, e.g.,
        lookupByPath(p, []): p itself (wrapped as a module)
        lookupByPath(p,["m","d"]): datatype d in module
 
        precondition: name must exist
     *)
-    let rec lookupByPath (prog: Program, path: Path) : Decl =
-        if path.isRoot then
-            Module(prog.name, prog.decls, emptyMeta)
-        else
-            // TODO copy over lookup code from YuccaDafnyCompiler to look up in parent classes
-            let parentDecl = lookupByPath (prog, path.parent)
-            let children = parentDecl.children
+    let lookupByPath(prog: Program, path: Path) : Decl =
+        lookupAncestorsByPath(prog,path).Head
 
-            match List.tryFind (fun (x: Decl) -> x.name = path.name) children with
-            | Some d -> d
-            | None ->
-                let implChildren = (implicitChildren parentDecl)
-
-                match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
-                | Some (d) -> d
-                | None -> error $"Path [{path}] not valid in {prog.name}"
     (* as above, but returns a constructor *)
     let lookupConstructor (prog: Program, path: Path) : DatatypeConstructor =
         match lookupByPath (prog, path.parent) with
         | Datatype (_, _, ctrs, _, _) -> List.find (fun c -> c.name = path.name) ctrs
         | _ -> error $"parent not a datatype: {path}"
-
-    
-    /// A trait for contextual information required during printing.
-    type PrintingContext =
-        abstract member enterMethod: (string * MethodType) -> PrintingContext
-        abstract member enterForLoopInitializer: unit -> PrintingContext
-        abstract member enterForLoopBody: unit -> PrintingContext
-        abstract member leaveForLoopBody: unit -> PrintingContext
-        abstract member inMethod: unit -> (string * MethodType) option 
-        abstract member inForLoopInitializer: unit -> bool
-        abstract member inForLoopBody: unit -> bool
-        
-    /// Trivial implementation of PrintingContext.
-    type EmptyPrintingContext() =    
-        interface PrintingContext with
-            member this.enterMethod(_) = EmptyPrintingContext()
-            member this.enterForLoopInitializer() = EmptyPrintingContext()
-            member this.enterForLoopBody() = EmptyPrintingContext()
-            member this.leaveForLoopBody() = EmptyPrintingContext()
-            member this.inMethod() = None
-            member this.inForLoopInitializer() = false
-            member this.inForLoopBody() = false
-            
     
     /// used in Context to track where we are
     /// adjust this if we ever need to track if we are in the final position of an expression
-    type ContextPosition = BodyPosition | OtherPosition
+    type ContextPosition = BodyPosition | InForLoopInitializer | InForLoopBody | OtherPosition
+    
     (* ***** contexts: built during traversal and used for lookup of iCodeIdentifiers
 
        A Context stores an entire program plus information about where we are during its traversal:
@@ -774,38 +761,30 @@ module YIL =
        - vars: local variables that have been declared (most recent last)
        - pos: tracks if we are in the body of a method
        - modulePath: the path of the current module
-       - 
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
        
        TODO: remove importPaths and just use the tree representation of imports.
     *)
     type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition,
-                 modulePath: Path, importPaths: ImportType list, currMethod: (string * MethodType) option, inForLoopInitializer: bool, inForLoopBody: bool) =
-        // convenience constructor and accessor methods
-        new(p: Program) = Context(p, Path([]), [], [], OtherPosition, Path[], [], None, false, false)
-        
-        // A program context can be supplied to the printer.
-        interface PrintingContext with
-            member this.enterMethod(m) = Context(prog, currentDecl, tpvars, vars, pos, modulePath, importPaths, Some m, inForLoopInitializer, inForLoopBody)
-            member this.enterForLoopInitializer() = Context(prog, currentDecl, tpvars, vars, pos, modulePath, importPaths, currMethod, true, inForLoopBody)
-            member this.enterForLoopBody() = Context(prog, currentDecl, tpvars, vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, true)
-            member this.leaveForLoopBody() = Context(prog, currentDecl, tpvars, vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, false)
-            member this.inMethod() = this.currMethod
-            member this.inForLoopInitializer() = this.inForLoop
-            member this.inForLoopBody() = this.inForLoopBody
-        
+                 importPaths: ImportType list) =
+        /// convenience constructor and accessor methods
+        new(p: Program) = Context(p, Path([]), [], [], OtherPosition, [])
+        /// dummy context, use carefully
+        new() = Context(emptyProgram, Path([]), [], [], OtherPosition, [])
+            
         member this.prog = prog
         member this.currentDecl = currentDecl
         member this.tpvars = tpvars
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.pos = pos
-        member this.modulePath = modulePath
+        member this.modulePath() =
+            let ancs = lookupAncestorsByPath(prog, currentDecl)
+            let firstMod = ancs |> List.findIndex (fun (d: Decl) -> match d with Module _ -> true | _ -> false)
+            let modNames = ancs.GetSlice(Some firstMod, None) |> List.map (fun d -> d.name)
+            Path(List.rev modNames)
         member this.importPaths = importPaths
-        member this.currMethod = currMethod
-        member this.inForLoop = inForLoopInitializer
-        member this.inForLoopBody = inForLoopBody
 
         /// lookup of a type variable by name
         /// precondition: name must exist in the current context
@@ -847,30 +826,26 @@ module YIL =
         
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
-            Context(prog, currentDecl.child (n), tpvars, vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl.child (n), tpvars, vars, pos, importPaths)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, importPaths)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(tvs: TypeArg list) : Context =
-            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, importPaths)
 
         member this.add(ds: LocalDecl list) : Context =
-            Context(prog, currentDecl, tpvars, List.append vars ds, pos, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
 
         /// remembers where we are
-        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, modulePath, importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, importPaths)
         member this.enterBody() = this.setPos(BodyPosition)
-        
-        /// enter a new module
-        member this.enterModuleScope(newModulePath: Path)  =
-            Context(prog, currentDecl, tpvars, vars, pos, modulePath.append(newModulePath), importPaths, currMethod, inForLoopInitializer, inForLoopBody)
         
         // add and remove imports
         member this.addImport(importType: ImportType) =
-            Context(prog, currentDecl, tpvars, vars, pos, modulePath, importType :: importPaths, currMethod, inForLoopInitializer, inForLoopBody)
+            Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths)
                
     (* ***** printer for the language above
 
@@ -886,7 +861,7 @@ module YIL =
             if braced then " {" + s + "\n}\n" else s
         let indentedBraced(s: string) = indented(s,true)
         
-        member this.prog(p: Program, pctx: PrintingContext) =
+        member this.prog(p: Program, pctx: Context) =
             // Print out includes first because Dafny enforces this.
             // For future work, consider making includes meta-information instead of
             // AST information, as this along with the design of Dafny includes as a
@@ -931,12 +906,12 @@ module YIL =
             else
                 "<" + listToString (List.map (this.tpvar inDecl) ns, ", ") + ">"
 
-        member this.declsGeneral(ds: Decl list, pctx: PrintingContext, braced: Boolean) =
+        member this.declsGeneral(ds: Decl list, pctx: Context, braced: Boolean) =
                 indented(listToString (List.map (fun d -> this.decl(d, pctx) + "\n\n") ds, ""), braced)
-        member this.decls(ds: Decl list, pctx: PrintingContext) =
+        member this.decls(ds: Decl list, pctx: Context) =
                 this.declsGeneral(ds, pctx, true) 
         // array dimensions/indices
-        member this.dims(ds: Expr list, pctx: PrintingContext) = "[" + this.exprsNoBr ds ", " pctx + "]"
+        member this.dims(ds: Expr list, pctx: Context) = "[" + this.exprsNoBr ds ", " pctx + "]"
         member this.meta(_: Meta) = ""
         
         member this.methodType(m: MethodType) =
@@ -944,7 +919,7 @@ module YIL =
             | NonStaticMethod mp -> mp.ToString()
             | StaticMethod mp -> "static " + mp.ToString()
                 
-        member this.decl(d: Decl, pctx: PrintingContext) =
+        member this.decl(d: Decl, pctx: Context) =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""
             let decls d = this.decls(d, pctx)
             let expr (e: Expr) : string = this.expr e pctx
@@ -997,7 +972,7 @@ module YIL =
                     match outs.outputType with
                     | Some t -> this.tp t
                     | None -> this.localDecls outs.decls
-                let methodCtx = pctx.enterMethod(n, methodType)
+                let methodCtx = pctx.enter(n)
                 this.methodType(methodType) + " "
                 + n
                 + (this.tpvars false tpvs)
@@ -1038,26 +1013,26 @@ module YIL =
             | Export exportT -> exportT.ToString()
             | DUnimplemented -> UNIMPLEMENTED
 
-        member this.inputSpec(ins: InputSpec, pctx: PrintingContext) =
+        member this.inputSpec(ins: InputSpec, pctx: Context) =
             match ins with
             | InputSpec (lds, rs) ->
                 this.localDecls lds
                 + this.conditions (true, rs, pctx)
 
-        member this.outputSpec(outs: OutputSpec, pctx: PrintingContext) =
+        member this.outputSpec(outs: OutputSpec, pctx: Context) =
           let r = match outs.outputType with
                   | Some t -> this.tp t
                   | None -> this.localDecls outs.decls
           r + this.conditions (false, outs.conditions, pctx)
 
-        member this.conditions(require: bool, cs: Condition list, pctx: PrintingContext) =
+        member this.conditions(require: bool, cs: Condition list, pctx: Context) =
             if cs.IsEmpty then "" else indented(listToString (List.map (fun c -> this.condition (require, c, pctx)) cs, "\n"), false)
 
-        member this.condition(require: bool, c: Condition, pctx: PrintingContext) =
+        member this.condition(require: bool, c: Condition, pctx: Context) =
             let kw = if require then "requires" else "ensures"
             kw + " " + (this.expr c pctx)
 
-        member this.datatypeConstructor(c: DatatypeConstructor, pctx: PrintingContext) = c.name + (this.localDecls c.ins)
+        member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) = c.name + (this.localDecls c.ins)
 
         member this.tps(ts: Type list) =
             if ts.IsEmpty then
@@ -1069,12 +1044,12 @@ module YIL =
 
         member this.tp(t: Type) = t.ToString()
 
-        member this.exprsNoBr (es: Expr list)(sep: string)(pctx: PrintingContext) =
+        member this.exprsNoBr (es: Expr list)(sep: string)(pctx: Context) =
             listToString (List.map (fun e -> this.expr e pctx) es, sep)
 
-        member this.exprs (es: Expr list) (pctx: PrintingContext) = "(" + (this.exprsNoBr es ", " pctx) + ")"
+        member this.exprs (es: Expr list) (pctx: Context) = "(" + (this.exprsNoBr es ", " pctx) + ")"
 
-        member this.exprO (eO: Expr option, sep: string, pctx: PrintingContext) : string =
+        member this.exprO (eO: Expr option, sep: string, pctx: Context) : string =
             Option.defaultValue "" (Option.map (fun e -> sep + (this.expr e pctx)) eO)
 
         member this.noPrintSep(e: Expr) =
@@ -1084,7 +1059,7 @@ module YIL =
             | EWhile _ -> true
             | _ -> false
         
-        member this.statement (e: Expr) (pctx: PrintingContext) =
+        member this.statement (e: Expr) (pctx: Context) =
             let expr e = this.expr e pctx
             let exprsNoBr es sep = this.exprsNoBr es sep pctx 
             match e with
@@ -1151,8 +1126,8 @@ module YIL =
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
-                let forInitCtx = pctx.enterForLoopInitializer()
-                let forBodyCtx = pctx.enterForLoopBody()
+                let forInitCtx = pctx.setPos(InForLoopInitializer)
+                let forBodyCtx = pctx.setPos(InForLoopBody)
                 "for "
                 + this.expr d forInitCtx
                 + (if up then " to " else " downto ")
@@ -1179,7 +1154,7 @@ module YIL =
             | _ as b -> failwith "encountered non-statement in statement: " + (b.ToString())
             
         
-        member this.expr (e: Expr) (pctx: PrintingContext) : string =
+        member this.expr (e: Expr) (pctx: Context) : string =
             let expr e = this.expr e pctx
             let exprs es = this.exprs es pctx
             let exprO e sep = this.exprO (e, sep, pctx)
@@ -1290,8 +1265,8 @@ module YIL =
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
-                let forInitCtx = pctx.enterForLoopInitializer()
-                let forBodyCtx = pctx.enterForLoopBody()
+                let forInitCtx = pctx.setPos(InForLoopInitializer)
+                let forBodyCtx = pctx.setPos(InForLoopBody)
                 "for "
                 + this.expr d forInitCtx
                 + (if up then " to " else " downto ")
@@ -1326,7 +1301,7 @@ module YIL =
             | EDecls (ds) ->
                 let doOne (ld: LocalDecl, uO: UpdateRHS option) =
                     let varQual =
-                        if pctx.inForLoopInitializer() then "" else "var "
+                        if pctx.pos = InForLoopInitializer then "" else "var "
                     varQual
                     + (this.localDecl ld)
                     + (Option.defaultValue "" (Option.map (fun x -> this.update x pctx) uO))
@@ -1377,7 +1352,7 @@ module YIL =
             + (if brackets then ")" else "")
         member this.localDecls(lds: LocalDecl list) = this.localDeclsBr(lds,true)
 
-        member this.update(u: UpdateRHS)(pctx: PrintingContext) =
+        member this.update(u: UpdateRHS)(pctx: Context) =
             let op = if u.monadic.IsSome then ":-" else ":="
             " " + op + " " + (this.expr u.df pctx)
 
@@ -1386,7 +1361,7 @@ module YIL =
         member this.classType(ct: ClassType) =
             ct.path.ToString() + (this.tps ct.tpargs)
         
-        member this.receiver (rcv: Receiver, pctx: PrintingContext) =
+        member this.receiver (rcv: Receiver, pctx: Context) =
             // do not print out the "." separator if receiver is empty.
             let dot s =
                 match s with
@@ -1396,15 +1371,11 @@ module YIL =
             | StaticReceiver (ct) -> this.classType(ct) |> dot // ClassType --> path, tpargs
             | ObjectReceiver (e) -> this.expr e pctx |> dot
 
-        member this.case(case: Case)(pctx: PrintingContext) =
+        member this.case(case: Case)(pctx: Context) =
             "case " + this.expr case.pattern pctx
             + " => "
             + indented(this.expr case.body pctx, false)
-
-    
-    
-    // shortcut to create a fresh printer
+ 
+    /// shortcut to create a fresh printer
     let printer () = Printer()
-    
-    // shortcut to an empty context
-    let emptyPrintingContext = EmptyPrintingContext()
+   

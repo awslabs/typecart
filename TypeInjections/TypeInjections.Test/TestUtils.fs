@@ -65,12 +65,12 @@ module TestUtils =
             
             writeFile prog folder prefix
 
-        interface Typecart.TypecartOutput with
+        interface Typecart.TypecartOutputProcessor with
             member this.processOld(oldYIL: YIL.Program) = writeOut "old.dfy" "Old" oldYIL 
             member this.processNew(newYIL: YIL.Program) = writeOut "new.dfy" "New" newYIL
             member this.processJoint(jointYIL: YIL.Program) = writeOut "joint.dfy" "Joint" jointYIL 
-            member this.processTranslations(translationsYIL: YIL.Program) =
-                writeOut "translations.dfy" "Combine" translationsYIL  
+            member this.processCombine(translationsYIL: YIL.Program) =
+                writeOut "combine.dfy" "Combine" translationsYIL  
                            
     let typeCartAPI (argv: string array) =
         

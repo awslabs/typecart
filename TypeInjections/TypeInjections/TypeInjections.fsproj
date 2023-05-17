@@ -28,10 +28,10 @@
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Boogie.BaseTypes" Version="2.15.6" />
-        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.6" />
-        <PackageReference Include="Boogie.Core" Version="2.15.6" />
-        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.6" />
-        <PackageReference Include="DafnyPipeline" Version="3.7.3.40719" />
+        <PackageReference Include="Boogie.BaseTypes" Version="2.16.0" />
+        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.16.0" />
+        <PackageReference Include="Boogie.Core" Version="2.16.0" />
+        <PackageReference Include="Boogie.ExecutionEngine" Version="2.16.0" />
+        <PackageReference Include="DafnyCore" Version="4.0.0.50302" />
     </ItemGroup>
 </Project>

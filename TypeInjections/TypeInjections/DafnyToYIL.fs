@@ -167,26 +167,42 @@ module DafnyToYIL =
 
     and constructorDecl (c: DatatypeCtor) : Y.DatatypeConstructor =
         let cName = c.Name
+        { name = cName; ins = formal @ c.Formals; meta = namedMeta c }
 
-        { name = cName
-          ins = formal @ c.Formals
-          meta = namedMeta c }
-
-    and case (e: MatchCase) : Y.Case =
+    and case(e: MatchCase) : Y.Case =
         let vardecls = boundVar @ e.Arguments
-
         let bd =
             match e with
             | :? MatchCaseExpr as c -> expr c.Body
             | :? MatchCaseStmt as c -> Y.EBlock(statement @ c.Body)
             | _ -> error "Unexpected match case"
-
-        let p =
-            pathOfTopLevelDecl(e.Ctor.EnclosingDatatype)
-                .child (e.Ctor.Name)
-
+        let p = pathOfTopLevelDecl(e.Ctor.EnclosingDatatype).child (e.Ctor.Name)
         YIL.plainCase (p, vardecls, bd)
-
+        
+    and nestedCase (srcTp: Type)(e: NestedMatchCase) : Y.Case =
+        let vardecls, patt = pattern srcTp e.Pat
+        let bd =
+            match e with
+            | :? NestedMatchCaseExpr as c -> expr c.Body
+            | :? NestedMatchCaseStmt as c -> Y.EBlock(statement @ c.Body)
+            | _ -> error "Unexpected match case"
+        {vars = vardecls; pattern = patt; body = bd}
+        
+    and pattern(srcTp: Type)(p: ExtendedPattern): Y.LocalDecl list * Y.Expr =
+       match p with
+       | :? LitPattern as p -> [], expr p.OrigLit
+       | :? IdPattern as p ->
+           if p.ResolvedLit <> null then
+               [], expr p.ResolvedLit
+           else if p.Arguments = null then
+               [Y.LocalDecl(p.Id, tp p.Type, false)], Y.EVar(p.Id)
+           else
+               let constr = pathOfTopLevelDecl(p.Ctor.EnclosingDatatype).child(p.Ctor.Name)
+               let dss, ps = (pattern(srcTp) @  p.Arguments) |> List.unzip
+               let tpArgs = tp @ srcTp.NormalizeExpand().TypeArgs
+               List.concat dss, Y.EConstructorApply(constr, tpArgs, ps)
+       | _ -> unsupported "unknown pattern"
+    
     and isTrait (d: TopLevelDecl) =
         match d with
         | :? TraitDecl -> true
@@ -602,6 +618,7 @@ module DafnyToYIL =
                 Y.ELet(v.Var.Name, tp v.Var.Type, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
+        | :? NestedMatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, nestedCase(e.Source.Type) @ e.Cases, None)
         | :? QuantifierExpr as e ->
             // mostly in logic parts; but can only be computational if domain is finite (occurs once in Yucca)
             // if e.TypeArgs > 0 then
@@ -659,9 +676,10 @@ module DafnyToYIL =
 
     and statement (s: Statement) : Y.Expr =
         match s with
-        | :? ConcreteSyntaxStatement as s ->
-            // cases that are eliminated during resolution
-            statement s.ResolvedStatement
+        // removed in Dafny 4
+        // | :? ConcreteSyntaxStatement as s ->
+        //    // cases that are eliminated during resolution
+        //    statement s.ResolvedStatement
         | :? BlockStmt as b -> Y.EBlock(statement @ b.Body)
         | :? VarDeclStmt as s ->
             let vs = boundVar @ s.Locals
@@ -793,7 +811,7 @@ module DafnyToYIL =
         | :? ReturnStmt as s ->
             (* There may be more than one return value - see the comment on the translation of the method header.
                There may be no or multiple return values - see the comment on EReturn. *)
-            let rs = s.rhss
+            let rs = s.Rhss
 
             let es =
                 if rs = null then

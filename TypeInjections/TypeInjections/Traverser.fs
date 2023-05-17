@@ -82,18 +82,17 @@ module Traverser =
             match d with
             | Include p -> [Include p]
             | Module (n, ds, m) ->
-                let nameP = n.Split(".") |> List.ofArray
                 let imports = List.choose (function | Import it -> Some it | _ -> None) ds
                 let moduleCtx = List.fold
-                                    (fun (ctx: Context) -> ctx.addImport) (ctx.enterModuleScope(Path(nameP))) imports
+                                    (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n)) imports
                 let membersT =
-                    List.collect (fun (d: Decl) -> this.decl (childCtx n moduleCtx, d)) ds
+                    List.collect (fun (d: Decl) -> this.decl (moduleCtx, d)) ds
                 [ Module(n, membersT, m) ]
             | Datatype (n, tpvs, cons, ds, a) ->
                 // We enter a new module scope when in datatype constructors. For instance,
-                // datatype "Option" inside Joint.CommonTypes should be in scope
-                // Path ["Joint", "CommonTypes", "Option"].
-                let bodyCtx = (childCtx n ctx).enterModuleScope(Path[n]).addTpvars tpvs
+                // datatype "Option" inside Joint.CommonTypes is in scope
+                // Path ["Joint.CommonTypes", "Option"].
+                let bodyCtx = ctx.enter(n).addTpvars tpvs
                 let consT =
                     List.map (fun (c: DatatypeConstructor) -> this.constructor(bodyCtx, c)) cons
                 let membersT =
@@ -101,7 +100,7 @@ module Traverser =
                 [ Datatype(n, tpvs, consT, membersT, a) ]
             | Class (n, isT, tpvs, ps, ds, m) ->
                 // Enter a new module scope as well in class. TODO: check if this approach generates valid code.
-                let bodyCtx = (childCtx n ctx).enterModuleScope(Path[n]).addTpvars tpvs
+                let bodyCtx = ctx.enter(n).addTpvars tpvs
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (bodyCtx, d)) ds
                 let psT = List.map (fun p -> this.classType(ctx, p)) ps

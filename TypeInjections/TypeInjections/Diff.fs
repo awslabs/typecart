@@ -219,7 +219,7 @@ module Diff =
         member this.typeargs(ts: TypeArgList) = this.List(ts, fst, fst, "<", ", ", ">")
 
         member this.decls(ds: DeclList) =
-            this.List(ds, (fun x -> P().decl(x, YIL.emptyPrintingContext)), this.decl, "{\n", "\n", "\n}")
+            this.List(ds, (fun x -> P().decl(x, YIL.Context())), this.decl, "{\n", "\n", "\n}")
 
         member this.decl(d: Decl) =
             match d with
@@ -268,12 +268,12 @@ module Diff =
                 + (this.outputSpec outs)
                 + " = \n"
                 + this.exprO b
-             | Import iT -> P().decl(YIL.Import iT, YIL.emptyPrintingContext)
-             | Export eT -> P().decl(YIL.Export eT, YIL.emptyPrintingContext)
+             | Import iT -> P().decl(YIL.Import iT, YIL.Context())
+             | Export eT -> P().decl(YIL.Export eT, YIL.Context())
              | DUnimplemented -> "Unimplemented"
 
         member this.datatypeConstructors(cs: DatatypeConstructorList) =
-            this.List(cs, (fun x -> P().datatypeConstructor(x, YIL.emptyPrintingContext)), this.datatypeConstructor, "", " | ", "")
+            this.List(cs, (fun x -> P().datatypeConstructor(x, YIL.Context())), this.datatypeConstructor, "", " | ", "")
 
         member this.datatypeConstructor(c: DatatypeConstructor) =
             match c with
@@ -290,7 +290,7 @@ module Diff =
             match s with | OutputSpec (ds, cs) -> this.localDecls ds + " " + (this.conditions(false,cs))
 
         member this.conditions(require: bool, cDs: ConditionList) =
-            let p = (fun c -> P().condition (require, c, YIL.emptyPrintingContext))
+            let p = (fun c -> P().condition (require, c, YIL.Context()))
             this.List(cDs, p, p, "", ", ", "")
 
         member this.tps(ts: Type list) =
@@ -308,10 +308,10 @@ module Diff =
 
         member this.exprO(eO: ExprO) =
             match eO with
-            | SameExprO e -> UNC + (YIL.printer().exprO (e, "", YIL.emptyPrintingContext))
-            | UpdateExpr e -> UPD + (YIL.printer().expr e YIL.emptyPrintingContext)
+            | SameExprO e -> UNC + (YIL.printer().exprO (e, "", YIL.Context()))
+            | UpdateExpr e -> UPD + (YIL.printer().expr e (YIL.Context()))
             | DeleteExpr _ -> DEL
-            | AddExpr e -> ADD + (YIL.printer().expr e YIL.emptyPrintingContext)
+            | AddExpr e -> ADD + (YIL.printer().expr e (YIL.Context()))
 
         member this.localDecls(lds: LocalDeclList) =
             this.List(lds, P().localDecl, this.localDecl, "(", ", ", ")")

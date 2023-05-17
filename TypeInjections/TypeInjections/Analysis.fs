@@ -166,7 +166,7 @@ module Analysis =
             // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
             // We don't do the same for translations module, since it is produced from scratch and the fully-qualified
             // names should include "Translations.".
-            // Handle spceical case first: when both paths are in the same module, then we elide both.
+            // Handle spcecial case first: when both paths are in the same module, then we elide both.
             | Path ("Joint" :: t1), Path ("Joint" :: t2) 
             | Path ("Translations" :: t1), Path ("Translations" :: t2)
             | Path ("New" :: t1), Path ("New" :: t2)
@@ -197,34 +197,24 @@ module Analysis =
             | Path (a1 :: t1), ImportEquals (Path (a2 :: t2), _) -> p
             | _, _ -> p
             
-        member this.doPathForReceiver(p: Path, currModulePath: Path, imports: ImportType list) =
-                let objectPath = this.consumeModulePath(p, currModulePath)
-                let objectPath' = List.fold (this.consumeImportPath) objectPath imports
-                objectPath'
-              
-        member this.doPathForType(p: Path, currModulePath: Path, imports: ImportType list) =
-                
-                let objectPath = this.consumeModulePath(p, currModulePath)
-                let objectPath' =
-                    match objectPath with
-                    | Path [] -> Path [p.name]
-                    | _ -> List.fold (this.consumeImportPath) objectPath imports
-                objectPath'
-
+        member this.doPath(p: Path, currModulePath: Path, imports: ImportType list) =
+             let objectPath = this.consumeModulePath(p, currModulePath)
+             let objectPath' = List.fold (this.consumeImportPath) objectPath imports
+             objectPath'
         
         override this.receiver(ctx: Context, r: Receiver) =
             match r with
             | ObjectReceiver _ -> r // do not care about fields of e.g. local record vars.
             | StaticReceiver ct ->
                 let imports = ctx.importPaths
-                let currModulePath = ctx.modulePath
-                let objectPath = this.doPathForReceiver(ct.path, currModulePath, imports)
+                let currModulePath = ctx.modulePath()
+                let objectPath = this.doPath(ct.path, currModulePath, imports)
                 StaticReceiver {ct with path = objectPath}
         
         override this.tp(ctx: Context, t: Type) =
             let imports = ctx.importPaths
-            let currModulePath = ctx.modulePath
-            let doPath p = this.doPathForType(p, currModulePath, imports)
+            let currModulePath = ctx.modulePath()
+            let doPath p = this.doPath(p, currModulePath, imports)
             match t with
             | TApply (p, ts) -> TApply(doPath(p), List.map (fun x -> this.tp (ctx, x)) ts)
             | _ -> this.tpDefault(ctx, t)
