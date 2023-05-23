@@ -293,7 +293,7 @@ module Translation =
             //   leaves the (possibly changed) objects related)
             //
             // For a static method without specification:
-            // method p<u>(x:a,y:u):B = {_} --->
+            // method p<u,v>(x:a,y:u):B = {_} --->
             // lemma  p<uO,uN,vO,vN>(uT:uO*uN->bool, vT:vO*vN->bool, xO:aO, xN:aN, yO:uO, yN:uN))
             //     requires a-related(xO,xN) && uT(yO,yN)
             //     ensures B-related(pO(xO,uO), pN(xN, uN)
@@ -452,6 +452,7 @@ module Translation =
             tO,tN,tT
         else
             tO,tN, fun (x,y) -> EEqual(tT(x,y), y)
+
     /// the auxiliary recursive function associated with the toplevel call tp
     /// tpRF is the same as tp except for the third component:
     /// * relational: the needed relation
@@ -494,7 +495,8 @@ module Translation =
                 if relational then EConj(esT) else ETuple(esT)
             TTuple tsO, TTuple tsN, T
         | TFun (ts, u) ->
-            if not relational then failwith("functional approach does not support function types")
+            if not relational then
+               failwith "functional approach does not support function types"
             // two functions are related if they map related arguments to related results
             // x1:t1, ..., xn:tn
             let lds =
@@ -557,14 +559,11 @@ module Translation =
       let eO = NameTranslator(true).expr(ctx, e)
       let eN = NameTranslator(false).expr(ctx, e)
       eO,eN,None
-    
-    // alternate constructor for diffing two programs at once with module-level granularity
-    new(prog: Program, progD: Diff.Program, jointDecls: Path list) =
-        Translator(Context(prog), progD.decls, jointDecls, true)
-    // entry for doing translation at the declarations-level
+
+    /// entry point for running the translation
     member this.doTranslate() = decls ctx declsD
   
-  
+    
   /// entry point to call translator on a module --- experimental, unused
   /// assumes the module is at the program toplevel
   /// dependency analysis is done at the intramodule level, with granularity of every decl child of the module.
@@ -600,7 +599,7 @@ module Translation =
           Console.WriteLine($" ***** JOINT PATHS FOR {m.name} *****")          
           List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
           Console.WriteLine($" ***** JOINT PATHS FOR {m.name} END *****")
-          let tr = Translator(ctx, declD, jointPaths, true)
+          let tr = Translator(ctx, declD, jointPaths, false)
           tr.doTranslate(), jointPaths
       | _ -> failwith "declaration to be translated is not a module"
   
@@ -623,7 +622,7 @@ module Translation =
     printPaths("changed", changedChildren)
     printPaths("dependency closure of changed", changedClosed)
     printPaths("joint", jointPaths)
-    let tr = Translator(p,pD,jointPaths)
+    let tr = Translator(Context(p), pD.decls, jointPaths, true)
     let translations = {name = newName; decls = tr.doTranslate(); meta = emptyMeta}
     translations, jointPaths
 

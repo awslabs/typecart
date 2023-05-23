@@ -259,7 +259,7 @@ module YIL =
         member this.provides = provides
         member this.reveals = reveals
         override this.ToString() =
-            let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> p.name), ", "))
+            let lts (ps: Path list) = (listToString(ps, ", "))
             match this.provides, this.reveals with
             | [], [] -> ""
             | _ -> 
@@ -460,7 +460,7 @@ module YIL =
         | EFun of vars: LocalDecl list * out: Type * body: Expr
         // *** introduction/elimination forms for built-in type operators
         | ESet of tp: Type * elems: Expr list
-        | ESetComp of lds: LocalDecl list * p: Expr // set comprehension. {x in lds | p(lds)}
+        | ESetComp of lds: LocalDecl list * p: Expr * body: Expr // set comprehension {x in lds | p(lds) : f(x)}
         | ESeq of tp: Type * elems: Expr list
         | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
         | EMapKeys of map: Expr
@@ -643,9 +643,6 @@ module YIL =
         match d with
         | Datatype (_, [], ctors, _, _) -> List.forall (fun c -> c.ins.IsEmpty) ctors
         | _ -> false
-
-    // Is a given path an anonymous Dafny tuple contructor
-    let isDafnyTuple (p: Path) = p.name.StartsWith("_#Make")
     
     /// OutputSpec with a plain return type
     let outputType(t: Type, cs: Condition list) = OutputSpec([LocalDecl(anonymous, t, false)], cs)
@@ -664,7 +661,7 @@ module YIL =
         // Use prefix to explicitly detect anonymous tuple constructors here.
         let lts = List.map localDeclTerm lds
         // type arguments to EConstructorApply(...) are empty because there is no matching on types
-        let pat = if isDafnyTuple(c) then ETuple(lts) else EConstructorApply(c, [], lts)
+        let pat = EConstructorApply(c, [], lts)
         { vars = lds; pattern = pat; body = bd }
    
     // local variables introduced by an expression (relevant when extending the context during traversal)
@@ -1101,20 +1098,21 @@ module YIL =
             (* ModifyStmt *)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es)) + ";"
             | EReturn es -> "return " + (exprsNoBr es ", ") + ";"
-            | EReveal es ->  "reveal " + (String.concat ", " (List.map expr es)) + ";"
+            | EReveal es ->
+                if es.IsEmpty then
+                   "" // happens when unresolved expressions are dropped in DafnyToYIL
+                else
+                   "reveal " + (String.concat ", " (List.map expr es)) + ";"
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map expr ns
                 listToString (lhsExprs, ",") + (this.update u pctx) + ";"
-            | EVar n ->
-                let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
-                nF + ";"
+            | EVar _ -> expr e + ";"
             | EMemberRef (r, m, _) -> this.receiver(r, pctx) + m.name + ";"
             | EWhile (c, e, l) ->
                 let label =
                     match l with
                     | Some l -> sprintf "%s: " l
                     | None -> ""
-
                 sprintf "%s while (%s) %s" label (expr c) (this.statement e pctx)
             | EFor (index, init, last, up, body) ->
                 let d =
@@ -1160,9 +1158,10 @@ module YIL =
             let tps = this.tps
 
             match e with
-            | EVar n ->
-                let nF = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
-                nF
+            | EVar n -> 
+                let n1 = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
+                let n2 = if n1.StartsWith("_") then "_" else n1 // Dafny-generated anonymous variables
+                n2
             | EThis -> "this"
             | ENew (ct, _) -> "new " + this.classType (ct) + "()"
             | ENull _ -> "null"
@@ -1188,9 +1187,9 @@ module YIL =
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
             | ESet (_, es) -> "{" + (exprs es) + "}"
-            | ESetComp (lds, predicate) ->
+            | ESetComp (lds, predicate, body) ->
                 let ldsStr = List.map this.localDecl lds |> String.concat ", "
-                "set (" + ldsStr + ") | " + (expr predicate)
+                "set " + ldsStr + " | " + (expr predicate) + " :: " + (expr body)
             | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
             | ESeqConstr(_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
             | ESeqSelect (s, _, elem, f, t) ->
@@ -1314,7 +1313,11 @@ module YIL =
             | EAssert e -> "assert " + (expr e) 
             | EAssume e -> "assume " + (expr e) 
             | EExpect e -> "expect " + (expr e)
-            | EReveal es -> "reveal " + (String.concat ", " (List.map expr es)) 
+            | EReveal es ->
+                if es.IsEmpty then
+                   "reveal true" // empty reveal not allowed in Dafny
+                else
+                   "reveal " + (String.concat ", " (List.map expr es))
             | ECommented(s,e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 

@@ -22,11 +22,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Boogie.BaseTypes" Version="2.15.6" />
-        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.15.6" />
-        <PackageReference Include="Boogie.Core" Version="2.15.6" />
-        <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.6" />
-        <PackageReference Include="DafnyPipeline" Version="3.7.3.40719" />
+        <PackageReference Include="Boogie.BaseTypes" Version="2.16.0" />
+        <PackageReference Include="Boogie.CodeContractsExtender" Version="2.16.0" />
+        <PackageReference Include="Boogie.Core" Version="2.16.0" />
+        <PackageReference Include="Boogie.ExecutionEngine" Version="2.16.0" />
+        <PackageReference Include="DafnyCore" Version="4.0.0.50302" />
         <PackageReference Include="CommandLineParser.FSharp" Version="2.9.2-ci-210"/>
         <PackageReference Include="LibGit2Sharp" Version="0.27.0-preview-0182"/>
     </ItemGroup>

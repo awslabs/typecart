@@ -195,10 +195,11 @@ module Traverser =
                 | ETuple es -> ETuple (rcEs es)
                 | EProj (e, i) -> EProj (rcE e, i)
                 | ESet (t, es) -> ESet (rcT t, rcEs es)
-                | ESetComp (lds, p) ->
+                | ESetComp (lds, p, b) ->
                     let ctxE = ctx.add lds
                     let pT = this.expr(ctxE, p)
-                    ESetComp (this.localDeclList (ctx, lds), pT)
+                    let bT = this.expr(ctxE, b)
+                    ESetComp (this.localDeclList (ctx, lds), pT, bT)
                 | ESeq (t, es) -> ESeq (rcT t, rcEs es)
                 | ESeqConstr(t, l, i) -> ESeqConstr(rcT t, rcE l, rcE i)
                 | ESeqSelect (s, t, elem, frI, toI) -> ESeqSelect (rcE s, rcT t, elem, rcEo frI, rcEo toI)

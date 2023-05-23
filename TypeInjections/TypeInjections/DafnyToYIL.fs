@@ -27,7 +27,7 @@ module DafnyToYIL =
     module Y = YIL
 
     // ***** helper functions
-
+    let warning(msg: string) = Console.WriteLine("WARNING: " + msg)
     let unsupported msg = failwith msg
     let error msg = failwith msg
 
@@ -38,6 +38,7 @@ module DafnyToYIL =
     // special strings that Dafny uses for built-in objects
     let DafnySystem = "_System"
     let DafnyTuple = "_tuple#"
+    let DafnyTupleMake = "_#Make" // tuple constructor is named _#Maken for arity n
     let DafnyFun = "_#Func"
     let DafnyTotalFun = "_#TotalFunc"
     let DafnyPartialFun = "_#PartialFunc"
@@ -197,10 +198,16 @@ module DafnyToYIL =
            else if p.Arguments = null then
                [Y.LocalDecl(p.Id, tp p.Type, false)], Y.EVar(p.Id)
            else
-               let constr = pathOfTopLevelDecl(p.Ctor.EnclosingDatatype).child(p.Ctor.Name)
                let dss, ps = (pattern(srcTp) @  p.Arguments) |> List.unzip
-               let tpArgs = tp @ srcTp.NormalizeExpand().TypeArgs
-               List.concat dss, Y.EConstructorApply(constr, tpArgs, ps)
+               let n = p.Ctor.Name
+               let patternT = 
+                 if n.StartsWith(DafnyTupleMake) then
+                   Y.ETuple(ps)
+                 else
+                   let constr = pathOfTopLevelDecl(p.Ctor.EnclosingDatatype).child(p.Ctor.Name)
+                   let tpArgs = tp @ srcTp.NormalizeExpand().TypeArgs
+                   Y.EConstructorApply(constr, tpArgs, ps)
+               List.concat dss, patternT
        | _ -> unsupported "unknown pattern"
     
     and isTrait (d: TopLevelDecl) =
@@ -478,17 +485,13 @@ module DafnyToYIL =
             | :? LetExpr as e ->
                 if e.LHSs.Count <> 1 then
                     unsupported "let with more than 1 LHS"
-
                 if e.RHSs.Count <> 1 then
                     unsupported "let with more than 1 RHS"
-
                 let v = e.LHSs.Item(0)
-
                 if v.Var = null then
                     unsupported "let with constructor pattern"
                 else
                     let rhs = expr (e.RHSs.Item(0))
-
                     match e.Body with
                     | :? ITEExpr as iteE ->
                         let elseExpr = (iteE.Els :?> LetExpr)
@@ -499,7 +502,11 @@ module DafnyToYIL =
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
-            expr e.ResolvedExpression
+            let r = e.ResolvedExpression
+            if r = null then
+                YIL.EUnimplemented // a few expressions are not resolved by Dafny
+            else
+                expr e.ResolvedExpression
         // identifiers/names
         | :? IdentifierExpr as e -> Y.EVar(e.Var.Name)
         | :? MemberSelectExpr as e ->
@@ -587,15 +594,12 @@ module DafnyToYIL =
 
             let tpargs = tp @ e.InferredTypeArgs
             let args = expr @ e.Arguments
-
-            if Y.isDafnyTuple(Y.Path [n]) then
-                // built-in datatype for tuples
+            if n.StartsWith(DafnyTupleMake) then
                 Y.ETuple(args) // tpargs are the types of the components
             else
                 if n.Contains("#") then
                     // make sure we caught all the built-in names
                     unsupported $"special name: {n}"
-
                 Y.EConstructorApply(path, tpargs, args)
         // others
         | :? ConversionExpr as e -> Y.ETypeConversion(expr e.E, tp e.ToType)
@@ -606,12 +610,9 @@ module DafnyToYIL =
         | :? LetExpr as e ->
             if e.LHSs.Count <> 1 then
                 unsupported "let with more than 1 LHS"
-
             if e.RHSs.Count <> 1 then
                 unsupported "let with more than 1 RHS"
-
             let v = e.LHSs.Item(0)
-
             if v.Var = null then
                 unsupported "let with constructor pattern"
             else
@@ -657,7 +658,8 @@ module DafnyToYIL =
                 unsupported "set comprehension must be finite"
             let lds = e.BoundVars |> List.ofSeq |> List.map boundVar
             let rangePredicate = expr e.Range
-            Y.ESetComp (lds, rangePredicate)
+            let body = expr e.Term
+            Y.ESetComp (lds, rangePredicate, body)
         | :? SetDisplayExpr as e ->
             if not (e.Finite) then
                 unsupported "Infinite set definition"
@@ -870,9 +872,13 @@ module DafnyToYIL =
         | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
         | :? RevealStmt as s ->
-            Y.EReveal (List.map expr (List.ofSeq s.Exprs |> List.filter (fun e -> e = null)))
+            let rs = expr @ s.Exprs
+            if List.contains YIL.EUnimplemented rs then
+                warning "dropping unresolved reveal expression"
+            let rs2 = rs |> List.filter (fun x -> x <> YIL.EUnimplemented)
+            Y.EReveal rs2
         | :? ForallStmt as s ->
-            // TODO: compile foralls correctly by also considering ensures clause.
+            // TODO: compile foralls correctly by also considering ensures clause
             Y.EQuant(Y.Forall, boundVar @ s.BoundVars, exprO s.Range, if s.Body <> null then statement s.Body else Y.ESKip)
         | :? SkeletonStatement -> Y.EUnimplemented (* '...;' skeleton statements *)
         | _ -> unsupported $"statement {s.ToString()}"
