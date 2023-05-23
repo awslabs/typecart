@@ -20,52 +20,43 @@ module YIL =
     let error msg = failwith msg
 
     /// a qualified identifier of a declaration, see lookupByPath for semantics
-    [<CustomEquality;NoComparison>]
     type Path =
         | Path of string list
         member this.names =
             match this with
-            | Path (ns) -> ns
+            | Path ns -> ns
+        /// empty path
         member this.isRoot = this.names.IsEmpty
+        /// this . n
         member this.child(n: string) =
             if n = "" then
                 this
             else
                 Path(this.names @ [ n ])
-        member this.prefix(s: string) = match this with Path ps -> Path (s :: ps)
+        /// this . ns
         member this.append(ns: Path) =
             Path(
                 this.names
                 @ List.filter (fun x -> x <> "") ns.names
             )
-        member this.parent = Path(listDropLast (this.names))
-        member this.name = listLast (this.names)
-        member this.namesWithoutLast() =
-            match List.rev this.names with
-            | _ :: t -> List.rev t
-            | [] -> []
-        /// this is prefix of that (reflexive)
+        /// prefix root component; used for adding "Old", "New", etc.        
+        member this.prefix(s: string) = Path((s + "." + this.names.Head) :: this.names.Tail)
+        /// a.b.c ---> a.b
+        member this.parent = Path(listDropLast this.names)
+        /// a.b.c ---> c
+        member this.name = listLast this.names
+        /// p = this . rest
         member this.isAncestorOf(p: Path) =
             let l = this.names.Length
-            p.names.Length >= l
-            && p.names.[..l - 1] = this.names
-
+            p.names.Length >= l && p.names.[..l - 1] = this.names
+        /// this . that ---> that
+        member this.relativize(that: Path) =
+            if this.isAncestorOf that then
+                Path that.names.[this.names.Length..]
+            else
+                that
+        /// dot-separated names
         override this.ToString() = listToString (this.names, ".")
-        
-        // Two paths is equal if every pair of elements in each position are equal.
-        override this.Equals(that: Object) =
-            let eq (that: Path) =
-                match this, that with
-                | Path (a :: t), Path (b :: t') -> a.Equals(b) && (Path t).Equals(Path t')
-                | Path [], Path [] -> true
-                | _ -> false
-            match that with
-            | :? Path as that -> eq that
-            | _ -> false
-        
-        override this.GetHashCode() =
-            match this with Path ps -> (String.concat ";" ps).GetHashCode()
-            
         
     // meta-information
     [<CustomEquality;NoComparison>]
@@ -109,8 +100,7 @@ module YIL =
        Within the program each declaration is uniquely identified.
     *)
     and Decl =
-        (* Include "..." is a preprocessor-like intrinsic in dafny that causes dafny to inline the file specified.
-           We need to include it here essentially because translations.dfy can also use types from joint.dfy. *)
+        (* Include "..." is a preprocessor-like intrinsic in dafny that causes dafny to inline a file *)
         | Include of p: Path
         (* We do not allow module abstraction, inheritance; modules are just namespaces and are not used as types.
            In other words, children of a module are static and globally visible via their qualified identifier.
@@ -719,17 +709,16 @@ module YIL =
         if path.isRoot then
             [Module(prog.name, prog.decls, emptyMeta)]
         else
-            // TODO copy over lookup code from YuccaDafnyCompiler to look up in parent classes
+            // if we use classes, maybe copy over lookup code from YuccaDafnyCompiler to look up in parent classes
             let ancestorDecls = lookupAncestorsByPath (prog, path.parent)
             let parentDecl = ancestorDecls.Head
             let children = parentDecl.children
-
             match List.tryFind (fun (x: Decl) -> x.name = path.name) children with
-            | Some d -> [d]
+            | Some d -> d::ancestorDecls
             | None ->
                 let implChildren = (implicitChildren parentDecl)
                 match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
-                | Some d -> d :: ancestorDecls
+                | Some d -> d::ancestorDecls
                 | None -> error $"Path [{path}] not valid in {prog.name}"
     (* retrieves a declaration in a program by traversing into children, e.g.,
        lookupByPath(p, []): p itself (wrapped as a module)
@@ -747,7 +736,8 @@ module YIL =
         | _ -> error $"parent not a datatype: {path}"
     
     /// used in Context to track where we are
-    /// adjust this if we ever need to track if we are in the final position of an expression
+    /// adjust this if we ever need to track the position in a more refined way, e.g.,
+    /// to track if we are in the return position of an expression
     type ContextPosition = BodyPosition | InForLoopInitializer | InForLoopBody | OtherPosition
     
     (* ***** contexts: built during traversal and used for lookup of iCodeIdentifiers
@@ -760,11 +750,10 @@ module YIL =
        - tpvars: type parameters of enclosing declarations (inner most last)
        - vars: local variables that have been declared (most recent last)
        - pos: tracks if we are in the body of a method
-       - modulePath: the path of the current module
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
        
-       TODO: remove importPaths and just use the tree representation of imports.
+       TODO: remove importPaths and just collect imports from the AST
     *)
     type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition,
                  importPaths: ImportType list) =
@@ -781,7 +770,11 @@ module YIL =
         member this.pos = pos
         member this.modulePath() =
             let ancs = lookupAncestorsByPath(prog, currentDecl)
-            let firstMod = ancs |> List.findIndex (fun (d: Decl) -> match d with Module _ -> true | _ -> false)
+            let firstModO = ancs |> List.tryFindIndex (fun (d: Decl) -> match d with Module _ -> true | _ -> false)
+            let firstMod =
+                match firstModO with
+                | Some m -> m
+                | None -> failwith "no module path"
             let modNames = ancs.GetSlice(Some firstMod, None) |> List.map (fun d -> d.name)
             Path(List.rev modNames)
         member this.importPaths = importPaths

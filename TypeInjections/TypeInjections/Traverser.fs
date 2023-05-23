@@ -18,7 +18,6 @@ module Traverser =
         default this.error(s: string) =
             System.Console.WriteLine(s)
         
-        
         /// translate a path referencing a declaration
         abstract member path : Context * Path -> Path
         default this.path(_,p) = p
@@ -78,13 +77,11 @@ module Traverser =
         
         // transform a declaration
         member this.declDefault(ctx: Context, d: Decl) : Decl list =
-            let childCtx (dName: string) (ctx: Context) = ctx.enter dName
             match d with
             | Include p -> [Include p]
             | Module (n, ds, m) ->
                 let imports = List.choose (function | Import it -> Some it | _ -> None) ds
-                let moduleCtx = List.fold
-                                    (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n)) imports
+                let moduleCtx = List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n)) imports
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (moduleCtx, d)) ds
                 [ Module(n, membersT, m) ]
@@ -115,7 +112,7 @@ module Traverser =
             | Field (n, t, e, isG, isS, isM, m) ->
                 [ Field(n, this.tp(ctx, t), this.exprO(ctx, e), isG, isS, isM, m) ]
             | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, isG, isS, m) ->
-                let ctxTps = (childCtx n ctx).addTpvars tpvs
+                let ctxTps = (ctx.enter n).addTpvars tpvs
                 let insT = this.inputSpec(ctxTps, ins)
                 let ctxIns = ctxTps.add(ins.decls)
                 let outsT =
@@ -132,7 +129,7 @@ module Traverser =
                 let bT = Option.map (fun b -> this.expr (bodyCtx, b)) b
                 [ Method(methodType, n, tpvs, insT, outsT, modifiesT, readsT, decreasesT, bT, isG, isS, m) ]
             | ClassConstructor (n, tpvs, ins, outs, b, m) ->
-                let headerCtx = (childCtx n ctx).addTpvars tpvs
+                let headerCtx = (ctx.enter n).addTpvars tpvs
                 let insT = this.inputSpec(headerCtx, ins)
                 let outsT = this.conditionList(headerCtx, outs)
                 let bodyCtx = (headerCtx.add ins.decls).enterBody()

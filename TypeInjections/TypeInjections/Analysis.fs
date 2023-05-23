@@ -49,9 +49,10 @@ module Analysis =
       List.iter add start
       closure
   
-  /// recursively get rid of any path not in list of specified paths, in the AST.
-  type RecursiveFilterTransform(mustPreserve: Path -> bool) =
+  /// removes declarations according to a filter predicate
+  type FilterDecls(mustPreserve: Path -> bool) =
       inherit Traverser.Identity()
+      override this.ToString() = "filtering declarations"
 
       // internal nodes must be handled separately from leaf nodes.
       override this.decl(ctx: Context, decl: Decl) =
@@ -74,45 +75,25 @@ module Analysis =
           let p' = this.progDefault(p)
           p'
   
-  /// Import joint, old, new in translations.
-  type ImportInTranslationsModule() =
+  /// add certain includes to a program and certain imports to every module
+  type AddImports(incls: string list, imps: string list) =
       inherit Traverser.Identity()
-      
+      override this.ToString() = "adding imports of " + (Utils.listToString(imps, ", "))
+      override this.prog(prog: Program) =
+          let prog' = this.progDefault(prog)
+          let is = incls |> List.map (fun i -> Include(Path ["joint.dfy"]))
+          {prog' with decls = is @ prog'.decls}
       override this.decl(ctx: Context, decl: Decl) =
           match decl with
           | Module(name, decls, meta) ->
-              [ Module(name, Import (ImportDefault (Path ["Joint"]))
-                               :: Import (ImportDefault (Path ["Old"]))
-                               :: Import (ImportDefault (Path ["New"]))
-                               :: decls, meta) ]
+              let is = imps |> List.map (fun i -> Import (ImportDefault (Path [i])))
+              [Module(name, is @ decls, meta)]
           | _ -> this.declDefault(ctx, decl)
-      
-      override this.prog(prog: Program) =
-          let prog' = this.progDefault(prog)
-          { prog' with decls = (Include(Path ["joint.dfy"]))
-                               :: (Include (Path ["old.dfy"]))
-                               :: (Include (Path ["new.dfy"]))
-                               :: prog'.decls }
   
-  type ImportJointInOldNew() =
+  /// adds a prefix to every import not found in the current AST
+  type PrefixUnfoundImports(prefix: string) =
       inherit Traverser.Identity()
-      
-      override this.decl(ctx: Context, decl: Decl) =
-          match decl with
-          | Module(name, decls, meta) ->
-              [ Module(name, Import (ImportDefault (Path ["Joint"]))
-                               :: decls, meta) ]
-          | _ -> this.declDefault(ctx, decl)
-      
-      override this.prog(prog: Program) =
-          let prog' = this.progDefault(prog)
-          { prog' with decls = (Include(Path ["joint.dfy"]))
-                               :: prog'.decls }
-  
-  /// Any import that isn't found in the old, new ASTs must belong in Joint module.
-  type PrefixNotFoundImportsWithJoint() =
-      inherit Traverser.Identity()
-      
+      override this.ToString() = "prefixing unfound imports with " + prefix
       override this.decl(ctx: Context, decl: Decl) =
           let importIn importPath =
               match List.tryFind (fun p -> importPath.Equals(p)) ctx.importPaths with
@@ -125,7 +106,7 @@ module Analysis =
                       match decl with
                       | Import it ->
                           if importIn it then decl
-                          else Import (it.prefix("Joint"))
+                          else Import (it.prefix(prefix))
                       | _ -> decl) decls
               [ Module(name, filtDecls, meta) ]
           | _ -> this.declDefault(ctx, decl)
@@ -142,94 +123,48 @@ module Analysis =
             decls = dsT
             meta = prog.meta }
 
-  /// Prefixes the names of all toplevel modules
+  /// prefixes the names of all toplevel modules in a program (only to be called on programs)
   type PrefixTopDecls(pref: string) =
     inherit Traverser.Identity()
-    member this.pref = pref
-    
-      override this.prog(prog: Program) =
+    override this.ToString() = "prefixing toplevel decls with " + pref
+    override this.prog(prog: Program) =
         let prN (n: string) = pref + "." + n
-        let prD (d: YIL.Decl) =
+        let prD (d: Decl) =
             match d with
-            | YIL.Module(n,ds,mt) -> YIL.Module(prN n, ds, mt)
+            | Module(n,ds,mt) -> Module(prN n, ds, mt)
             | d -> d
         { name=prog.name; decls=List.map prD prog.decls; meta = prog.meta }
   
-  /// Resolve module imports tagged along expressions and declarations.
-  /// Dafny complains when we print out fully qualified names in some cases, hence this pass.
-  type AnalyzeModuleImports() =
+  /// makes path unqualified if they are relative to the current module or an opened one
+  /// (Dafny complains when we print out fully qualified names in some cases)
+  type UnqualifyPaths() =
         inherit Traverser.Identity()
-        
-        // consume common prefix of current module path with current path.
-        member this.consumeModulePath(p: Path, modulePath: Path) : Path =
-            match p, modulePath with
-            // We rename the old YIL AST to Joint AST, so the fully-qualified names don't include "Joint."
-            // We don't do the same for translations module, since it is produced from scratch and the fully-qualified
-            // names should include "Translations.".
-            // Handle spcecial case first: when both paths are in the same module, then we elide both.
-            | Path ("Joint" :: t1), Path ("Joint" :: t2) 
-            | Path ("Translations" :: t1), Path ("Translations" :: t2)
-            | Path ("New" :: t1), Path ("New" :: t2)
-            | Path ("Old" :: t1), Path ("Old" :: t2) -> this.consumeModulePath(Path t1, Path t2)
-            | _, Path ("Joint" :: t) -> this.consumeModulePath(p, Path(t))
-            | _, Path ("New" :: t) -> this.consumeModulePath(p, Path(t))
-            | _, Path ("Old" :: t) -> this.consumeModulePath(p, Path(t))
-            // remove common prefix of current module scope and the fully qualified path "p".
-            // For instance, if current module scope is CommonTypes.Option and p = Path [CommonTypes, Option, None]
-            // then the result should be Path [None]
-            | Path (a1 :: t1), Path (a2 :: t2) ->
-                if a1.Equals(a2) then this.consumeModulePath(Path(t1), Path(t2))
-                else p
-            | _, _ -> p
-
-        // consume common prefix of an import path with current path.
+        override this.ToString() = "shortening paths by removing redundant qualification"
+        /// remove opened imported path from a path
         member this.consumeImportPath(p: Path) (import: ImportType) =
-            match p, import with
-            // Only consume common prefix of "import opened".
-            // For instance, if the current module scope has "import Constant" and
-            // the fully qualified path name is "Constant.int64", we should keep the
-            // fully qualified path name here. However, if we "import opened Constant"
-            // then the correct result should be Path ["int64"].
-            | Path (a1 :: t1), ImportOpened (Path (a2 :: t2)) when a1.Equals(a2) ->
-                this.consumeImportPath (Path(t1)) (ImportOpened (Path(t2)))
-            | Path (a1 :: t1), ImportOpened (Path (a2 :: t2))
-            | Path (a1 :: t1), ImportDefault (Path (a2 :: t2))
-            | Path (a1 :: t1), ImportEquals (Path (a2 :: t2), _) -> p
-            | _, _ -> p
+            match import with
+            | ImportOpened q -> q.relativize p
+            | _ -> p
             
-        member this.doPath(p: Path, currModulePath: Path, imports: ImportType list) =
-             let objectPath = this.consumeModulePath(p, currModulePath)
-             let objectPath' = List.fold (this.consumeImportPath) objectPath imports
-             objectPath'
-        
-        override this.receiver(ctx: Context, r: Receiver) =
-            match r with
-            | ObjectReceiver _ -> r // do not care about fields of e.g. local record vars.
-            | StaticReceiver ct ->
-                let imports = ctx.importPaths
-                let currModulePath = ctx.modulePath()
-                let objectPath = this.doPath(ct.path, currModulePath, imports)
-                StaticReceiver {ct with path = objectPath}
-        
-        override this.tp(ctx: Context, t: Type) =
-            let imports = ctx.importPaths
-            let currModulePath = ctx.modulePath()
-            let doPath p = this.doPath(p, currModulePath, imports)
-            match t with
-            | TApply (p, ts) -> TApply(doPath(p), List.map (fun x -> this.tp (ctx, x)) ts)
-            | _ -> this.tpDefault(ctx, t)
-
+        override this.path(ctx: Context, p: Path) =
+           let currModulePath = ctx.modulePath()
+           let p2 = currModulePath.relativize(p)
+           let imports = ctx.importPaths
+           List.fold this.consumeImportPath p2 imports
+             
+     /// removes duplicate includes in programs or imports in modules
      type DeduplicateImportsIncludes() =
          inherit Traverser.Identity()
-         
+         override this.ToString() = "removing duplicate imports"
          override this.prog(prog: Program) =
              let prog = this.progDefault(prog)
              let decls, _ = List.fold (fun (decls, includes: Path list) decl ->
                  match decl with
                  | Include p ->
-                     match List.tryFind (fun x -> x.Equals(p)) includes with
-                     | Some _ -> (decls, includes)
-                     | None -> (decl :: decls, p :: includes)
+                     if (List.contains p includes) then
+                       (decls, includes)
+                     else
+                       (decl :: decls, p :: includes)
                  | _ -> (decl :: decls, includes)) ([], []) prog.decls
              {prog with decls = List.rev decls}
          
@@ -246,46 +181,29 @@ module Analysis =
                    [ Module (name, List.rev newDecls, meta) ]
              | _ -> this.declDefault(ctx, d) 
     
-     type CreateEmptyModuleIfNoneExists(moduleName: string) =
-         inherit Traverser.Identity()
-         
-         let noModule(t: Decl list) =
-             match List.tryFind (function | Module _ -> true | _ -> false) t with
-             | None -> true
-             | Some _ -> false
-         
-         override this.prog(prog: Program) =
-             match prog.decls with
-             | [] as l | l when noModule(l) ->
-                 {prog with decls = l @ [Module(moduleName, [], emptyMeta)]}
-             | _ -> prog
-    
-    // MapBuiltinTypes.dfy, RelateBuiltinTypes.dfy
-    type GenerateTranslationCode() =
+    /// pulls MapBuiltinTypes.dfy, RelateBuiltinTypes.dfy from the assembly and inserts them into a program
+    type InsertTranslationFunctionsForBuiltinTypeOperators() =
         inherit Traverser.Identity()
-
         let retrieveResource (filename: string) : string =
             let asmb = Assembly.GetExecutingAssembly();
             // to check all assembly base names, use asmb.GetManifestResourceNames()
             let stream = asmb.GetManifestResourceStream($"TypeInjections.Resources.{filename}")
             let reader = new StreamReader(stream)
             reader.ReadToEnd()
-
         let relateBuiltinTypes = retrieveResource "RelateBuiltinTypes.dfy"
         let mapBuiltinTypes = retrieveResource "MapBuiltinTypes.dfy"
-        
+        override this.ToString() = "inserting includes translation functions for built-in type operators"
         override this.prog(prog: Program) =
             {prog with meta = {prog.meta with prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes}}
             
     
     type Pipeline(passes : Traverser.Transform list) =
-        member this.passes = passes
         member this.apply(prog: Program) =
-            let rec oneRest (passes: (#Traverser.Transform) list) (r: Program) =
-                match passes with
-                | curr :: next ->
-                    curr.prog(r) |> oneRest next
-                | [] -> r
-            oneRest this.passes prog
+            let mutable pM = prog
+            passes |> List.iter (fun pass ->
+                Console.WriteLine(pass.ToString())
+                pM <- pass.prog pM
+            )
+            pM
 
     

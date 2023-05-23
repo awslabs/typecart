@@ -133,26 +133,26 @@ module Typecart =
         let jointPrefix = "Joint"
         // pipelines for transforming old, new, joint, translations
         let oldOrNewPipeline(joint: YIL.Path list, old: bool) : Traverser.Transform list =
-            [ Analysis.RecursiveFilterTransform(fun p -> not (List.contains p joint))
-              Analysis.PrefixNotFoundImportsWithJoint()
+            [ Analysis.FilterDecls(fun p -> not (List.contains p joint))
+              Analysis.PrefixUnfoundImports("Joint")
               Analysis.PrefixTopDecls(oldOrNewPrefix(old))
-              Analysis.ImportJointInOldNew()
-              Analysis.AnalyzeModuleImports()
+              Analysis.AddImports(["joint.dfy"], ["Joint"])
+              Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
-              Analysis.CreateEmptyModuleIfNoneExists(oldOrNewPrefix(old)) ]
+            ]
 
         let jointPipeline(joint: YIL.Path list) : Traverser.Transform list =
-            [ Analysis.RecursiveFilterTransform(fun p -> List.contains p joint)
+            [ Analysis.FilterDecls(fun p -> List.contains p joint)
               Analysis.PrefixTopDecls(jointPrefix)
-              Analysis.AnalyzeModuleImports()
+              Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
-              Analysis.CreateEmptyModuleIfNoneExists(jointPrefix) ]
+            ]
 
         let combinePipeline : Traverser.Transform list =
-            [ Analysis.ImportInTranslationsModule()
-              Analysis.AnalyzeModuleImports()
+            [ Analysis.AddImports(["joint.dfy";"old.dfy";"new.dfy"], ["Joint";"Old";"New"])
+              Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
-              Analysis.GenerateTranslationCode() ]
+              Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
 
         // constructor without a logger instance
         new(oldYIL: Program, newYIL: Program) = Typecart(oldYIL, newYIL, None)
@@ -164,14 +164,10 @@ module Typecart =
             | None -> ()
             | Some logger -> logger s
 
-        // (old) run typecart on oldYIL and newYIL and perform program-level diffing with module granularity
+        /// run typecart on oldYIL and newYIL and perform program-level diffing with module granularity
         member this.go(outputWriter: TypecartOutputProcessor) =
             // for debugging: tests the transformation code
             // Traverser.test oldYIL
-
-            // for debugging/loggin
-            
-            
             // diff the programs
             this.logger "***** diffing the two programs"
             let diff = Differ.prog (oldYIL, newYIL)
@@ -179,17 +175,21 @@ module Typecart =
             this.logger diffS
 
             // generate translation
-            this.logger "***** generating compatibility code"
-            let combineYIL, jointPaths = Translation.prog(oldYIL, diff)
+            this.logger "***** generating translation code"
+            let combineYIL, jointPaths = Translation.prog(oldYIL, "Combine", diff)
 
-            // write output files
-            this.logger "***** writing output files"
+            // emitting output
+            this.logger "************ emitting output"
+            this.logger "***** joint"
             Analysis.Pipeline(jointPipeline jointPaths).apply newYIL
             |> outputWriter.processJoint
+            this.logger "***** old"
             Analysis.Pipeline(oldOrNewPipeline(jointPaths, true)).apply oldYIL
             |> outputWriter.processOld
+            this.logger "***** new"
             Analysis.Pipeline(oldOrNewPipeline(jointPaths, false)).apply oldYIL
             |> outputWriter.processNew
+            this.logger "***** combine"
             Analysis.Pipeline(combinePipeline).apply combineYIL
             |> outputWriter.processCombine
 
