@@ -219,10 +219,10 @@ module YIL =
         member this.filterChildren (mustPreserve: Decl -> bool) =
             let f ds = List.filter (mustPreserve) ds
             match this with
-            | Module (x, ds, y) -> [ Module (x, f ds, y) ]
-            | Datatype (a, b, c, ds, d) -> [ Datatype (a, b, c, ds, d) ]
-            | Class (a, b, c, d, ds, e) -> [ Class (a, b, c, d, ds, e) ]
-            | _ -> []
+            | Module (x, ds, y) -> Module (x, f ds, y)
+            | Datatype (a, b, c, ds, d) -> Datatype (a, b, c, ds, d)
+            | Class (a, b, c, d, ds, e) -> Class (a, b, c, d, ds, e)
+            | _ -> this
     and TypeArg = string * (bool option)  // true/false for co/contravariant
     /// Three Dafny method types. This is going to matter when pretty-printing, since
     /// Dafny distinguishes the set of syntaxes allowed when printing different methods.

@@ -24,6 +24,7 @@ module Typecart =
         let write (fileName: string, p: YIL.Program) =
             let f = IO.Path.Combine(outFolder, fileName)
             mkdir f
+            Console.WriteLine ("writing " + f)
             let s = YIL.printer().prog (p, YIL.Context(p))
             IO.File.WriteAllText(f, s)
 
@@ -139,6 +140,7 @@ module Typecart =
               Analysis.AddImports(["joint.dfy"], ["Joint"])
               Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
+              Analysis.AddEmptyModuleIfProgramEmpty(oldOrNewPrefix(old))
             ]
 
         let jointPipeline(joint: YIL.Path list) : Traverser.Transform list =
@@ -146,6 +148,7 @@ module Typecart =
               Analysis.PrefixTopDecls(jointPrefix)
               Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
+              Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix)
             ]
 
         let combinePipeline : Traverser.Transform list =

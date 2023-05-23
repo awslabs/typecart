@@ -49,31 +49,19 @@ module Analysis =
       List.iter add start
       closure
   
-  /// removes declarations according to a filter predicate
-  type FilterDecls(mustPreserve: Path -> bool) =
+  /// filters declarations by applying a predicate to their path
+  type FilterDecls(keep: Path -> bool) =
       inherit Traverser.Identity()
       override this.ToString() = "filtering declarations"
-
-      // internal nodes must be handled separately from leaf nodes.
       override this.decl(ctx: Context, decl: Decl) =
           let childCtx = ctx.enter decl.name
-          if mustPreserve(ctx.currentDecl.child(decl.name)) then
-              let decl' = this.declDefault(ctx, decl)
-              decl' 
-          else
-              let pChildren =
-                List.map (fun (childDecl: Decl) -> this.decl(childCtx, childDecl)) decl.children
-                |> List.collect id
-              match pChildren with
-              | [] -> []
-              | _ (* children preserved *) ->
-                  let fDecl = decl.filterChildren(fun x -> List.contains x pChildren)
-                  fDecl
-          
-              
+          let preservedChildren(d: Decl) = keep(ctx.currentDecl.child(d.name))
+          let declsF = decl.filterChildren preservedChildren
+          this.declDefault(childCtx, declsF)
       override this.prog(p: Program) =
-          let p' = this.progDefault(p)
-          p'
+          let dsF = p.decls |> List.filter (fun (d:Decl) -> keep(Path [d.name]))
+          let pF = {p with decls = dsF}
+          pF // this.progDefault(pF)
   
   /// add certain includes to a program and certain imports to every module
   type AddImports(incls: string list, imps: string list) =
@@ -192,10 +180,19 @@ module Analysis =
             reader.ReadToEnd()
         let relateBuiltinTypes = retrieveResource "RelateBuiltinTypes.dfy"
         let mapBuiltinTypes = retrieveResource "MapBuiltinTypes.dfy"
-        override this.ToString() = "inserting includes translation functions for built-in type operators"
+        override this.ToString() = "inserting translation functions for built-in type operators"
         override this.prog(prog: Program) =
             {prog with meta = {prog.meta with prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes}}
             
+    /// add an empty momule if the program is effectively empty
+    type AddEmptyModuleIfProgramEmpty(moduleName: string) =
+         inherit Traverser.Identity()
+         override this.ToString() = "adding empty module " + moduleName + " if necessary"
+         override this.prog(prog: Program) =
+             if prog.decls |> List.exists (function Module _ -> true | _ -> false) then
+                 prog
+             else
+                 {prog with decls = prog.decls @ [Module(moduleName, [], emptyMeta)]}
     
     type Pipeline(passes : Traverser.Transform list) =
         member this.apply(prog: Program) =
