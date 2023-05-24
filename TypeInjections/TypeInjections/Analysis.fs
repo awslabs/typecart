@@ -69,7 +69,7 @@ module Analysis =
       override this.ToString() = "adding imports of " + (Utils.listToString(imps, ", "))
       override this.prog(prog: Program) =
           let prog' = this.progDefault(prog)
-          let is = incls |> List.map (fun i -> Include(Path ["joint.dfy"]))
+          let is = incls |> List.map (fun i -> Include(Path [i]))
           {prog' with decls = is @ prog'.decls}
       override this.decl(ctx: Context, decl: Decl) =
           match decl with
