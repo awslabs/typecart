@@ -4,25 +4,27 @@ open System
 open YIL
 
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
-/// TODO make this a class taking rel as argument so that the name can be changed
 module DafnyFunctions =
+    let rcv p = StaticReceiver {path=p; tpargs=[]}
     let rb = Path ["Translations"; "RelateBuiltinTypes"]
+    let fb = Path ["Translations"; "MapBuiltinTypes"]
+    let rbRec rel = if rel then rcv rb else rcv fb
     let args rel e f = if rel then [e;f] else [e]
-    let rbRec = StaticReceiver {path=rb; tpargs=[]}
+    let utils = rcv (Path ["Translations"; "Utils"])
     /// given relation t on o*n, the sequences e: seq<n> and f:seq<n> are related
     /// if they have the same length and are related element-wise
-    let seqRel rel o n t (e,f) = EMethodApply(rbRec, rb.child("seq"), [o;n], [t]@(args rel e f), false)
+    let seqRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Seq"), [o;n], [t]@(args rel e f), false)
     /// given relation t on o*n, the array e: arr<n> and f:arr<n> are related
     /// if they have the same length and are related element-wise
-    let arrayRel rel o n t (e,f) = EMethodApply(rbRec, rb.child("array"), [o;n], [t]@(args rel e f), false)
+    let arrayRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Array"), [o;n], [t]@(args rel e f), false)
     /// given relation t on o*n, the sets e: set<n> and f:set<n> are related
     /// if every element of e is related to an element of f and vice versa
-    let setRel rel o n t (e,f) = EMethodApply(rbRec, rb.child("set"), [o;n], [t]@(args rel e f), false)
+    let setRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Set"), [o;n], [t]@(args rel e f), false)
     /// given relations, sT,tT on so*sn and tO*tN, the maps e: map<sO,tO> and f:map<sN,tN> are related
     /// if every pair in e is related a pair in f and vice versa
-    let mapRel rel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT]@(args rel e f), false)
+    let mapRel rel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec rel, rb.child("Map"), [sO;sN;tO;tN], [sT;tT]@(args rel e f), false)
     /// ???()
-    let missingTerm = EMethodApply(rbRec, rb.child("???"), [], [], false)
+    let missingTerm = EMethodApply(utils, rb.child("???"), [], [], false)
     
 open DafnyFunctions
 

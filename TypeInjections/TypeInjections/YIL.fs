@@ -259,7 +259,7 @@ module YIL =
         member this.provides = provides
         member this.reveals = reveals
         override this.ToString() =
-            let lts (ps: Path list) = (listToString(ps, ", "))
+            let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> Path p.names.Tail), ", "))
             match this.provides, this.reveals with
             | [], [] -> ""
             | _ -> 
