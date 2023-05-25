@@ -324,7 +324,11 @@ module DafnyToYIL =
            | TypeParameter.TPVariance.Co -> Some true
            | TypeParameter.TPVariance.Contra -> Some false
            | _ -> unsupported ("variance: " + t.ToString())
-        (t.Name, v)
+        let e =
+            match t.Characteristics.EqualitySupport with
+            | TypeParameter.EqualitySupportValue.Required -> true
+            | _ -> false // InferedRequired?
+        (t.Name, (v,e))
 
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
     and tp (t: Type) : Y.Type =

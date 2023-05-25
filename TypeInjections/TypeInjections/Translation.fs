@@ -81,7 +81,7 @@ module Translation =
             override this.tp(ctx: Context, t: Type) =
                 match t with
                 | TVar n ->
-                    let nO,nN,_ = typearg (n,None)
+                    let nO,nN,_ = typearg (plainTypeArg n)
                     TVar(if old then fst nO else fst nN)
                 | _ -> this.tpDefault(ctx, t)
         }
@@ -263,7 +263,7 @@ module Translation =
                   InputSpec([], []),
                   OutputSpec([], [ fieldsRelated ]),
                   [], [], [],
-                  None,
+                  Some (EBlock []),
                   true,
                   true,
                   emptyMeta
@@ -372,7 +372,7 @@ module Translation =
                     bdO |> Option.bind (fun b -> let _, _, pf = expr b in pf)
                 | _ ->
                     // changed body: generate empty proof
-                    None
+                    Some (EBlock [])
 
             [ Method(IsLemma, pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
            | _ -> failwith("impossible") // Diff.Method must occur with YIL.Method

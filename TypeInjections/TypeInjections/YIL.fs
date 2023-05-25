@@ -227,7 +227,7 @@ module YIL =
             match this with
             | Module _ -> true
             | _ -> false
-    and TypeArg = string * (bool option)  // true/false for co/contravariant
+    and TypeArg = string * (bool option * bool) // true/false for co/contravariant; true for equality required
     /// Three Dafny method types. This is going to matter when pretty-printing, since
     /// Dafny distinguishes the set of syntaxes allowed when printing different methods.
     and MethodType =
@@ -600,7 +600,7 @@ module YIL =
         | _ -> EBlock [b]
     
     /// invariant type argument given by name
-    let plainTypeArg n = (n,None)
+    let plainTypeArg n = (n,(None,false))
     
     /// the corresponding list of TVars
     let typeargsToTVars (tvs: TypeArg list) = List.map (fun (n,_) -> TVar n) tvs
@@ -873,17 +873,15 @@ module YIL =
 
         member this.tpvar(inDecl: bool) (a: TypeArg) =
             // Only print out variance type info for declaration-level printing.
-            // Prefix "+" for (n, Some true) and prefix "-" for (n, Some false).
+            // variance: prefix "+" for Some true and "-" for Some false)
+            // equality: suffix "(==)" for equality types
+            let (n,(v,e)) = a
             if inDecl then
-                match a with
-                | (n,None) -> n
-                | (n,Some true) -> "+" + n
-                | (n,Some false) -> "-" + n
+                let vS = match v with | Some true -> "+" | Some false -> "-" | _ -> ""
+                let eS = if e then "(==)" else ""
+                vS+n+eS
             else
-                match a with
-                | (n,None) 
-                | (n,Some true) 
-                | (n,Some false) -> n
+                n
         // inDecl should only be set to true when printing out class or datatype declarations.
         // These are the only places when variance type signature should be print out.
         member this.tpvars(inDecl: bool)(ns: TypeArg list) =
