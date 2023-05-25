@@ -953,13 +953,13 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + this.exprO (eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, s, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, _) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
                     | None -> this.localDecls outs.decls
                 let methodCtx = pctx.enter(n)
-                this.stat(s, pctx)
+                this.stat(s, pctx) + (if methodType = IsLemma then "" else this.ghost(g))
                 + methodType.ToString() + " "
                 + n
                 + (this.tpvars false tpvs)
