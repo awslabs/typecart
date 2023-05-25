@@ -183,7 +183,7 @@ module Diff =
         let UNC = "UNC"
 
         /// a YIL printer
-        let P () = YIL.printer ()
+        let P () = YIL.Printer false
 
         /// prints a diff between two lists, given printing functions for the YIL and Diff types
         member this.List<'y, 'd>

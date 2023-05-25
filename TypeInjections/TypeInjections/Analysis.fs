@@ -1,6 +1,7 @@
 namespace TypeInjections
 
 open System
+open System.Drawing
 open System.IO
 open System.Reflection
 open TypeInjections.YIL
@@ -69,7 +70,7 @@ module Analysis =
       override this.ToString() = "adding imports of " + (Utils.listToString(imps, ", "))
       override this.prog(prog: Program) =
           let prog' = this.progDefault(prog)
-          let is = incls |> List.map (fun i -> Include(Path ["joint.dfy"]))
+          let is = incls |> List.map (fun i -> Include(Path [i]))
           {prog' with decls = is @ prog'.decls}
       override this.decl(ctx: Context, decl: Decl) =
           match decl with
@@ -135,6 +136,8 @@ module Analysis =
             | _ -> p
             
         override this.path(ctx: Context, p: Path) =
+           if p.name = "STRING" then
+               ()
            let currModulePath = ctx.modulePath()
            let p2 = currModulePath.relativize(p)
            let imports = ctx.importPaths
@@ -193,7 +196,16 @@ module Analysis =
                  prog
              else
                  {prog with decls = prog.decls @ [Module(moduleName, [], emptyMeta)]}
-    
+
+    /// turn lemmas into axioms
+    type LemmasToAxioms() =
+         inherit Traverser.Identity()
+         override this.ToString() = "turning lemmas into axioms"
+         override this.decl(ctx: Context, d: Decl) =
+             match d with
+             | Method(IsLemma, a,b,c,d,e,f,g,_,h,i,j) -> [Method(IsLemma, a,b,c,d,e,f,g,None,h,i,j)]
+             | d -> this.declDefault(ctx, d)
+        
     type Pipeline(passes : Traverser.Transform list) =
         member this.apply(prog: Program) =
             let mutable pM = prog

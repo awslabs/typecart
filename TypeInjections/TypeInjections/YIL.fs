@@ -157,7 +157,7 @@ module YIL =
             meta: Meta
         (* methods *)
         | Method of
-            methodIs: MethodType *
+            methodType: MethodType *
             name: string *
             tpvars: TypeArg list *
             ins: InputSpec *
@@ -223,10 +223,14 @@ module YIL =
             | Datatype (a, b, c, ds, d) -> Datatype (a, b, c, ds, d)
             | Class (a, b, c, d, ds, e) -> Class (a, b, c, d, ds, e)
             | _ -> this
+        member this.isModule() =
+            match this with
+            | Module _ -> true
+            | _ -> false
     and TypeArg = string * (bool option)  // true/false for co/contravariant
     /// Three Dafny method types. This is going to matter when pretty-printing, since
     /// Dafny distinguishes the set of syntaxes allowed when printing different methods.
-    and MethodTypePayload =
+    and MethodType =
         | IsMethod
         | IsFunctionMethod
         | IsFunction
@@ -246,20 +250,13 @@ module YIL =
             | IsFunction -> "function"
             | IsLemma -> "lemma"
             | IsPredicate -> "predicate"
-    
-    and MethodType =
-        | NonStaticMethod of m: MethodTypePayload
-        | StaticMethod of m: MethodTypePayload
-        member this.map() =
-            match this with
-            | NonStaticMethod m | StaticMethod m -> m
-    
+
     and ExportType(provides: Path list, reveals: Path list) =
         new() = ExportType([], [])
         member this.provides = provides
         member this.reveals = reveals
         override this.ToString() =
-            let lts (ps: Path list) = (listToString(ps |> List.map (fun p -> Path p.names.Tail), ", "))
+            let lts (ps: Path list) = listToString(ps, ", ")
             match this.provides, this.reveals with
             | [], [] -> ""
             | _ -> 
@@ -351,7 +348,7 @@ module YIL =
             | TString b -> "string" + b.ToString()
             | TReal b -> match b with | Bound (Some 32) -> "float" | Bound (Some 64) -> "double" | _ -> "real"
             | TBitVector (w) -> "bv" + w.ToString()
-            | TVar (n) -> n
+            | TVar n -> n
             | TApply (op, args) -> (String.concat "." op.names) + (tps args)
             | TTuple (ts) -> product ts
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
@@ -496,7 +493,7 @@ module YIL =
         | ETypeTest of Expr * Type
         // *** control flow etc.
         | EBlock of exprs: Expr list
-        | ELet of var: string * tp: Type * df: Expr * body: Expr
+        | ELet of var: string * tp: Type * exact: bool * df: Expr * body: Expr // not exact = non-deterministic
         | EIf of cond: Expr * thn: Expr * els: Expr option // cond must not have side-effects; els non-optional if this is an expression; see also flattenIf
         | EWhile of cond: Expr * body: Expr * label: (string option)
         | EFor of index: LocalDecl * init: Expr * last: Expr * up: bool * body: Expr
@@ -595,7 +592,7 @@ module YIL =
         match b with
         | EBlock es -> es
         | e -> [ e ]
-
+    
     /// wraps in a block if not yet a block
     let block(b: Expr): Expr =
         match b with
@@ -735,7 +732,7 @@ module YIL =
     /// used in Context to track where we are
     /// adjust this if we ever need to track the position in a more refined way, e.g.,
     /// to track if we are in the return position of an expression
-    type ContextPosition = BodyPosition | InForLoopInitializer | InForLoopBody | OtherPosition
+    type ContextPosition = BodyPosition | InForLoopInitializer | InForLoopBody | PatternPosition | OtherPosition
     
     (* ***** contexts: built during traversal and used for lookup of iCodeIdentifiers
 
@@ -766,8 +763,8 @@ module YIL =
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.pos = pos
         member this.modulePath() =
-            let ancs = lookupAncestorsByPath(prog, currentDecl)
-            let firstModO = ancs |> List.tryFindIndex (fun (d: Decl) -> match d with Module _ -> true | _ -> false)
+            let ancs = listDropLast (lookupAncestorsByPath(prog, currentDecl)) // drop pseudo-module for whole program
+            let firstModO = ancs |> List.tryFindIndex (fun (d: Decl) -> d.isModule())
             let firstMod =
                 match firstModO with
                 | Some m -> m
@@ -841,9 +838,11 @@ module YIL =
 
        This is implemented as a class so that we can use state for indentation or overriding for variants.
        A new instance should be created for every print job.
+       
+       strict: print parsable Dafny syntax; if set, the passed contexts must be correct
     *)
     // F# has string interpolation now, so this code could be made more readable
-    type Printer() =
+    type Printer(strict: bool) =
         let UNIMPLEMENTED = "<UNIMPLEMENTED>"
         let indentString = "  "
         let indented(s: string, braced: Boolean) =
@@ -856,19 +855,16 @@ module YIL =
             // For future work, consider making includes meta-information instead of
             // AST information, as this along with the design of Dafny includes as a
             // preprocessor-level syntax construct.
-            
             let iPath (p: Path) =
                 let toSysPath (Path plist) =
                     String.concat "/" plist                
                 "include " + "\"" + toSysPath(p) + "\""
-            
             let includes =
                 List.collect (function | Include p -> [iPath p] | _ -> []) p.decls
                 |> String.concat "\n"
-                
             includes
             + "\n"
-            + if not(p.meta.prelude.Equals("")) then
+            + if not(p.meta.prelude = "") then
                 "/***** TYPECART PRELUDE START *****/\n"
                 + p.meta.prelude
                 + "\n/***** TYPECART PRELUDE END *****/"
@@ -904,14 +900,13 @@ module YIL =
         member this.dims(ds: Expr list, pctx: Context) = "[" + this.exprsNoBr ds ", " pctx + "]"
         member this.meta(_: Meta) = ""
         
-        member this.methodType(m: MethodType) =
-            match m with
-            | NonStaticMethod mp -> mp.ToString()
-            | StaticMethod mp -> "static " + mp.ToString()
-                
+        member this.ghost(g: bool) = if g then "ghost " else ""
+        member this.stat(s: bool, ctx: Context) =
+            if s && not (strict && ctx.lookupCurrent().isModule()) then "static " else ""
+             
         member this.decl(d: Decl, pctx: Context) =
             let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""
-            let decls d = this.decls(d, pctx)
+            let decls ds = this.decls(ds, pctx.enter(d.name))
             let expr (e: Expr) : string = this.expr e pctx
             // comm +
             match d with
@@ -950,24 +945,26 @@ module YIL =
                 + (match predO with
                    | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr p pctx)
                    | None -> this.tp sup)
-            | Field (n, t, eO, _, _, _, a) ->
-                "const "
+            | Field (n, t, eO, g, s, _, a) ->
+                this.stat(s, pctx) + this.ghost(g)
+                + "const "
                 + (this.meta a)
                 + n
                 + ": "
                 + (this.tp t)
                 + this.exprO (eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, _, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, _, s, _) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
                     | None -> this.localDecls outs.decls
                 let methodCtx = pctx.enter(n)
-                this.methodType(methodType) + " "
+                this.stat(s, pctx)
+                + methodType.ToString() + " "
                 + n
                 + (this.tpvars false tpvs)
                 + (this.localDecls ins.decls)
-                + (match methodType.map() with
+                + (match methodType with
                    | IsLemma | IsPredicate | IsPredicateMethod -> ""
                    | IsMethod -> " returns " + outputsS
                    | _ -> ":" + outputsS)
@@ -984,10 +981,9 @@ module YIL =
                 + (this.conditions(false, outs.conditions, methodCtx))
                 + "\n"
                 + Option.fold (fun _ e ->
-                    match methodType.map() with
-                    | IsLemma
-                    | IsMethod -> this.statement e methodCtx
-                    | _ -> this.expr e methodCtx) "" (Option.map block b)
+                    match methodType with
+                    | IsLemma | IsMethod -> this.statement e methodCtx
+                    | _ -> indentedBraced(this.expr e methodCtx)) "" b
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
@@ -1125,12 +1121,12 @@ module YIL =
                 + (expr last)
                 + " "
                 + this.statement body forBodyCtx
-            | ELet (n, t, d, e) ->
+            | ELet (n, t, ex, d, e) ->
                 "var "
                 + n
                 + ":"
                 + (this.tp t)
-                + ":="
+                + (if ex then ":=" else ":|")
                 + (expr d)
                 + "; "
                 + (this.statement e pctx)
@@ -1169,8 +1165,8 @@ module YIL =
             | EBool (v) -> match v with true -> "true" | false -> "false"
             | EChar (v) -> "'" + v.ToString() + "'"
             | EString (v) -> "\"" + v.ToString() + "\""
-            // EToString compile from sequence display expressions of char sequences.
-            | EToString (es) -> "[" + (exprsNoBr es ", ") + "]"
+            // EToString compile from sequence display expressions of char sequences
+            | EToString es -> "[" + (exprsNoBr es ", ") + "]"
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToString()
             | EQuant (q, lds, r, b) ->
@@ -1186,7 +1182,7 @@ module YIL =
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
-            | ESet (_, es) -> "{" + (exprs es) + "}"
+            | ESet (_, es) -> "{" + (exprsNoBr es ", ") + "}"
             | ESetComp (lds, predicate, body) ->
                 let ldsStr = List.map this.localDecl lds |> String.concat ", "
                 "set " + ldsStr + " | " + (expr predicate) + " :: " + (expr body)
@@ -1225,20 +1221,20 @@ module YIL =
                 + m.name
                 + (exprs es)
             | EConstructorApply (c, ts, es) ->
-                // let cS = if isPattern then c.name else c.ToString()
-                c.name + (exprs es)
+                let cS = if pctx.pos = PatternPosition then c.name else c.ToString()
+                cS + (exprs es)
             | EBlock es ->
                 // throw out empty blocks; these are usually artifacts of the processing
                 let notEmptyBlock e = match e with | EBlock [] | ECommented(_,EBlock[]) -> false | _ -> true
                 let esS = exprsNoBr (List.filter notEmptyBlock es) "; "
-                let s = indentedBraced(esS)
+                let s = indented(esS, false) // no braces - Dafny parses them as sets
                 s
-            | ELet (n, t, d, e) ->
+            | ELet (n, t, x, d, e) ->
                 "var "
                 + n
                 + ":"
                 + (tp t)
-                + ":="
+                + (if x then ":=" else ":|")
                 + (expr d)
                 + "; "
                 + (expr e)
@@ -1305,7 +1301,7 @@ module YIL =
             | EDeclChoice (ld, e) ->
                 "var "
                 + (this.localDecl ld)
-                + " where "
+                + " :| "
                 + (expr e)
             | ETypeConversion (e, t) -> (expr e) + " as " + (tp t)
             | ETypeTest(e,t) -> (expr e) + " is " + (tp t)
@@ -1368,10 +1364,10 @@ module YIL =
             | ObjectReceiver (e) -> this.expr e pctx |> dot
 
         member this.case(case: Case)(pctx: Context) =
-            "case " + this.expr case.pattern pctx
+            "case " + this.expr case.pattern (pctx.setPos PatternPosition)
             + " => "
             + indented(this.expr case.body pctx, false)
  
-    /// shortcut to create a fresh printer
-    let printer () = Printer()
+    /// shortcut to create a fresh strict printer
+    let printer () = Printer(true)
    

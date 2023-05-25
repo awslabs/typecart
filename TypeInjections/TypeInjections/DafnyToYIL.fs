@@ -215,8 +215,10 @@ module DafnyToYIL =
         | :? TraitDecl -> true
         | _ -> false
     
-    and resolveDafnyMethodTypePayload(isByMethod: bool, s: string) =
+    and methodType(isByMethod: bool, s: string) =
         match isByMethod, s with
+        | _, Prefix "static " s2 -> methodType(isByMethod, s2)
+        | _, Prefix "ghost " s2 -> methodType(isByMethod, s2)
         | true, "function" -> Y.IsFunctionMethod
         | false, "function" -> Y.IsFunction
         | _, "function method" -> Y.IsFunctionMethod
@@ -225,13 +227,7 @@ module DafnyToYIL =
         | _, "predicate method" -> Y.IsPredicateMethod
         | _, "lemma" -> Y.IsLemma
         | _, "method" -> Y.IsMethod
-        | _, Prefix "ghost " p -> resolveDafnyMethodTypePayload(isByMethod, p)
         | _ -> unsupported $"unsupported method type payload: %s{s}"
-        
-    and resolveDafnyMethodType(isByMethod: bool, s: string) =
-        match s with
-        | Prefix "static " s -> Y.StaticMethod (resolveDafnyMethodTypePayload(isByMethod, s))
-        | _ -> Y.NonStaticMethod (resolveDafnyMethodTypePayload(isByMethod, s))
         
     and memberDecl (m: MemberDecl) : Y.Decl =
         match m with
@@ -276,7 +272,7 @@ module DafnyToYIL =
                     Some(expr m.Body)
             let mName = m.Name
             let meta = namedMeta m
-            let yilMethodType = resolveDafnyMethodType((match m.ByMethodDecl with null -> false | _ -> true), m.FunctionDeclarationKeywords)
+            let yilMethodType = methodType(m.ByMethodDecl <> null, m.FunctionDeclarationKeywords)
             Y.Method(yilMethodType, mName, tpvars, input, output, modifies, reads, decreases, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
@@ -299,15 +295,11 @@ module DafnyToYIL =
                     None
                 else
                     Some(statement m.Body)
-
-            let mName = m.Name
-            
+            let mName = m.Name            
             let yilMethodType =
-                match m.HasStaticKeyword, m with
-                // Lemmas shall always not have static qualifiers when printing
-                | _, :? Lemma -> Y.NonStaticMethod Y.IsLemma 
-                | true, _ -> Y.StaticMethod Y.IsMethod
-                | false, _ -> Y.NonStaticMethod Y.IsMethod
+                match m with
+                | :? Lemma -> Y.IsLemma 
+                | _ -> Y.IsMethod
             Y.Method(yilMethodType, mName, tpvars, input, output, modifies, [], decreases, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
@@ -497,7 +489,7 @@ module DafnyToYIL =
                         let elseExpr = (iteE.Els :?> LetExpr)
                         let var = elseExpr.LHSs.Item(0).Var
                         let body = expr (elseExpr.Body)
-                        Y.ELet(var.Name, tp var.Type, rhs, body)
+                        Y.ELet(var.Name, tp var.Type, e.Exact, rhs, body)
                     | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
         | :? ConcreteSyntaxExpression as e ->
@@ -616,7 +608,7 @@ module DafnyToYIL =
             if v.Var = null then
                 unsupported "let with constructor pattern"
             else
-                Y.ELet(v.Var.Name, tp v.Var.Type, expr (e.RHSs.Item(0)), expr e.Body)
+                Y.ELet(v.Var.Name, tp v.Var.Type, e.Exact, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
         | :? NestedMatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, nestedCase(e.Source.Type) @ e.Cases, None)
