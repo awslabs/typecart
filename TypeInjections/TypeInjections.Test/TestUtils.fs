@@ -12,6 +12,8 @@ module TestUtils =
     open System
     module T = Typecart
     
+    type TestFormat = string -> string -> unit
+    
     let pwd : string =
         let wd = Environment.CurrentDirectory
 
@@ -63,12 +65,12 @@ module TestUtils =
             
             writeFile prog folder prefix
 
-        interface Typecart.TypecartOutput with
+        interface Typecart.TypecartOutputProcessor with
             member this.processOld(oldYIL: YIL.Program) = writeOut "old.dfy" "Old" oldYIL 
             member this.processNew(newYIL: YIL.Program) = writeOut "new.dfy" "New" newYIL
             member this.processJoint(jointYIL: YIL.Program) = writeOut "joint.dfy" "Joint" jointYIL 
-            member this.processTranslations(translationsYIL: YIL.Program) =
-                writeOut "translations.dfy" "Combine" translationsYIL  
+            member this.processCombine(translationsYIL: YIL.Program) =
+                writeOut "combine.dfy" "Combine" translationsYIL  
                            
     let typeCartAPI (argv: string array) =
         
@@ -102,11 +104,36 @@ module TestUtils =
         
         T.Typecart(oldProj.toYILProgram("Old", Utils.initDafny),
                    newProj.toYILProgram("New", Utils.initDafny)).go(outputWriter)
-        
-        
+       
     let public testRunnerGen (directoryName: string) (outputDirectoryName: string) =
         let inputDirectory = Path.Combine([| pwd; directoryName |])
         let inputDirectoryOld = Path.Combine([|inputDirectory; "Old"|])
         let inputDirectoryNew = Path.Combine([|inputDirectory; "New"|])
         let outputDirectory = Path.Combine([| pwd; outputDirectoryName |])
-        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|] 
+        typeCartAPI [|inputDirectoryOld; inputDirectoryNew; outputDirectory|]   
+    
+    (* 
+    let public testRunnerGen
+        (testToRun: TestFormat)
+        (inputFileName1: string)
+        (inputFileName2: string)
+        (outputFileName: string)
+        (expectedFileName: string)
+        =
+        let inputFile1 =
+            Path.Combine([| pwd; inputFileName1 |])
+
+        let inputFile2 =
+            Path.Combine([| pwd; inputFileName2 |])
+
+        let outputFile =
+            Path.Combine([| pwd; outputFileName |])
+
+        let expectedFile =
+            Path.Combine([| pwd; expectedFileName |])
+
+        TypeInjections.Program.runTypeCart inputFile1 inputFile2 pwd extraFileName false outputFileName
+        |> ignore
+
+        testToRun outputFile expectedFile
+    *)

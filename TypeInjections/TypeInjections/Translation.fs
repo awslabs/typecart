@@ -1,27 +1,31 @@
 namespace TypeInjections
 
 open System
-open TypeInjections.Diff
-open TypeInjections.Traverser
 open YIL
 
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =
+    let rcv p = StaticReceiver {path=p; tpargs=[]}
     let rb = Path ["Translations"; "RelateBuiltinTypes"]
-    let rbRec = StaticReceiver {path=rb; tpargs=[]}
+    let fb = Path ["Translations"; "MapBuiltinTypes"]
+    let rbRec rel = if rel then rcv rb else rcv fb
+    let args rel e f = if rel then [e;f] else [e]
+    let utils = rcv (Path ["Translations"; "Utils"])
     /// given relation t on o*n, the sequences e: seq<n> and f:seq<n> are related
     /// if they have the same length and are related element-wise
-    let seqRel o n t (e,f) = EMethodApply(rbRec, rb.child("seq"), [o;n], [t;e;f], false)
+    let seqRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Seq"), [o;n], [t]@(args rel e f), false)
     /// given relation t on o*n, the array e: arr<n> and f:arr<n> are related
     /// if they have the same length and are related element-wise
-    let arrayRel o n t (e,f) = EMethodApply(rbRec, rb.child("array"), [o;n], [t;e;f], false)
+    let arrayRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Array"), [o;n], [t]@(args rel e f), false)
     /// given relation t on o*n, the sets e: set<n> and f:set<n> are related
     /// if every element of e is related to an element of f and vice versa
-    let setRel o n t (e,f) = EMethodApply(rbRec, rb.child("set"), [o;n], [t;e;f], false)
+    let setRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Set"), [o;n], [t]@(args rel e f), false)
     /// given relations, sT,tT on so*sn and tO*tN, the maps e: map<sO,tO> and f:map<sN,tN> are related
     /// if every pair in e is related a pair in f and vice versa
-    let mapRel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec, rb.child("map"), [sO;sN;tO;tN], [sT;tT;e;f], false)
-
+    let mapRel rel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec rel, rb.child("Map"), [sO;sN;tO;tN], [sT;tT]@(args rel e f), false)
+    /// ???()
+    let missingTerm = EMethodApply(utils, rb.child("???"), [], [], false)
+    
 open DafnyFunctions
 
 // variable naming conventions:
@@ -33,28 +37,21 @@ module Translation =
   let unsupported s = "unsupported: " + s
   
   /// translates a program, encapsulates global data/state for use during translation
-  type Translator(ctx: Context, declsD: Diff.DeclList, jointDecls: Path list) =    
+  type Translator(ctx: Context, declsD: Diff.DeclList, jointDecls: Path list, relational: bool) =    
     /// old, new, and translations path for a path
-    // This is the only place besides functionNames(s) below that uses the literal prefix strings.
+    // This is the only place that uses the literal prefix strings.
     let rec path (p: Path) : Path * Path * Path =
-        let prefixRoot (p: Path) (s: string) =
-            Path(s :: p.names.Head :: p.names.Tail)
         // joint decls are the same in old and new version
         // the translation declaration is still generated because e.g.,
         // a joint type can be called with non-joint type parameters
         if List.exists (fun (j:Path) -> j.isAncestorOf p) jointDecls then
-           (prefixRoot p "Joint", prefixRoot p "Joint", prefixRoot p "Translations")
+           (p.prefix "Joint", p.prefix "Joint", p.prefix "Translations")
         else
-           (prefixRoot p "Old", prefixRoot p "New", prefixRoot p "Translations")
+           (p.prefix "Old", p.prefix "New", p)
 
     /// s ---> s_old, s_new, s
     // This is the only place that uses the literal names.
     and name (s: string) = s+"_O", s+"_N", s
-    
-    // Function name must be distinct from lemma names. So we prefix all function names with "T_".
-    and functionName(s: string) = "TF_" + s
-
-    and lemmaName(s: string) = "TL_" + s
     
     /// a --->  a_old, a_new, a: a_old * a_new -> bool
     and typearg (a: TypeArg) : TypeArg * TypeArg * LocalDecl =
@@ -68,7 +65,7 @@ module Translation =
     /// translates paths and type/expr variables to old or new variant
     // empty context must be passed so that traversal context tracks local bindings
     and NameTranslator(old: bool) =
-         {new Identity() with
+         {new Traverser.Identity() with
             override this.path(ctx: Context, p: Path) =
                 let pO,pN,_ = path p
                 if old then pO else pN
@@ -84,7 +81,7 @@ module Translation =
             override this.tp(ctx: Context, t: Type) =
                 match t with
                 | TVar n ->
-                    let nO,nN,_ = typearg (n,None)
+                    let nO,nN,_ = typearg (plainTypeArg n)
                     TVar(if old then fst nO else fst nN)
                 | _ -> this.tpDefault(ctx, t)
         }
@@ -125,7 +122,8 @@ module Translation =
             // let relation = Method(NonStaticMethod IsFunction, pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
             // belongs to the implementation part.
             // let memberLemmas = decls ctxI msD
-            //[ relation ] :: memberLemmas
+            // wrap all declarations generated by members into a module to get the right paths
+            // let decls = [ relation; Module(n, memberLemmas, emptyMeta) ]
             []
         | Diff.ClassConstructor _ ->
             // Depending on how we treat classes, we could generate a lemma here.
@@ -146,14 +144,18 @@ module Translation =
             let xO = localDeclTerm xtO
             let xN = localDeclTerm xtN
             let body =
-                if isNew then
-                    // new types are new primitive types, so return diagonal relation
-                    EEqual(xO, xN)
+              if isNew then
+                // new types are new primitive types, so return diagonal relation/identity map
+                if relational then
+                  EEqual(xO, xN)
                 else
-                    // otherwise, call relation of supertype
-                    let _, _, superT = tp super
-                    superT (xO, xN)
-            [ Method(NonStaticMethod IsFunction, functionName pT.name, typeParams, inSpec, outSpec, Some body, false, true, context.currentMeta()) ]
+                  xO
+              else
+                // otherwise, call relation/function of supertype
+                let _, _, superT = tp super
+                superT (xO, xN)
+                   
+            [ Method(IsFunction, pT.name, typeParams, inSpec, outSpec, [], [], [], Some body, false, true, context.currentMeta()) ]
             | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
 
         | Diff.Datatype (_, tvsD, ctrsD, msD) ->
@@ -190,30 +192,57 @@ module Translation =
                 let patO = EConstructorApply(pO.child (ctrO.name), [], argsO) // type parameters do not matter in a pattern
                 let patN = EConstructorApply(pN.child (ctrN.name), [], argsN)
                 // to share code between two cases below
-                let buildCase(vs, p1, p2, comment, body) =
-                     [{ vars = vs
-                        pattern = ETuple([ p1; p2 ])
+                // "case (p1,p2) -> body // comment" where vs_i are the variables in p_i
+                let buildCase(vs1, vs2, p1, p2, comment, body) =
+                     [{ vars = if relational then vs1 @ vs2 else vs1
+                        pattern = if relational then ETuple([ p1; p2 ]) else p1
                         body = ECommented(comment, body) }]
-
                 match elem with
                 // no cases to generate for Add and Delete, but we generate stubs for customization
                 | Diff.Add _ ->
-                    buildCase(insN, EWildcard, patN, "added constructor", EBool false)
+                    if relational then
+                       // case (_,n) -> false
+                       buildCase([], insN, EWildcard, patN, "added constructor", EBool false)
+                    else
+                       // nothing to do
+                       []
                 | Diff.Delete _ ->
-                    buildCase(insO, patO, EWildcard, "deleted constructor", EBool false)
+                    if relational then
+                       // case (o,_) -> false
+                       buildCase(insO, [], patO, EWildcard, "deleted constructor", EBool false)
+                    else
+                       // case o -> ???
+                       buildCase(insO, [], patO, EWildcard, "deleted constructor", missingTerm) 
                 | Diff.Same _ ->
-                    buildCase(insO @ insN, patO, patN, "unchanged constructor", EConj(insT))
+                    if relational then
+                       // case (o,n) -> arguments of o,n related
+                       buildCase(insO, insN, patO, patN, "unchanged constructor", EConj(insT))
+                    else
+                       // TODO this case is unfinished
+                       buildCase(insO, [], patO, EWildcard, "unchanged constructor", patN)
                 | Diff.Update _ ->
-                    // for updates, we only generate the conditions that the unchanged arguments are related
-                    // the relation must be customized in a way that takes the added/deleted arguments into account 
-                    buildCase(insO @ insN, patO, patN, "added/deleted constructor arguments", EConj(insT))
-            let dflt = EBool false
+                    if relational then
+                        // for updates, we only generate the conditions that the unchanged arguments are related
+                        // the relation must be customized in a way that takes the added/deleted arguments into account 
+                        buildCase(insO, insN, patO, patN, "added/deleted constructor arguments", EConj(insT))
+                    else
+                        // TODO this case is unfinished
+                        buildCase(insO, [], patO, EWildcard, "added/deleted constructor arguments", patN)
+            let dflt = if relational then Some (EBool false) else None
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             let tO, tN = localDeclType xtO, localDeclType xtN
-            let body = EMatch(ETuple [ xO; xN ], TTuple [ tO; tN ], List.collect mkCase ctrsD.elements, Some dflt)
-            let relation = Method(NonStaticMethod IsFunction,  functionName pT.name, typeParams, inSpec, outSpec, Some body, false, true, emptyMeta)
+            let scrutinee,scrutineeTp =
+                if relational then
+                   ETuple [ xO; xN ],  TTuple [ tO; tN ]
+                else
+                   xO, tO
+            let body = EMatch(scrutinee,scrutineeTp, List.collect mkCase ctrsD.elements, dflt)
+            let relation = Method(IsFunction, pT.name, typeParams, inSpec, outSpec, [], [], [], Some body, false, true, emptyMeta)
             let memberLemmas = decls ctxI msD
-            relation :: memberLemmas
+            // wrap all declarations generated by members into a module to avoid name clashes
+            // TODO: all paths to a lemma generated by a datatype function must insert "_Lemma"
+            let decls = [relation; Module(n+"_Lemmas", memberLemmas, emptyMeta)]
+            decls
         // immutable fields with initializer yield a lemma, mutable fields yield nothing
         | Diff.Field (_, tpD, dfD) ->
            match declO with
@@ -228,12 +257,13 @@ module Translation =
                 sr parentO, sr parentN
             let fieldsRelated = tT (EMemberRef(recO, pO, []), EMemberRef(recN, pN, []))
             [ Method(
-                  NonStaticMethod IsLemma,
-                  lemmaName pT.name,
+                  IsLemma,
+                  pT.name,
                   [],
                   InputSpec([], []),
                   OutputSpec([], [ fieldsRelated ]),
-                  None,
+                  [], [], [],
+                  Some (EBlock []),
                   true,
                   true,
                   emptyMeta
@@ -242,12 +272,10 @@ module Translation =
         // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
         | Diff.Method(_, tvsD, insD, outsD, bdD)  ->
            match declO,declN with
-           | Method(methodIs = (NonStaticMethod IsLemma)), _
-           | Method(methodIs = (StaticMethod IsLemma)), _
-           | Method(methodIs = (NonStaticMethod IsMethod)), _
-           | Method(methodIs = (StaticMethod IsMethod)), _ -> []
-           | Method (_, _, tvs, ins_o, outs, bodyO, _, isStatic, _),
-             Method (_, _, _,   ins_n, _, _, _, _, _) ->
+           | Method(methodType = IsLemma), _
+           | Method(methodType = IsMethod), _ -> []
+           | Method (_, _, tvs, ins_o, outs, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _),
+             Method (_, _, _,   ins_n, _, modifiesN, readsN, decreasesN, _, _, _, _) ->
             // we ignore bodyO, i.e., ignore changes in the body
             if not tvsD.isSame then
                 failwith (unsupported "change in type parameters: " + p.ToString())
@@ -257,13 +285,15 @@ module Translation =
                 failwith (unsupported "update to individual inputs: " + p.ToString())
             if not outsD.decls.isSame then
                 failwith (unsupported "change in outputs: " + p.ToString())
+            // if modifies, reads, decreases clauses change, throw an error
+            // TODO here
             // as "methods", we only consider pure functions here
             // a more general approach might also generate two-state lemmas for method invocations on class instances
             // (i.e., calling corresponding methods with related arguments on related objects yields related values and
             //   leaves the (possibly changed) objects related)
             //
             // For a static method without specification:
-            // method p<u>(x:a,y:u):B = {_} --->
+            // method p<u,v>(x:a,y:u):B = {_} --->
             // lemma  p<uO,uN,vO,vN>(uT:uO*uN->bool, vT:vO*vN->bool, xO:aO, xN:aN, yO:uO, yN:uN))
             //     requires a-related(xO,xN) && uT(yO,yN)
             //     ensures B-related(pO(xO,uO), pN(xN, uN)
@@ -282,11 +312,7 @@ module Translation =
                 let t = TApply(context.currentDecl, typeargsToTVars parentTvs)
                 localDecl (LocalDecl(varname parentDecl.name, t, false))
             let instanceInputs =
-                if isStatic then
-                    []
-                else
-                    [ oldInstDecl; newInstDecl ]
-
+                if isStatic then [] else [ oldInstDecl; newInstDecl ]
             let receiverO, receiverN =
                 if isStatic then
                     // ignores the instances above
@@ -304,11 +330,7 @@ module Translation =
             let _, insN, _ = List.unzip3 (List.map localDecl ins_n.decls)
             // assumptions that the inputs occuring in both old and new are related
             let _,_, insT = List.unzip3 (List.map localDecl (insD.decls.getSame()))
-            let inputs =
-                instanceInputs
-                @ parentTvsT
-                @ tvsT @ insO @ insN
-
+            let inputs = instanceInputs @ parentTvsT @ tvsT @ insO @ insN
             // old requires clauses applied to old arguments
             let inputRequiresO,_,_ =
                 ins_o.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
@@ -316,10 +338,7 @@ module Translation =
             let _,inputRequiresN,_ =
                 ins_n.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
             let inputsRelated =
-                if isStatic then
-                    insT
-                else
-                    instancesRelated :: insT
+                if isStatic then insT else instancesRelated :: insT
             let inSpec = InputSpec(inputs, inputRequiresO @ inputRequiresN @ inputsRelated)
             // we don't need the ensures-conditions of the method
             // because they can be proved from the verification of the method
@@ -353,13 +372,21 @@ module Translation =
                     bdO |> Option.bind (fun b -> let _, _, pf = expr b in pf)
                 | _ ->
                     // changed body: generate empty proof
-                    None
+                    Some (EBlock [])
 
-            [ Method(NonStaticMethod IsLemma, pT.name, typeParams, inSpec, outSpec, proof, true, true, emptyMeta) ]
+            [ Method(IsLemma, pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
            | _ -> failwith("impossible") // Diff.Method must occur with YIL.Method
 
-    // joint code for type declarations
+    /// joint code for type declarations
     and typeDeclHeader(p: Path, d: Decl) = typeDeclHeaderMain(p, d.name, d.tpvars) 
+    /// in: declaration path/name and type arguments
+    /// out: header of relation:
+    ///   * path
+    ///   * type arguments
+    ///   * input spec: relations/functions for the type arguments, elements of old type, and (if relational) new type
+    ///   * output spec: if relational bool, else new type
+    ///   * declaration for variable of old type
+    ///   * declaration for variable of new type
     and typeDeclHeaderMain(p: Path, n:string, tvs: TypeArg list) =
         let pO, pN, pT = path p
         let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg tvs)
@@ -369,10 +396,11 @@ module Translation =
         let xO, xN, _ = name (varname n)
         let xtO = LocalDecl(xO, oldType, false)
         let xtN = LocalDecl(xN, newType, false)
-        let inputs = tvsT @ [ xtO; xtN ]
+        let inputs = if relational then tvsT @ [ xtO; xtN ] else  tvsT @ [xtO] 
         let inSpec = InputSpec(inputs, [])
-        let outSpec = outputType(TBool, [])
-        typeParams, inSpec, outSpec, xtO, xtN
+        let outType = if relational then TBool else newType
+        let outSpec = outputType(outType, [])
+        typeParams, inSpec, outSpec, xtO, xtN    
 
     /// translates a context, e.g., the arguments of a polymorphic method
     /// Ideally, we would translate type and term variables individually and collect the results.
@@ -399,25 +427,37 @@ module Translation =
 
     /// diagonal relation
     and diag (x: Expr, y: Expr) = EEqual(x, y)
+    /// reduction to avoid synthesizing reducible terms
+    and reduce(e: Expr) = Traverser.reduce(ctx, e)
     /// convenience for building a lambda-abstraction
     and abstractRel (x: string, tO: Type, tN: Type, body: Expr * Expr -> Expr) =
         let xO, xN, _ = name (x)
         let xOE = EVar xO
         let xNE = EVar xN
         let bodyXON = body (xOE, xNE)
-        match bodyXON with
-        | EAnonApply(EVar n, [a;b]) when a = xOE && b = xNE ->
-            // this often introduces an eta-expanded variable ---> eta-contract
-            EVar n
-        | _ -> 
-            EFun(
-                [ LocalDecl(xO, tO, false)
-                  LocalDecl(xN, tN, false) ],
-                TBool,
-                bodyXON
-            )
-    /// tp(t) = (o,n,f) such that o/n are the old/new types corresponding to t and f:n->o is the translation function
+        let abs = EFun(
+                    [ LocalDecl(xO, tO, false)
+                      LocalDecl(xN, tN, false) ],
+                    TBool,
+                    bodyXON
+                  )
+        reduce abs // reduce eta-contracts
+    /// tp(t) = (o,n,r) such that o/n are the old/new types corresponding to t and r:n*o->bool is the
+    /// relation for t.
+    /// For the functional approach, r is of the form (x,y) -> f(x)=y where f:o->n is the translation function
+    /// for t.
     and tp (t: Type) : Type * Type * (Expr * Expr -> Expr) =
+        let tO,tN,tT = tpFR(t)
+        if relational then
+            tO,tN,tT
+        else
+            tO,tN, fun (x,y) -> EEqual(tT(x,y), y)
+
+    /// the auxiliary recursive function associated with the toplevel call tp
+    /// tpFR is the same as tp except for the third component:
+    /// * relational: the needed relation
+    /// * functional: the translation function (x,y) -> f(x) (second argument is ignored)
+    and tpFR (t: Type) : Type * Type * (Expr * Expr -> Expr) =
         match t with
         | TUnit
         | TBool
@@ -426,10 +466,17 @@ module Translation =
         | TChar 
         | TString _
         | TReal _
-        | TBitVector _ -> t, t, diag
+        | TBitVector _
+        | TObject ->
+            // see the treatment of class declarations for TObject
+            // (x,y) -> x=y resp. (x,y) -> x
+            let r = if relational then diag else fst
+            t, t, r
         | TVar a ->
             let aO, aN, aT = name a
-            TVar aO, TVar aN, (fun (e, f) -> EAnonApply(EVar aT, [ e; f ]))
+            // apply the relation/function of the type variable to the old+new/old value
+            let args e f = if relational then [e;f] else [e]
+            TVar aO, TVar aN, (fun (e, f) -> EAnonApply(EVar aT, args e f))
         | TApply (p, ts) ->
             let pO, pN, pT = path p
             let r = StaticReceiver({ path = pT.parent; tpargs = [] })
@@ -437,34 +484,19 @@ module Translation =
             let tsT = List.map (fun (o, n, t) -> abstractRel ("x", o, n, t)) tsONT
             let tsO, tsN, _ = List.unzip3 tsONT
             let tsON = Utils.listInterleave (tsO, tsN)
-            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT.transformLast(functionName pT.name), tsON, tsT @ [ x; y ], false))
-        | TApplyPrimitive (p, t) ->
-            let pO, pN, pT = path p
-            let r = StaticReceiver({ path = pT.parent; tpargs = [] })
-            let tO, tN, tONT = tp t
-            let primitiveTO = TApplyPrimitive(pO, tO)
-            let primitiveTN = TApplyPrimitive(pN, tN)
-            // TApplyPrimitive(...) is really just a transparent wrapper type here designed to give us
-            // access to the fully qualified path of a type, so tONT operating on tO and tN should still
-            // be a valid translation function here.
-            TApplyPrimitive(pO, tO), TApplyPrimitive(pN, tN), tONT
+            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT, tsON, tsT @ [ if relational then x; y else x ], false))
         | TTuple ts ->
             // two tuples are related if all elements are
             let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
             let T (x, y) =
-                match x, y with
-                | ETuple xs, ETuple ys ->
-                    // optimization to avoid reducible expressions
-                    let txys = List.zip3 tsT xs ys
-                    let eTs =
-                        List.map (fun (t, x, y) -> t (x, y)) txys
-                    EConj(eTs)
-                | _ ->
-                    let its = List.indexed tsT
-                    let esT = List.map (fun (i, t) -> t (EProj(x, i), EProj(y, i))) its
-                    EConj(esT)
+                let its = List.indexed tsT
+                let esT = its |> List.map (fun (i, t) -> t (reduce(EProj(x, i)), reduce(EProj(y, i)))) // reduce eliminates projections from tuples
+                // conjunction of component relations, or tuple of component mappings
+                if relational then EConj(esT) else ETuple(esT)
             TTuple tsO, TTuple tsN, T
         | TFun (ts, u) ->
+            if not relational then
+               failwith "functional approach does not support function types"
             // two functions are related if they map related arguments to related results
             // x1:t1, ..., xn:tn
             let lds =
@@ -481,33 +513,33 @@ module Translation =
             let inputsO = List.map localDeclTerm ldsO
             let inputsN = List.map localDeclTerm ldsN
             let inputsRelated = EConj(ldsT)
-
             let funsRelated (o, n) =
                 let outputO = EAnonApply(o, inputsO)
                 let outputN = EAnonApply(n, inputsN)
                 let outputRelated = outputTypeRelation (outputO, outputN)
                 EQuant(Forall, inputDecls, Some(inputsRelated), outputRelated)
-
             TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), funsRelated
-        | TObject ->
-            // see the treatment of class declarations
-            TObject, TObject, EEqual
         | TNullable t ->
             let tO, tN, tT = tp t
-            TNullable tO, TNullable tN, (fun e -> EDisj [EEqual(ETuple[fst e;snd e], ETuple([ENull tO; ENull tN])); tT e])
+            let r =
+              if relational then
+                fun (x,y) -> x
+              else
+                fun (x,y) -> EIf(EEqual(x,ENull tO), ENull tN, Some (tT (x,y)))
+            TNullable tO, TNullable tN, r
         | TSeq(b,t) ->
             let tO, tN, tT = tpAbstracted("sq", t)
-            TSeq(b,tO), TSeq(b,tN), seqRel tO tN tT
+            TSeq(b,tO), TSeq(b,tN), seqRel relational tO tN tT
         | TSet(b,t) ->
             let tO, tN, tT = tpAbstracted("st", t)
-            TSet(b,tO), TSet(b,tN), setRel tO tN tT
+            TSet(b,tO), TSet(b,tN), setRel relational tO tN tT
         | TMap(b,s, t) ->
             let sO, sN, sT = tpAbstracted("mp", s)
             let tO, tN, tT = tpAbstracted("mp", t)
-            TMap(b, sO, tO), TMap(b, sN, tN), mapRel sO sN sT tO tN tT
+            TMap(b, sO, tO), TMap(b, sN, tN), mapRel relational sO sN sT tO tN tT
         | TArray(b,t) ->
             let tO, tN, tT = tpAbstracted("ar", t)
-            TArray(b,tO), TArray(b,tN), arrayRel tO tN tT
+            TArray(b,tO), TArray(b,tN), arrayRel relational tO tN tT
         | TUnimplemented -> TUnimplemented, TUnimplemented, (fun _ -> EUnimplemented)
     /// same as tp but with the relation lambda-abstracted
     and tpAbstracted(x: string, t: Type) =
@@ -518,7 +550,7 @@ module Translation =
     /// translates expression e:t to the proof that it is in the t-relation
     ///
     /// if |- e:t and tp t = tO, tN, tT, then
-    /// post(expr(e,t) = eO,eN,eT where eT is a proof of tT(eO,eN)
+    /// expr(e,t) = eO,eN,eT where eT is a proof of tT(eO,eN)
     /// Dafny does not have full proof terms and finds proofs automatically.
     /// So it's not clear what can/should return here.
     /// But we probably have to return the instances of the lemmas generated by the methods used in e.
@@ -527,16 +559,14 @@ module Translation =
       let eO = NameTranslator(true).expr(ctx, e)
       let eN = NameTranslator(false).expr(ctx, e)
       eO,eN,None
-    
-    // alternate constructor for diffing two programs at once with module-level granularity
-    new(prog: Program, progD: Diff.Program, jointDecls: Path list) =
-        Translator(Context(prog), progD.decls, jointDecls)
-        
+
+    /// entry point for running the translation
     member this.doTranslate() = decls ctx declsD
   
-  /// entry point to call translator on a module
+    
+  /// entry point to call translator on a module --- experimental, unused
   /// assumes the module is at the program toplevel
-  /// dependency analysis is done at the intermodule level, with granularity of every decl child of the module.
+  /// dependency analysis is done at the intramodule level, with granularity of every decl child of the module.
   /// precondition: (m, mD) is a valid translation pair.
   /// Joint.X ---> Old.X
   ///  |            |
@@ -552,12 +582,12 @@ module Translation =
   /// declarations with either "Joint." or "New.", resp. "Old.".
   let translateModule(ctx: Context,  m: Decl, pD: Diff.Decl)  =
       let ctx = ctx.enter(m.name) // enter decl of m
-      let inputOk (nameO: string) (nameD: Name) =
+      let inputOk (nameO: string) (nameD: Diff.Name) =
           match nameD with
-          | SameName s -> nameO.Equals(s)
-          | Rename(o, n) -> nameO.Equals(o)
+          | Diff.SameName s -> nameO = s
+          | Diff.Rename(o, n) -> nameO = o
       match m, pD with
-      | YIL.Module _ as m, Diff.Module (nameD, declD) when (inputOk m.name nameD)->
+      | Module _ as m, Diff.Module (nameD, declD) when (inputOk m.name nameD)->
           let pathOf = fun (decl: Decl) -> Path [ m.name; decl.name ]
           let childPaths = List.map pathOf m.children
           let sameChildren = List.map pathOf (declD.getSame())
@@ -569,10 +599,31 @@ module Translation =
           Console.WriteLine($" ***** JOINT PATHS FOR {m.name} *****")          
           List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
           Console.WriteLine($" ***** JOINT PATHS FOR {m.name} END *****")
-          let tr = Translator(ctx, declD, jointPaths)
+          let tr = Translator(ctx, declD, jointPaths, false)
           tr.doTranslate(), jointPaths
       | _ -> failwith "declaration to be translated is not a module"
   
- 
+  /// prints a list of paths
+  let printPaths(kind: string, ps: Path list) =
+      Console.WriteLine("********* " + kind + " *****")
+      List.iter (fun x -> Console.WriteLine(x.ToString())) ps
+      Console.WriteLine("***** END " + kind + " *****")
+
+  /// entry point for translating a program
+  let prog (p: Program, newName: string, pD: Diff.Program) : Program * Path list =
+    let ctx = Context(p)
+    let pathOf(d: Decl) = ctx.currentDecl.child(d.name)
+    let childPaths = List.map pathOf p.decls // toplevel paths of p
+    let sameChildren = List.map pathOf (pD.decls.getSame())  // the unchanged ones among those
+    let changedChildren = Utils.listDiff(childPaths, sameChildren) // the changed ones
+    let changedClosed = Analysis.dependencyClosure(ctx, p.decls, changedChildren) // dependency closure of the changed ones
+    let jointPaths = Utils.listDiff(childPaths, changedClosed) // greatest self-contained set of unchanged declarations
+    printPaths("unchanged", sameChildren)
+    printPaths("changed", changedChildren)
+    printPaths("dependency closure of changed", changedClosed)
+    printPaths("joint", jointPaths)
+    let tr = Translator(Context(p), pD.decls, jointPaths, false)
+    let translations = {name = newName; decls = tr.doTranslate(); meta = emptyMeta}
+    translations, jointPaths
 
 

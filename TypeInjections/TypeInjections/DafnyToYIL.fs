@@ -27,7 +27,7 @@ module DafnyToYIL =
     module Y = YIL
 
     // ***** helper functions
-
+    let warning(msg: string) = Console.WriteLine("WARNING: " + msg)
     let unsupported msg = failwith msg
     let error msg = failwith msg
 
@@ -38,12 +38,14 @@ module DafnyToYIL =
     // special strings that Dafny uses for built-in objects
     let DafnySystem = "_System"
     let DafnyTuple = "_tuple#"
+    let DafnyTupleMake = "_#Make" // tuple constructor is named _#Maken for arity n
     let DafnyFun = "_#Func"
     let DafnyTotalFun = "_#TotalFunc"
     let DafnyPartialFun = "_#PartialFunc"
     let DafnyMap = "map"
     let DafnyKeys = "Keys"
-
+    let DafnyReads = "reads" // the special 'reads' member of a function
+    
     // ***** the mutually recursive functions
 
     (* a program concatenates the input file with all its dependencies, in reverse dependency order
@@ -166,33 +168,57 @@ module DafnyToYIL =
 
     and constructorDecl (c: DatatypeCtor) : Y.DatatypeConstructor =
         let cName = c.Name
+        { name = cName; ins = formal @ c.Formals; meta = namedMeta c }
 
-        { name = cName
-          ins = formal @ c.Formals
-          meta = namedMeta c }
-
-    and case (e: MatchCase) : Y.Case =
+    and case(e: MatchCase) : Y.Case =
         let vardecls = boundVar @ e.Arguments
-
         let bd =
             match e with
             | :? MatchCaseExpr as c -> expr c.Body
             | :? MatchCaseStmt as c -> Y.EBlock(statement @ c.Body)
             | _ -> error "Unexpected match case"
-
-        let p =
-            pathOfTopLevelDecl(e.Ctor.EnclosingDatatype)
-                .child (e.Ctor.Name)
-
+        let p = pathOfTopLevelDecl(e.Ctor.EnclosingDatatype).child (e.Ctor.Name)
         YIL.plainCase (p, vardecls, bd)
-
+        
+    and nestedCase (srcTp: Type)(e: NestedMatchCase) : Y.Case =
+        let vardecls, patt = pattern srcTp e.Pat
+        let bd =
+            match e with
+            | :? NestedMatchCaseExpr as c -> expr c.Body
+            | :? NestedMatchCaseStmt as c -> Y.EBlock(statement @ c.Body)
+            | _ -> error "Unexpected match case"
+        {vars = vardecls; pattern = patt; body = bd}
+        
+    and pattern(srcTp: Type)(p: ExtendedPattern): Y.LocalDecl list * Y.Expr =
+       match p with
+       | :? LitPattern as p -> [], expr p.OrigLit
+       | :? IdPattern as p ->
+           if p.ResolvedLit <> null then
+               [], expr p.ResolvedLit
+           else if p.Arguments = null then
+               [Y.LocalDecl(p.Id, tp p.Type, false)], Y.EVar(p.Id)
+           else
+               let dss, ps = (pattern(srcTp) @  p.Arguments) |> List.unzip
+               let n = p.Ctor.Name
+               let patternT = 
+                 if n.StartsWith(DafnyTupleMake) then
+                   Y.ETuple(ps)
+                 else
+                   let constr = pathOfTopLevelDecl(p.Ctor.EnclosingDatatype).child(p.Ctor.Name)
+                   let tpArgs = tp @ srcTp.NormalizeExpand().TypeArgs
+                   Y.EConstructorApply(constr, tpArgs, ps)
+               List.concat dss, patternT
+       | _ -> unsupported "unknown pattern"
+    
     and isTrait (d: TopLevelDecl) =
         match d with
         | :? TraitDecl -> true
         | _ -> false
     
-    and resolveDafnyMethodTypePayload(isByMethod: bool, s: string) =
+    and methodType(isByMethod: bool, s: string) =
         match isByMethod, s with
+        | _, Prefix "static " s2 -> methodType(isByMethod, s2)
+        | _, Prefix "ghost " s2 -> methodType(isByMethod, s2)
         | true, "function" -> Y.IsFunctionMethod
         | false, "function" -> Y.IsFunction
         | _, "function method" -> Y.IsFunctionMethod
@@ -201,13 +227,7 @@ module DafnyToYIL =
         | _, "predicate method" -> Y.IsPredicateMethod
         | _, "lemma" -> Y.IsLemma
         | _, "method" -> Y.IsMethod
-        | _, Prefix "ghost " p -> resolveDafnyMethodTypePayload(isByMethod, p)
         | _ -> unsupported $"unsupported method type payload: %s{s}"
-        
-    and resolveDafnyMethodType(isByMethod: bool, s: string) =
-        match s with
-        | Prefix "static " s -> Y.StaticMethod (resolveDafnyMethodTypePayload(isByMethod, s))
-        | _ -> Y.NonStaticMethod (resolveDafnyMethodTypePayload(isByMethod, s))
         
     and memberDecl (m: MemberDecl) : Y.Decl =
         match m with
@@ -238,6 +258,13 @@ module DafnyToYIL =
                    Y.OutputSpec([formal m.Result], ensures)
                 else
                    Y.outputType(tp m.ResultType, ensures)
+            let modifies = [] // functions do not modify
+            let reads =
+                List.ofSeq m.Reads
+                |> List.map (fun (e: FrameExpression) -> expr e.E)
+            let decreases =
+                List.ofSeq m.Decreases.Expressions
+                |> List.map expr
             let body =
                 if (m.Body = null) then
                     None
@@ -245,8 +272,8 @@ module DafnyToYIL =
                     Some(expr m.Body)
             let mName = m.Name
             let meta = namedMeta m
-            let yilMethodType = resolveDafnyMethodType((match m.ByMethodDecl with null -> false | _ -> true), m.FunctionDeclarationKeywords)
-            Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, meta)
+            let yilMethodType = methodType(m.ByMethodDecl <> null, m.FunctionDeclarationKeywords)
+            Y.Method(yilMethodType, mName, tpvars, input, output, modifies, reads, decreases, body, m.IsGhost, m.IsStatic, meta)
         | :? Method as m ->
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
@@ -256,21 +283,24 @@ module DafnyToYIL =
             let outs = formal @ m.Outs
             let ens = condition @ m.Ens
             let output = Y.OutputSpec(outs, ens)
+            let modifies =
+                m.Mod.Expressions
+                |> List.ofSeq
+                |> List.map (fun (e: FrameExpression) -> expr e.E)
+            
+            let decreases = m.Decreases.Expressions |> List.ofSeq |> List.map expr
+            
             let body =
                 if (m.Body = null) then
                     None
                 else
                     Some(statement m.Body)
-
-            let mName = m.Name
-            
+            let mName = m.Name            
             let yilMethodType =
-                match m.HasStaticKeyword, m with
-                // Lemmas shall always not have static qualifiers when printing
-                | _, :? Lemma -> Y.NonStaticMethod Y.IsLemma 
-                | true, _ -> Y.StaticMethod Y.IsMethod
-                | false, _ -> Y.NonStaticMethod Y.IsMethod
-            Y.Method(yilMethodType, mName, tpvars, input, output, body, m.IsGhost, m.IsStatic, namedMeta m)
+                match m with
+                | :? Lemma -> Y.IsLemma 
+                | _ -> Y.IsMethod
+            Y.Method(yilMethodType, mName, tpvars, input, output, modifies, [], decreases, body, m.IsGhost, m.IsStatic, namedMeta m)
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m
@@ -294,7 +324,11 @@ module DafnyToYIL =
            | TypeParameter.TPVariance.Co -> Some true
            | TypeParameter.TPVariance.Contra -> Some false
            | _ -> unsupported ("variance: " + t.ToString())
-        (t.Name, v)
+        let e =
+            match t.Characteristics.EqualitySupport with
+            | TypeParameter.EqualitySupportValue.Required -> true
+            | _ -> false // InferedRequired?
+        (t.Name, (v,e))
 
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
     and tp (t: Type) : Y.Type =
@@ -305,8 +339,6 @@ module DafnyToYIL =
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
             | _ ->
-                // TODO: find a less hacky way of handling all the user-defined types?
-                // ^ currently we need to look at the path to determine Java/Rust/common types, this isn't too ideal.
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
                 // the default treatment
@@ -358,7 +390,11 @@ module DafnyToYIL =
                         Y.TObject
                     else
                         unsupported $"built-in type {n}"
-                elif p.names.Head = "TypeUtil" then
+                else
+                    makeTApply()
+                (* we used to have all this special treatment for DafnyLib types, which was removed
+                   code is kept while migrating to the new solution
+                 elif p.names.Head = "TypeUtil" then
                     // Legacy: types defined by Yucca in TypeUtil.dfy
                     // This is only for legacy support, can be removed later if we don't run typeCart on a
                     // legacy diff.
@@ -383,8 +419,8 @@ module DafnyToYIL =
                         | "string31" -> Y.TString Y.Bound31 
                         | "seq31" when args.Length = 1 -> Y.TSeq(Y.Bound31, args.Head) 
                         | "arr31" when args.Length = 1 -> Y.TArray(Y.Bound31, args.Head) 
-                        | "map31" when args.Length = 2 -> Y.TMap (Y.Bound31, args.Head, args.Tail.Head)
-                        | "set31" when args.Length = 1 -> Y.TSet (Y.Bound31, args.Head)
+                        | "map31" when args.Length = 2 -> Y.TMap(Y.Bound31, args.Head, args.Tail.Head)
+                        | "set31" when args.Length = 1 -> Y.TSet(Y.Bound31, args.Head)
                         | "Option" when args.Length = 1 -> makeTApply()
                         // types in CommonTypes.dfy are included in JavaLib.dfy.
                         | _ -> tpCommon t n args ("unknown type in JavaLib")
@@ -410,9 +446,7 @@ module DafnyToYIL =
                     (p, if p.names.Item(1).StartsWith("Option") then
                             makeTApply()
                         else tpCommon t (p.names.Item(1)) args ("unknown type in CommonTypes"))
-                    |> Y.TApplyPrimitive
-                else
-                    makeTApply()
+                    |> Y.TApplyPrimitive *)
         | :? BoolType -> Y.TBool
         | :? CharType -> Y.TChar
         | :? IntType -> Y.TInt Y.NoBound
@@ -447,28 +481,28 @@ module DafnyToYIL =
             | :? LetExpr as e ->
                 if e.LHSs.Count <> 1 then
                     unsupported "let with more than 1 LHS"
-
                 if e.RHSs.Count <> 1 then
                     unsupported "let with more than 1 RHS"
-
                 let v = e.LHSs.Item(0)
-
                 if v.Var = null then
                     unsupported "let with constructor pattern"
                 else
                     let rhs = expr (e.RHSs.Item(0))
-
                     match e.Body with
                     | :? ITEExpr as iteE ->
                         let elseExpr = (iteE.Els :?> LetExpr)
                         let var = elseExpr.LHSs.Item(0).Var
                         let body = expr (elseExpr.Body)
-                        Y.ELet(var.Name, tp var.Type, rhs, body)
+                        Y.ELet(var.Name, tp var.Type, e.Exact, rhs, body)
                     | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
-            expr e.ResolvedExpression
+            let r = e.ResolvedExpression
+            if r = null then
+                YIL.EUnimplemented // a few expressions are not resolved by Dafny
+            else
+                expr e.ResolvedExpression
         // identifiers/names
         | :? IdentifierExpr as e -> Y.EVar(e.Var.Name)
         | :? MemberSelectExpr as e ->
@@ -487,6 +521,9 @@ module DafnyToYIL =
                 elif p.names.Item(1) = DafnyMap
                      && p.names.Item(2) = DafnyKeys then
                     Y.EMapKeys(e)
+                elif p.names.Item(1).StartsWith(DafnyFun)
+                     && p.names.Item(2) = DafnyReads then
+                    Y.EMemberRef(r, p, [])
                 else
                     unsupported $"Unknown member {p}"
             else
@@ -512,39 +549,10 @@ module DafnyToYIL =
             let vars = boundVar @ e.BoundVars
             Y.EFun(vars, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e ->
-            let s = expr e.Seq
-            let e0 = exprO e.E0
-            let e1 = exprO e.E1
-            let t = tp (e.Seq.Resolved.Type)
-            // Dafny syntax merges several cases here that YIL distinguishes, so we need the type to distinguish
-            let handler t =
-                match (t, e.SelectOne) with
-                | (Y.TSeq _, true) -> Y.ESeqAt(s, Option.get e0)
-                | (Y.TSeq _, false) -> Y.ESeqRange(s, e0, e1)
-                | (Y.TString _, true) -> Y.ECharAt(s, Option.get e0) // Dafny strings are character arrays
-                | (Y.TString _, false) -> Y.EStringRange(s, e0, e1)
-                | (Y.TArray _, true) -> Y.EArrayAt(s, [ Option.get e0 ])
-                | (Y.TArray _, false) -> Y.EArrayRange(s, e0, e1)
-                | (Y.TMap _, true) -> Y.EMapAt(s, Option.get e0)
-                // User-defined type alias
-                | (Y.TApply _, true) ->
-                    // TODO: can we use this approach without resorting to `tp`?
-                    match e.Seq.Resolved.Type.AsCollectionType with
-                    | :? MapType -> Y.EMapAt(s, Option.get e0)
-                    | :? SeqType -> Y.ESeqRange(s, e0, e1)
-                    | _ ->
-                       unsupported (
-                            sprintf
-                                "Type of sequence in sequence access: %s"
-                                (e.Seq.Resolved.Type.AsCollectionType.ToString())
-                       )
-                | _ -> unsupported (sprintf "Type of sequence in sequence access: %s" (t.ToString()))
-            match t with
-            | Y.TApplyPrimitive(_, t) -> handler t
-            | _ as t -> handler t
+            Y.ESeqSelect(expr e.Seq, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays
-            Y.EArrayAt(expr e.Array, expr @ e.Indices)
+            Y.EMultiSelect(expr e.Array, expr @ e.Indices)
         | :? SeqDisplayExpr as e ->
             let elems = expr @ e.Elements
             match tp e.Type with
@@ -582,36 +590,32 @@ module DafnyToYIL =
 
             let tpargs = tp @ e.InferredTypeArgs
             let args = expr @ e.Arguments
-
-            if Y.isDafnyTuple(Y.Path [n]) then
-                // built-in datatype for tuples
+            if n.StartsWith(DafnyTupleMake) then
                 Y.ETuple(args) // tpargs are the types of the components
             else
                 if n.Contains("#") then
                     // make sure we caught all the built-in names
                     unsupported $"special name: {n}"
-
                 Y.EConstructorApply(path, tpargs, args)
         // others
         | :? ConversionExpr as e -> Y.ETypeConversion(expr e.E, tp e.ToType)
+        | :? TypeTestExpr as e -> Y.ETypeTest(expr e.E, tp e.ToType)
         | :? StmtExpr as e ->
             // S;E
             Y.EBlock([ statement e.S; expr e.E ])
         | :? LetExpr as e ->
             if e.LHSs.Count <> 1 then
                 unsupported "let with more than 1 LHS"
-
             if e.RHSs.Count <> 1 then
                 unsupported "let with more than 1 RHS"
-
             let v = e.LHSs.Item(0)
-
             if v.Var = null then
                 unsupported "let with constructor pattern"
             else
-                Y.ELet(v.Var.Name, tp v.Var.Type, expr (e.RHSs.Item(0)), expr e.Body)
+                Y.ELet(v.Var.Name, tp v.Var.Type, e.Exact, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
+        | :? NestedMatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, nestedCase(e.Source.Type) @ e.Cases, None)
         | :? QuantifierExpr as e ->
             // mostly in logic parts; but can only be computational if domain is finite (occurs once in Yucca)
             // if e.TypeArgs > 0 then
@@ -650,7 +654,8 @@ module DafnyToYIL =
                 unsupported "set comprehension must be finite"
             let lds = e.BoundVars |> List.ofSeq |> List.map boundVar
             let rangePredicate = expr e.Range
-            Y.ESetComp (lds, rangePredicate)
+            let body = expr e.Term
+            Y.ESetComp (lds, rangePredicate, body)
         | :? SetDisplayExpr as e ->
             if not (e.Finite) then
                 unsupported "Infinite set definition"
@@ -669,9 +674,10 @@ module DafnyToYIL =
 
     and statement (s: Statement) : Y.Expr =
         match s with
-        | :? ConcreteSyntaxStatement as s ->
-            // cases that are eliminated during resolution
-            statement s.ResolvedStatement
+        // removed in Dafny 4
+        // | :? ConcreteSyntaxStatement as s ->
+        //    // cases that are eliminated during resolution
+        //    statement s.ResolvedStatement
         | :? BlockStmt as b -> Y.EBlock(statement @ b.Body)
         | :? VarDeclStmt as s ->
             let vs = boundVar @ s.Locals
@@ -803,7 +809,7 @@ module DafnyToYIL =
         | :? ReturnStmt as s ->
             (* There may be more than one return value - see the comment on the translation of the method header.
                There may be no or multiple return values - see the comment on EReturn. *)
-            let rs = s.rhss
+            let rs = s.Rhss
 
             let es =
                 if rs = null then
@@ -836,7 +842,6 @@ module DafnyToYIL =
                     | :? NameSegment as l -> Y.EVar(l.Name)
                     | _ -> unsupported "Non-atomic LHS of :- statement"
                 | _ -> unsupported "Multiple LHSs in :- statement"
-
             Y.EUpdate([ n ], u)
         | :? IfStmt as s ->
             if s.IsBindingGuard then
@@ -859,13 +864,19 @@ module DafnyToYIL =
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
         | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
-        | :? AssumeStmt as s ->Y.EAssume(expr s.Expr)
+        | :? AssumeStmt as s -> Y.EAssume(expr s.Expr)
+        | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
         | :? RevealStmt as s ->
-            Y.EReveal (List.map expr (List.ofSeq s.Exprs |> List.filter (fun e -> e = null)))
+            let rs = expr @ s.Exprs
+            if List.contains YIL.EUnimplemented rs then
+                warning "dropping unresolved reveal expression"
+            let rs2 = rs |> List.filter (fun x -> x <> YIL.EUnimplemented)
+            Y.EReveal rs2
         | :? ForallStmt as s ->
-            // TODO: compile foralls correctly by also considering ensures clause.
+            // TODO: compile foralls correctly by also considering ensures clause
             Y.EQuant(Y.Forall, boundVar @ s.BoundVars, exprO s.Range, if s.Body <> null then statement s.Body else Y.ESKip)
+        | :? SkeletonStatement -> Y.EUnimplemented (* '...;' skeleton statements *)
         | _ -> unsupported $"statement {s.ToString()}"
     // ***** qualified names; Dafny has methods for this, but they are a bit confusing and work with .-separated strings
     and pathOfModule (d: ModuleDefinition) : Y.Path =

@@ -152,7 +152,7 @@ module Diff =
         | YIL.ClassConstructor(_,_,ins,outs,bd,_) -> ClassConstructor(nD,tvsD, idInputSpec ins, idList outs, SameExprO bd)
         | YIL.TypeDef(_,_,sp,pr,_,_) -> TypeDef(nD, tvsD, SameType sp, SameExprO (Option.map snd pr))
         | YIL.Field(_,t,d,_,_,_,_) -> Field(nD, SameType t, SameExprO d)
-        | YIL.Method(_,_,_,ins,outs,bd,_,_,_) -> Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
+        | YIL.Method(_,_,_,ins,outs,_,_,_,bd,_,_,_) -> Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
     and idList<'y,'d>(ys: 'y list): List<'y,'d> = UpdateList(List.map Same ys)
     and idConstructor(ctr: YIL.DatatypeConstructor) = DatatypeConstructor(SameName ctr.name, idList ctr.ins)
     and idInputSpec(ins: YIL.InputSpec) = InputSpec(idList ins.decls, idList ins.conditions)
@@ -183,7 +183,7 @@ module Diff =
         let UNC = "UNC"
 
         /// a YIL printer
-        let P () = YIL.printer ()
+        let P () = YIL.Printer false
 
         /// prints a diff between two lists, given printing functions for the YIL and Diff types
         member this.List<'y, 'd>
@@ -219,7 +219,7 @@ module Diff =
         member this.typeargs(ts: TypeArgList) = this.List(ts, fst, fst, "<", ", ", ">")
 
         member this.decls(ds: DeclList) =
-            this.List(ds, (fun x -> P().decl(x, YIL.emptyPrintingContext)), this.decl, "{\n", "\n", "\n}")
+            this.List(ds, (fun x -> P().decl(x, YIL.Context())), this.decl, "{\n", "\n", "\n}")
 
         member this.decl(d: Decl) =
             match d with
@@ -268,12 +268,12 @@ module Diff =
                 + (this.outputSpec outs)
                 + " = \n"
                 + this.exprO b
-             | Import iT -> P().decl(YIL.Import iT, YIL.emptyPrintingContext)
-             | Export eT -> P().decl(YIL.Export eT, YIL.emptyPrintingContext)
+             | Import iT -> P().decl(YIL.Import iT, YIL.Context())
+             | Export eT -> P().decl(YIL.Export eT, YIL.Context())
              | DUnimplemented -> "Unimplemented"
 
         member this.datatypeConstructors(cs: DatatypeConstructorList) =
-            this.List(cs, (fun x -> P().datatypeConstructor(x, YIL.emptyPrintingContext)), this.datatypeConstructor, "", " | ", "")
+            this.List(cs, (fun x -> P().datatypeConstructor(x, YIL.Context())), this.datatypeConstructor, "", " | ", "")
 
         member this.datatypeConstructor(c: DatatypeConstructor) =
             match c with
@@ -290,7 +290,7 @@ module Diff =
             match s with | OutputSpec (ds, cs) -> this.localDecls ds + " " + (this.conditions(false,cs))
 
         member this.conditions(require: bool, cDs: ConditionList) =
-            let p = (fun c -> P().condition (require, c, YIL.emptyPrintingContext))
+            let p = (fun c -> P().condition (require, c, YIL.Context()))
             this.List(cDs, p, p, "", ", ", "")
 
         member this.tps(ts: Type list) =
@@ -308,10 +308,10 @@ module Diff =
 
         member this.exprO(eO: ExprO) =
             match eO with
-            | SameExprO e -> UNC + (YIL.printer().exprO false (e, "", YIL.emptyPrintingContext))
-            | UpdateExpr e -> UPD + (YIL.printer().expr false e YIL.emptyPrintingContext)
+            | SameExprO e -> UNC + (YIL.printer().exprO (e, "", YIL.Context()))
+            | UpdateExpr e -> UPD + (YIL.printer().expr e (YIL.Context()))
             | DeleteExpr _ -> DEL
-            | AddExpr e -> ADD + (YIL.printer().expr false e YIL.emptyPrintingContext)
+            | AddExpr e -> ADD + (YIL.printer().expr e (YIL.Context()))
 
         member this.localDecls(lds: LocalDeclList) =
             this.List(lds, P().localDecl, this.localDecl, "(", ", ", ")")

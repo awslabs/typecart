@@ -38,8 +38,7 @@ module Utils =
     let listDiff<'a when 'a: equality> (l: 'a list, m: 'a list) =
         List.filter (fun x -> not (List.contains x m)) l
     /// l and m are disjoint
-    let listDisjoint<'a when 'a: equality> (l: 'a list, m: 'a list) =
-        listDiff(l,m) = l
+    let listDisjoint<'a when 'a: equality> (l: 'a list, m: 'a list) = listDiff (l, m) = l
     /// number of occurrences of a value in a list
     let listCount<'a when 'a: equality> (l: 'a list, x: 'a) = (List.filter (fun u -> u = x) l).Length
     /// list as string with given separator
@@ -110,65 +109,56 @@ module Utils =
             Some(s.Substring(pre.Length))
         else
             None
-    
+
     // Suffix matcher
     let (|Suffix|_|) (suf: string) (s: string) =
         if s.EndsWith(suf) then
             Some(s.Substring(0, s.Length - suf.Length))
         else
             None
-    
+
     /// Logging utils
     let log (s: string) = Console.WriteLine(s)
     let logObject (s: string) (arg: obj) = Console.WriteLine(s, arg)
 
-    
+
     /// Dafny utils
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
         let reporter = ConsoleErrorReporter()
         let options = DafnyOptions()
+        options.ApplyDefaultOptions() // needed to enable \U unicode
         // Disable module reveals / provides scopes, otherwise we get e.g. lemmas with empty bodies.
         options.DisableScopes <- true
         DafnyOptions.Install(options)
         log "***** Dafny initialised"
         reporter
-    
-    // Read in and parse a single Dafny file
-    let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
-        let dafnyFile = DafnyFile(file)
-        let mutable dafnyProgram = Unchecked.defaultof<Program>
-        logObject "***** calling Dafny parser and checker for {0}" file
-        let dafnyFiles = [ dafnyFile ]
-        let err =
-            Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
-        if err <> null && err <> "" then
-            failwith ("Dafny errors: " + err)
-        dafnyProgram
-    
+
     // Read in and parse a list of Dafny files
     let parseASTs (files: FileInfo list) (programName: string) (reporter: ConsoleErrorReporter) : Program =
         if List.length files = 0 then
             failwith "error: list of files supplied to parser is empty"
-        let dafnyFiles = List.map (fun (x : FileInfo) -> DafnyFile x.FullName) files
+        let dafnyFiles = List.map (fun (x: FileInfo) -> DafnyFile x.FullName) files
         let mutable dafnyProgram = Unchecked.defaultof<Program>
         log "***** calling dafny parser for multiple files"
-        let err =
-            Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
+        let err = Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
         if err <> null && err <> "" then
             failwith ("Dafny error: " + err)
         dafnyProgram
 
+    // Read in and parse a single Dafny file
+    let parseAST (file: string) (programName: string) (reporter: ConsoleErrorReporter) : Program =
+        parseASTs [FileInfo(file)] programName reporter
+
     // detects if path is file or directory
-    type SystemPathKind = D of DirectoryInfo | F of FileInfo
-    
+    type SystemPathKind =
+        | D of DirectoryInfo
+        | F of FileInfo
+
     let parseSystemPath (path: string) =
         let attr = File.GetAttributes(path)
+
         if attr.HasFlag(FileAttributes.Directory) then
-            D (DirectoryInfo(path))
+            D(DirectoryInfo(path))
         else
-            F (FileInfo(path))
-
-
-    
-    
+            F(FileInfo(path))

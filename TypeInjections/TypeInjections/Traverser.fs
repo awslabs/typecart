@@ -18,7 +18,6 @@ module Traverser =
         default this.error(s: string) =
             System.Console.WriteLine(s)
         
-        
         /// translate a path referencing a declaration
         abstract member path : Context * Path -> Path
         default this.path(_,p) = p
@@ -78,22 +77,19 @@ module Traverser =
         
         // transform a declaration
         member this.declDefault(ctx: Context, d: Decl) : Decl list =
-            let childCtx (dName: string) (ctx: Context) = ctx.enter dName
             match d with
             | Include p -> [Include p]
             | Module (n, ds, m) ->
-                let nameP = n.Split(".") |> List.ofArray
                 let imports = List.choose (function | Import it -> Some it | _ -> None) ds
-                let moduleCtx = List.fold
-                                    (fun (ctx: Context) -> ctx.addImport) (ctx.enterModuleScope(Path(nameP))) imports
+                let moduleCtx = List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n)) imports
                 let membersT =
-                    List.collect (fun (d: Decl) -> this.decl (childCtx n moduleCtx, d)) ds
+                    List.collect (fun (d: Decl) -> this.decl (moduleCtx, d)) ds
                 [ Module(n, membersT, m) ]
             | Datatype (n, tpvs, cons, ds, a) ->
                 // We enter a new module scope when in datatype constructors. For instance,
-                // datatype "Option" inside Joint.CommonTypes should be in scope
-                // Path ["Joint", "CommonTypes", "Option"].
-                let bodyCtx = (childCtx n ctx).enterModuleScope(Path[n]).addTpvars tpvs
+                // datatype "Option" inside Joint.CommonTypes is in scope
+                // Path ["Joint.CommonTypes", "Option"].
+                let bodyCtx = ctx.enter(n).addTpvars tpvs
                 let consT =
                     List.map (fun (c: DatatypeConstructor) -> this.constructor(bodyCtx, c)) cons
                 let membersT =
@@ -101,7 +97,7 @@ module Traverser =
                 [ Datatype(n, tpvs, consT, membersT, a) ]
             | Class (n, isT, tpvs, ps, ds, m) ->
                 // Enter a new module scope as well in class. TODO: check if this approach generates valid code.
-                let bodyCtx = (childCtx n ctx).enterModuleScope(Path[n]).addTpvars tpvs
+                let bodyCtx = ctx.enter(n).addTpvars tpvs
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (bodyCtx, d)) ds
                 let psT = List.map (fun p -> this.classType(ctx, p)) ps
@@ -115,19 +111,25 @@ module Traverser =
                 [ TypeDef(n, tpvs, spT, predT, isN, m) ]
             | Field (n, t, e, isG, isS, isM, m) ->
                 [ Field(n, this.tp(ctx, t), this.exprO(ctx, e), isG, isS, isM, m) ]
-            | Method (methodType, n, tpvs, ins, outs, b, isG, isS, m) ->
-                let ctxTps = (childCtx n ctx).addTpvars tpvs
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, isG, isS, m) ->
+                let ctxTps = (ctx.enter n).addTpvars tpvs
                 let insT = this.inputSpec(ctxTps, ins)
                 let ctxIns = ctxTps.add(ins.decls)
                 let outsT =
                     match outs with
                     | OutputSpec(ds,cs) -> OutputSpec(this.localDeclList(ctxIns, ds),
                                                       this.conditionList(ctxIns, cs))
+                let modifiesT =
+                    List.map (fun e -> this.expr(ctx, e)) modifies
+                let readsT =
+                    List.map (fun e -> this.expr(ctx, e)) reads
+                let decreasesT =
+                    List.map (fun e -> this.expr(ctx, e)) decreases
                 let bodyCtx = (ctxIns.add outs.namedDecls).enterBody()
                 let bT = Option.map (fun b -> this.expr (bodyCtx, b)) b
-                [ Method(methodType, n, tpvs, insT, outsT, bT, isG, isS, m) ]
+                [ Method(methodType, n, tpvs, insT, outsT, modifiesT, readsT, decreasesT, bT, isG, isS, m) ]
             | ClassConstructor (n, tpvs, ins, outs, b, m) ->
-                let headerCtx = (childCtx n ctx).addTpvars tpvs
+                let headerCtx = (ctx.enter n).addTpvars tpvs
                 let insT = this.inputSpec(headerCtx, ins)
                 let outsT = this.conditionList(headerCtx, outs)
                 let bodyCtx = (headerCtx.add ins.decls).enterBody()
@@ -153,7 +155,6 @@ module Traverser =
             | TBitVector _
             | TVar _ -> tp
             | TApply (op, args) -> TApply(this.path(ctx,op), rcL args)
-            | TApplyPrimitive (op, t) -> TApplyPrimitive(this.path(ctx, op), rc t)
             | TTuple ts -> TTuple (rcL ts)
             | TSeq(b,t) -> TSeq (b, rc t)
             | TSet(b,t) -> TSet (b, rc t)
@@ -194,23 +195,19 @@ module Traverser =
                 | ETuple es -> ETuple (rcEs es)
                 | EProj (e, i) -> EProj (rcE e, i)
                 | ESet (t, es) -> ESet (rcT t, rcEs es)
-                | ESetComp (lds, p) ->
+                | ESetComp (lds, p, b) ->
                     let ctxE = ctx.add lds
                     let pT = this.expr(ctxE, p)
-                    ESetComp (this.localDeclList (ctx, lds), pT)
+                    let bT = this.expr(ctxE, b)
+                    ESetComp (this.localDeclList (ctx, lds), pT, bT)
                 | ESeq (t, es) -> ESeq (rcT t, rcEs es)
                 | ESeqConstr(t, l, i) -> ESeqConstr(rcT t, rcE l, rcE i)
-                | ESeqAt (s, i) -> ESeqAt (rcE s, rcE i)
-                | ESeqRange (s, f, t) -> ESeqRange (rcE s, rcEo f, rcEo t)
+                | ESeqSelect (s, t, elem, frI, toI) -> ESeqSelect (rcE s, rcT t, elem, rcEo frI, rcEo toI)
                 | ESeqUpdate (s, i, e) -> ESeqUpdate (rcE s, rcE i, rcE e)
-                | ECharAt (s, i) -> ECharAt (rcE s, rcE i)
-                | EStringRange (s, f, t) -> EStringRange (rcE s, rcEo f, rcEo t)
                 | EToString es -> EToString (rcEs es)
                 | EArray (t, dim) -> EArray (rcT t, dim)
-                | EArrayAt (a, i) -> EArrayAt (rcE a, i)
-                | EArrayRange (a, f, t) -> EArrayRange (rcE a, rcEo f, rcEo t)
+                | EMultiSelect(a, i) -> EMultiSelect(rcE a, i)
                 | EArrayUpdate (a, i, e) -> EArrayUpdate (rcE a, i ,rcE e)
-                | EMapAt (m, a) -> EMapAt (rcE m, a)
                 | EMapKeys m -> EMapKeys (rcE m)
                 | EMapDisplay kvs ->
                     (List.fold (fun l (eKey, eVal) -> (rcE eKey, rcE eVal) :: l) [] kvs)
@@ -226,8 +223,13 @@ module Traverser =
                 | EAnonApply (f, es) -> EAnonApply(rcE f, rcEs es)
                 | EUnOpApply (op, e) -> EUnOpApply(op, rcE e)
                 | EBinOpApply (op, e1, e2) -> EBinOpApply(op, rcE e1, rcE e2)
-                | ELet(n,tp,df,bd) -> ELet(n, rcT tp, rcE df, this.expr(ctx.add(n,tp), bd))
-                | ETypeConversion (e, toType) -> ETypeConversion (rcE e, rcT toType)
+                | ELet(n,tp,x, df,bd) ->
+                    // if x is false, then df is a predicate about n
+                    let ctxI = ctx.add(n,tp)
+                    let dfT = if x then rcE df else this.expr(ctxI, df)
+                    ELet(n, rcT tp, x, dfT, this.expr(ctxI, bd))
+                | ETypeConversion (e, t) -> ETypeConversion (rcE e, rcT t)
+                | ETypeTest (e, t) -> ETypeTest (rcE e, rcT t)
                 | EBlock es ->
                     let esT = this.exprList (ctx, es)
                     EBlock esT
@@ -260,8 +262,9 @@ module Traverser =
                 | EAssert e -> EAssert (rcE e)
                 | EAssume e -> EAssume (rcE e)
                 | EReveal es -> EReveal (rcEs es)
+                | EExpect e -> EExpect (rcE e)
                 | ECommented(s,e) -> ECommented(s, rcE e)
-                | EUnimplemented _ -> expr
+                | EUnimplemented -> expr
 
         // methods for auxiliary types
 
@@ -436,6 +439,44 @@ module Traverser =
         let sub = SubstituteExprs(f,t, subs)
         sub.expr (Context(f.prog), e)
 
+    /// transformation to apply basic term normalization
+    /// topOnly: reduce only one step at toplevel (if any)
+    type Reduce(topOnly:bool) =
+        inherit Identity()
+        override this.expr(ctx: Context, e: Expr) =
+          let eR =
+           match e with
+           | EProj(ETuple(ts),i) ->
+               // beta-reduction for tuples: (t_1,...,t_n).i --->  t_i
+               ts.Item i
+           | ETuple(es) ->
+               let mutable vars = [] 
+               let isEtaExp = List.indexed es |> List.forall (fun (i,e) ->
+                   match e with
+                   | EProj(EVar(n),j) when i = j -> vars <- n::vars; true
+                   | _ -> false
+                   )
+               if isEtaExp && (List.distinct vars).Length = 1 then
+                   EVar(vars.Head)
+               else
+                   e
+           | EAnonApply(EFun(lds,_,b), es) when lds.Length = es.Length ->
+               // beta-reduction: (fun x_1,...,x_n -> b) e_1 ... e_n ---> b[x_1/e_1,...,x_n/e_n] 
+               let subs = (List.zip lds es) |> List.map (fun (ld,e) -> ld.name,e)
+               substituteExprs(ctx.add(lds), ctx, subs, b)
+           | EFun(lds,_,EAnonApply(EVar(f), args)) when lds.Length = args.Length ->
+               // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
+               // covers only special case where f is variable
+               let isEtaExp = List.zip lds args |> List.forall (fun (ld,a) -> a = EVar(ld.name))
+               if isEtaExp then EVar(f) else e
+           | _ -> e
+          if topOnly then
+             eR
+          else
+             if e = eR then this.exprDefault(ctx, e) else this.expr(ctx, e)
+    /// basic term normalization
+    let reduce(ctx: Context, e: Expr) = Reduce(true).expr(ctx,e)
+    
     /// test the traverser class by running a deep identity transformation on a program
     let test(p: Program) =
         let id = Identity()

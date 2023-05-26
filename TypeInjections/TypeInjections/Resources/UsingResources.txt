@@ -1,0 +1,17 @@
+How to make resource file
+1. 'Add file' to Resources folder (need to make new file, 
+can't figure out how to do this for imported dafny files)
+2. Right click on created file and go to 'properties'
+3. Change 'Build Action' to 'Embedded Resource'
+4. Change 'Copy to output directory' to 'Copy Always'
+
+How to access resource file
+1. get current assemby object: 
+let asmb = Assembly.GetExecutingAssembly();
+2. inspect list of assembly resources for your file's assembly name:
+let listOfNames = asmb.GetManifestResourceNames()
+3. Create stream object for Assembly file
+let stream = asmb.GetManifestResourceStream([ASSEMBLY_NAME_HERE])
+4. Read stream
+let reader = new StreamReader(stream)
+reader.ReadToEnd()
