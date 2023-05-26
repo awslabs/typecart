@@ -47,7 +47,7 @@ module Translation =
         if List.exists (fun (j:Path) -> j.isAncestorOf p) jointDecls then
            (p.prefix "Joint", p.prefix "Joint", p.prefix "Translations")
         else
-           (p.prefix "Old", p.prefix "New", p.prefix "Translations")
+           (p.prefix "Old", p.prefix "New", p)
 
     /// s ---> s_old, s_new, s
     // This is the only place that uses the literal names.

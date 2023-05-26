@@ -187,7 +187,7 @@ module Analysis =
         override this.prog(prog: Program) =
             {prog with meta = {prog.meta with prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes}}
             
-    /// add an empty momule if the program is effectively empty
+    /// add an empty module if the program is effectively empty
     type AddEmptyModuleIfProgramEmpty(moduleName: string) =
          inherit Traverser.Identity()
          override this.ToString() = "adding empty module " + moduleName + " if necessary"
