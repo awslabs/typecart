@@ -20,8 +20,10 @@ module DafnyFunctions =
     /// given relation t on o*n, the sets e: set<n> and f:set<n> are related
     /// if every element of e is related to an element of f and vice versa
     let setRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Set"), [o;n], [t]@(args rel e f), false)
-    /// given relations, sT,tT on so*sn and tO*tN, the maps e: map<sO,tO> and f:map<sN,tN> are related
-    /// if every pair in e is related a pair in f and vice versa
+    /// TODO: implement forward/backward translations; anything using Map will not compile now
+    /// given translations sT: sO -> sN, sT2: sN -> sO, tT: tO -> tN, tT2: tN -> tO,
+    /// return translations e: map<sO, tO> -> map<sN, tN> for each element in sN with a preimage in sT
+    /// and e2: map<sN, tN> -> map<sO, tO> for each element in sO with a preimage in sT2
     let mapRel rel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec rel, rb.child("Map"), [sO;sN;tO;tN], [sT;tT]@(args rel e f), false)
     /// ???()
     let missingTerm = EMethodApply(utils, rb.child("???"), [], [], false)
