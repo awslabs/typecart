@@ -14,7 +14,7 @@ module Translations.MapBuiltinTypes {
     {
         set x:o | x in e :: t(x)
     }
-    function Map<K_O,K_N,V_O,V_N>(K : K_O -> K_N, V : V_O -> V_N, e : map<K_O,V_O>) : (f: map<K_N,V_N>)   
+    function Map<K_O,K_N(==),V_O,V_N(==)>(K : K_O -> K_N, V : V_O -> V_N, e : map<K_O,V_O>) : (f: map<K_N,V_N>)   
     {
         var fKeys := set x: K_O | x in e.Keys :: K(x);
         var fSet := set x:K_O | x in e.Keys :: (K(x),V(e[x]));
@@ -25,12 +25,12 @@ module Translations.MapBuiltinTypes {
     {
         set x: T_O | x in m_O :: T(x)
     }
-    function fSetFunc<T_O(!new), T_N, U_O, U_N>(T: T_O->T_N, U: U_O->U_N, m_O: map<T_O,U_O>) : (res : set<(T_N,U_N)>)
+    function fSetFunc<T_O(!new), T_N(==), U_O, U_N>(T: T_O->T_N, U: U_O->U_N, m_O: map<T_O,U_O>) : (res : set<(T_N,U_N)>)
     {
         var fKeys := fKeysFunc(T,m_O.Keys);
         set x:T_O | x in m_O.Keys :: (T(x),U(m_O[x]))
     }
-    function fMapFunc<T_O(!new), T_N, U_O, U_N>(T: T_O->T_N, U: U_O->U_N, m_O: map<T_O,U_O>) : (res : map<T_N,U_N>)
+    function fMapFunc<T_O(!new), T_N(==), U_O, U_N(==)>(T: T_O->T_N, U: U_O->U_N, m_O: map<T_O,U_O>) : (res : map<T_N,U_N>)
     {
         var fKeys := fKeysFunc(T,m_O.Keys);
         var fSet := fSetFunc(T,U,m_O);
@@ -71,7 +71,7 @@ module Translations.MapBuiltinTypes {
             assert |fMap.Keys| == |fKeys|;
         }
     }
-    function mapCreateGeneric<T_O(!new), T_N, U_O, U_N>(T: T_O->T_N, U: U_O->U_N, m_O: map<T_O,U_O>) : (res : map<T_N,U_N>)
+    function mapCreateGeneric<T_O(!new), T_N(==), U_O, U_N(==)>(T: T_O->T_N, U: U_O->U_N, m_O: map<T_O,U_O>) : (res : map<T_N,U_N>)
     requires forall x : T_O :: !exists y : T_O :: x != y && T(x) == T(y)
     ensures forall x :: x in m_O.Keys ==> T(x) in res.Keys
     ensures forall y :: y in m_O.Values ==> U(y) in res.Values
