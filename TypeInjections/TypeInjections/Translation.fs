@@ -454,7 +454,7 @@ module Translation =
             tO,tN, fun (x,y) -> EEqual(tT(x,y), y)
 
     /// the auxiliary recursive function associated with the toplevel call tp
-    /// tpRF is the same as tp except for the third component:
+    /// tpFR is the same as tp except for the third component:
     /// * relational: the needed relation
     /// * functional: the translation function (x,y) -> f(x) (second argument is ignored)
     and tpFR (t: Type) : Type * Type * (Expr * Expr -> Expr) =
@@ -484,7 +484,7 @@ module Translation =
             let tsT = List.map (fun (o, n, t) -> abstractRel ("x", o, n, t)) tsONT
             let tsO, tsN, _ = List.unzip3 tsONT
             let tsON = Utils.listInterleave (tsO, tsN)
-            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT, tsON, tsT @ [ x; y ], false))
+            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT, tsON, tsT @ [ if relational then x; y else x ], false))
         | TTuple ts ->
             // two tuples are related if all elements are
             let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
@@ -622,7 +622,7 @@ module Translation =
     printPaths("changed", changedChildren)
     printPaths("dependency closure of changed", changedClosed)
     printPaths("joint", jointPaths)
-    let tr = Translator(Context(p), pD.decls, jointPaths, true)
+    let tr = Translator(Context(p), pD.decls, jointPaths, false)
     let translations = {name = newName; decls = tr.doTranslate(); meta = emptyMeta}
     translations, jointPaths
 
