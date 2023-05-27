@@ -6,27 +6,23 @@ open YIL
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =
     let rcv p = StaticReceiver {path=p; tpargs=[]}
-    let rb = Path ["Translations"; "RelateBuiltinTypes"]
     let fb = Path ["Translations"; "MapBuiltinTypes"]
-    let rbRec rel = if rel then rcv rb else rcv fb
-    let args rel e f = if rel then [e;f] else [e]
+    let rcvFunc = rcv fb
     let utils = rcv (Path ["Translations"; "Utils"])
-    /// given relation t on o*n, the sequences e: seq<n> and f:seq<n> are related
-    /// if they have the same length and are related element-wise
-    let seqRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Seq"), [o;n], [t]@(args rel e f), false)
-    /// given relation t on o*n, the array e: arr<n> and f:arr<n> are related
-    /// if they have the same length and are related element-wise
-    let arrayRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Array"), [o;n], [t]@(args rel e f), false)
-    /// given relation t on o*n, the sets e: set<n> and f:set<n> are related
-    /// if every element of e is related to an element of f and vice versa
-    let setRel rel o n t (e,f) = EMethodApply(rbRec rel, rb.child("Set"), [o;n], [t]@(args rel e f), false)
-    /// TODO: implement forward/backward translations; anything using Map will not compile now
-    /// given translations sT: sO -> sN, sT2: sN -> sO, tT: tO -> tN, tT2: tN -> tO,
-    /// return translations e: map<sO, tO> -> map<sN, tN> for each element in sN with a preimage in sT
-    /// and e2: map<sN, tN> -> map<sO, tO> for each element in sO with a preimage in sT2
-    let mapRel rel sO sN sT tO tN tT (e,f) = EMethodApply(rbRec rel, rb.child("Map"), [sO;sN;tO;tN], [sT;tT]@(args rel e f), false)
+    /// given translation t: o -> n,
+    /// return element-wise translation: seq<o> -> seq<n>
+    let seqRel o n t e = EMethodApply(rcvFunc, fb.child("Seq"), [o;n], [t;e], false)
+    /// given translation t: o -> n,
+    /// return element-wise translation: arr<o> -> arr<n>
+    let arrayRel o n t e = EMethodApply(rcvFunc, fb.child("Array"), [o;n], [t;e], false)
+    /// given translation t: o -> n,
+    /// return element-wise translation: set<o> -> set<n>
+    let setRel o n t e = EMethodApply(rcvFunc, fb.child("Set"), [o;n], [t;e], false)
+    /// given translations sT1: sO -> sN, sT2: sN -> sO, tT1: tO -> tN, tT2: tN -> tO,
+    /// return translation: map<sO, tO> -> map<sN, tN> for each element e in sN with a preimage in sT1
+    let mapRel sO sN (sT1, sT2) tO tN (tT1, tT2) e = EMethodApply(rcvFunc, fb.child("Map"), [sO;sN;tO;tN], [sT1;sT2;tT1;e], false)
     /// ???()
-    let missingTerm = EMethodApply(utils, rb.child("???"), [], [], false)
+    let missingTerm = EMethodApply(utils, fb.child("???"), [], [], false)
     
 open DafnyFunctions
 
@@ -155,7 +151,7 @@ module Translation =
               else
                 // otherwise, call relation/function of supertype
                 let _, _, superT = tp super
-                superT (xO, xN)
+                (fst superT) xO
                    
             [ Method(IsFunction, pT.name, typeParams, inSpec, outSpec, [], [], [], Some body, false, true, context.currentMeta()) ]
             | _ -> failwith("impossible") // Diff.TypeDef must go with YIL.TypeDef
@@ -216,18 +212,18 @@ module Translation =
                        // case o -> ???
                        buildCase(insO, [], patO, EWildcard, "deleted constructor", missingTerm) 
                 | Diff.Same _ ->
-                    if relational then
+                    // if relational then
                        // case (o,n) -> arguments of o,n related
-                       buildCase(insO, insN, patO, patN, "unchanged constructor", EConj(insT))
-                    else
+                       // buildCase(insO, insN, patO, patN, "unchanged constructor", EConj(insT))
+                    // else
                        // TODO this case is unfinished
                        buildCase(insO, [], patO, EWildcard, "unchanged constructor", patN)
                 | Diff.Update _ ->
-                    if relational then
+                    // if relational then
                         // for updates, we only generate the conditions that the unchanged arguments are related
                         // the relation must be customized in a way that takes the added/deleted arguments into account 
-                        buildCase(insO, insN, patO, patN, "added/deleted constructor arguments", EConj(insT))
-                    else
+                        // buildCase(insO, insN, patO, patN, "added/deleted constructor arguments", EConj(insT))
+                    // else
                         // TODO this case is unfinished
                         buildCase(insO, [], patO, EWildcard, "added/deleted constructor arguments", patN)
             let dflt = if relational then Some (EBool false) else None
@@ -253,11 +249,12 @@ module Translation =
             if not tpD.isSame then
                 failwith (unsupported "change in type: " + p.ToString())
             let tO, tN, tT = tp t
+            let tT1, tT2 = tT
             let recO, recN =
                 let parentO, parentN, _ = path (context.currentDecl)
                 let sr p = StaticReceiver({ path = p; tpargs = [] })
                 sr parentO, sr parentN
-            let fieldsRelated = tT (EMemberRef(recO, pO, []), EMemberRef(recN, pN, []))
+            let fieldsRelated = EEqual(tT1 (EMemberRef(recO, pO, [])), EMemberRef(recN, pN, []))
             [ Method(
                   IsLemma,
                   pT.name,
@@ -341,6 +338,8 @@ module Translation =
                 ins_n.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
             let inputsRelated =
                 if isStatic then insT else instancesRelated :: insT
+            // only needs backward compatibility so we only take the first?
+            let inputsRelated = List.map fst inputsRelated
             let inSpec = InputSpec(inputs, inputRequiresO @ inputRequiresN @ inputsRelated)
             // we don't need the ensures-conditions of the method
             // because they can be proved from the verification of the method
@@ -360,7 +359,7 @@ module Translation =
                 EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
             let outputsRelated =
                 match outputTypeT with
-                | Some ot -> ot (resultO, resultN)
+                | Some ot -> EEqual((fst ot) resultO, resultN)
                 | None -> EBool true
             // in general for mutable classes, we'd also have to return that the receivers remain related
             // but that is redundant due to our highly restricted treatment of classes
@@ -410,7 +409,7 @@ module Translation =
     /// and term variables give rise to both term variables and preconditions,
     /// which cannot alternate in a Dafny context.
     /// Therefore, we translate them at once using multiple outputs.
-    and context (tpDs: Diff.TypeArgList, ldDs: Diff.LocalDeclList) : TypeArg list * LocalDecl list * Condition list =
+    and context (tpDs: Diff.TypeArgList, ldDs: Diff.LocalDeclList) : TypeArg list * LocalDecl list * (Condition * Condition) list =
         if tpDs.isSame && ldDs.isSame then
             let tps = tpDs.getSame()
             let lds = ldDs.getSame()
@@ -420,46 +419,33 @@ module Translation =
         else
             failwith (unsupported "change in type/term arguments")
 
-    /// x:a ---> x_old: a_old, x_new: a_new, requires a(x_old,x_new)
-    and localDecl (ld: LocalDecl) : LocalDecl * LocalDecl * Condition =
+    /// x:a --->
+    /// x_old: a_old, x_new: a_new, (translate(x_old), translate(x_new))
+    and localDecl (ld: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
         let nO, nN, nT = name ld.name
         let tO, tN, tT = tp ld.tp
         let g = ld.ghost
-        LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), tT (EVar nO, EVar nN)
+        LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), ((fst tT) (EVar nO), (snd tT) (EVar nN))
 
+    and listOfFuncToFuncOfList (l: (Expr -> Expr) List) = (fun x -> List.map (fun (a, b) -> a b) (List.zip l x))
     /// diagonal relation
     and diag (x: Expr, y: Expr) = EEqual(x, y)
     /// reduction to avoid synthesizing reducible terms
     and reduce(e: Expr) = Traverser.reduce(ctx, e)
     /// convenience for building a lambda-abstraction
-    and abstractRel (x: string, tO: Type, tN: Type, body: Expr * Expr -> Expr) =
-        let xO, xN, _ = name (x)
+    and abstractRel (x: string, tO: Type, tN: Type, body: Expr -> Expr) =
+        let xO, _, _ = name (x)
         let xOE = EVar xO
-        let xNE = EVar xN
-        let bodyXON = body (xOE, xNE)
+        let bodyXOE = body xOE
         let abs = EFun(
-                    [ LocalDecl(xO, tO, false)
-                      LocalDecl(xN, tN, false) ],
-                    TBool,
-                    bodyXON
+                    [ LocalDecl(xO, tO, false) ],
+                    tN,
+                    bodyXOE
                   )
         reduce abs // reduce eta-contracts
-    /// tp(t) = (o,n,r) such that o/n are the old/new types corresponding to t and r:n*o->bool is the
-    /// relation for t.
-    /// For the functional approach, r is of the form (x,y) -> f(x)=y where f:o->n is the translation function
-    /// for t.
-    and tp (t: Type) : Type * Type * (Expr * Expr -> Expr) =
-        let tO,tN,tT = tpFR(t)
-        if relational then
-            tO,tN,tT
-        else
-            tO,tN, fun (x,y) -> EEqual(tT(x,y), y)
-
-    /// the auxiliary recursive function associated with the toplevel call tp
-    /// tpFR is the same as tp except for the third component:
-    /// * relational: the needed relation
-    /// * functional: the translation function (x,y) -> f(x) (second argument is ignored)
-    and tpFR (t: Type) : Type * Type * (Expr * Expr -> Expr) =
+    /// tp(t) = (o,n,(T1,T2)) such that o/n are the old/new types corresponding to t, T1: o->n and T2: n->o are the
+    /// translation functions for t.
+    and tp (t: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
         match t with
         | TUnit
         | TBool
@@ -470,83 +456,91 @@ module Translation =
         | TReal _
         | TBitVector _
         | TObject ->
-            // see the treatment of class declarations for TObject
-            // (x,y) -> x=y resp. (x,y) -> x
-            let r = if relational then diag else fst
-            t, t, r
+            t, t, (id, id)
         | TVar a ->
             let aO, aN, aT = name a
-            // apply the relation/function of the type variable to the old+new/old value
-            let args e f = if relational then [e;f] else [e]
-            TVar aO, TVar aN, (fun (e, f) -> EAnonApply(EVar aT, args e f))
+            // apply the function of the type variable to the old/new value
+            TVar aO, TVar aN, ((fun e -> EAnonApply(EVar aT, [e])), (fun e -> EAnonApply(EVar aT, [e])))
         | TApply (p, ts) ->
             let pO, pN, pT = path p
             let r = StaticReceiver({ path = pT.parent; tpargs = [] })
-            let tsONT= List.map tp ts
-            let tsT = List.map (fun (o, n, t) -> abstractRel ("x", o, n, t)) tsONT
+            let tsONT = List.map tp ts
+            let tsT = List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", o, n, t2))) tsONT
+            let tsT1, tsT2 = List.unzip tsT
             let tsO, tsN, _ = List.unzip3 tsONT
             let tsON = Utils.listInterleave (tsO, tsN)
-            TApply(pO, tsO), TApply(pN, tsN), (fun (x, y) -> EMethodApply(r, pT, tsON, tsT @ [ if relational then x; y else x ], false))
+            TApply(pO, tsO), TApply(pN, tsN), ((fun x -> EMethodApply(r, pT, tsO, tsT1@[x], false)), (fun x -> EMethodApply(r, pT, tsN, tsT2@[x], false)))
         | TTuple ts ->
-            // two tuples are related if all elements are
+            // element-wise translations on tuples
             let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
-            let T (x, y) =
-                let its = List.indexed tsT
-                let esT = its |> List.map (fun (i, t) -> t (reduce(EProj(x, i)), reduce(EProj(y, i)))) // reduce eliminates projections from tuples
-                // conjunction of component relations, or tuple of component mappings
-                if relational then EConj(esT) else ETuple(esT)
-            TTuple tsO, TTuple tsN, T
+            let its = List.indexed tsT
+            let T1 x =
+                let esT1 = its |> List.map (fun (i, (t1, _)) -> t1 (reduce(EProj(x, i)))) // reduce eliminates projections from tuples
+                ETuple(esT1) // tuple of component mappings
+            let T2 x =
+                let esT2 = its |> List.map (fun (i, (_, t2)) -> t2 (reduce(EProj(x, i)))) // reduce eliminates projections from tuples
+                ETuple(esT2) // tuple of component mappings
+            TTuple tsO, TTuple tsN, (T1, T2)
         | TFun (ts, u) ->
-            if not relational then
-               failwith "functional approach does not support function types"
-            // two functions are related if they map related arguments to related results
+            // translate functions
             // x1:t1, ..., xn:tn
             let lds =
                 List.indexed ts
                 |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
             // ldsO = x1O:t1O, ..., xnO:tnO
-            // ldsN = x1N:t1N, ..., xnO:tnN
-            // ldsT = t1-related(x1O,x1N), ..., tN-related(xnO,xnN)
+            // ldsN = x1N:t1N, ..., xnN:tnN
+            // ldsT = t1-translations(x1O,x1N), ..., tN-translations(xnO,xnN)
             let ldsO, ldsN, ldsT = List.unzip3 (List.map localDecl lds)
+            let ldsT1, ldsT2 = List.unzip ldsT  // unused... is ldsT1 the same as T1 inputsO?
             let inputTypesO = List.map localDeclType ldsO
             let inputTypesN = List.map localDeclType ldsN
-            let outputTypeO, outputTypeN, outputTypeRelation = tp u
-            let inputDecls = Utils.listInterleave (ldsO, ldsN)
             let inputsO = List.map localDeclTerm ldsO
             let inputsN = List.map localDeclTerm ldsN
-            let inputsRelated = EConj(ldsT)
-            let funsRelated (o, n) =
-                let outputO = EAnonApply(o, inputsO)
-                let outputN = EAnonApply(n, inputsN)
-                let outputRelated = outputTypeRelation (outputO, outputN)
-                EQuant(Forall, inputDecls, Some(inputsRelated), outputRelated)
-            TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), funsRelated
+            // input type translation functions
+            let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
+            let its = List.indexed tsT
+            let T1 x = List.map (fun ((t1, _), x) -> t1 x) (List.zip tsT x)
+            let T2 x = List.map (fun ((_, t2), x) -> t2 x) (List.zip tsT x)
+            // output type translation functions
+            let outputTypeO, outputTypeN, (outputT1, outputT2) = tp u
+            // To translate fO(xO) to fN(xN), we need to translate xN to xO, apply fO,
+            // then translate the result to outputTypeN
+            let funsTranslation1 fO =
+                let varsN = inputsN
+                let varsO = T2 varsN
+                let bodyO = EAnonApply(fO, varsO)
+                let bodyN = outputT1 bodyO
+                EFun(ldsN, outputTypeN, bodyN)
+            let funsTranslation2 fN =
+                let varsO = inputsO
+                let varsN = T1 varsO
+                let bodyN = EAnonApply(fN, varsN)
+                let bodyO = outputT2 bodyN
+                EFun(ldsO, outputTypeO, bodyO)
+            TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), (funsTranslation1, funsTranslation2)
         | TNullable t ->
             let tO, tN, tT = tp t
-            let r =
-              if relational then
-                fun (x,y) -> x
-              else
-                fun (x,y) -> EIf(EEqual(x,ENull tO), ENull tN, Some (tT (x,y)))
-            TNullable tO, TNullable tN, r
+            let tT1 = fun x -> EIf(EEqual(x,ENull tO), ENull tN, Some ((fst tT) x))
+            let tT2 = fun x -> EIf(EEqual(x,ENull tN), ENull tO, Some ((snd tT) x))
+            TNullable tO, TNullable tN, (tT1, tT2)
         | TSeq(b,t) ->
             let tO, tN, tT = tpAbstracted("sq", t)
-            TSeq(b,tO), TSeq(b,tN), seqRel relational tO tN tT
+            TSeq(b,tO), TSeq(b,tN), (seqRel tO tN (fst tT), seqRel tN tO (snd tT))
         | TSet(b,t) ->
             let tO, tN, tT = tpAbstracted("st", t)
-            TSet(b,tO), TSet(b,tN), setRel relational tO tN tT
+            TSet(b,tO), TSet(b,tN), (setRel tO tN (fst tT), setRel tN tO (snd tT))
         | TMap(b,s, t) ->
             let sO, sN, sT = tpAbstracted("mp", s)
             let tO, tN, tT = tpAbstracted("mp", t)
-            TMap(b, sO, tO), TMap(b, sN, tN), mapRel relational sO sN sT tO tN tT
+            TMap(b, sO, tO), TMap(b, sN, tN), ((mapRel sO sN sT tO tN tT), (mapRel sN sO (snd sT, fst sT) tN tO (snd tT, fst tT)))
         | TArray(b,t) ->
             let tO, tN, tT = tpAbstracted("ar", t)
-            TArray(b,tO), TArray(b,tN), arrayRel relational tO tN tT
-        | TUnimplemented -> TUnimplemented, TUnimplemented, (fun _ -> EUnimplemented)
+            TArray(b,tO), TArray(b,tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
+        | TUnimplemented -> TUnimplemented, TUnimplemented, ((fun _ -> EUnimplemented), (fun _ -> EUnimplemented))
     /// same as tp but with the relation lambda-abstracted
     and tpAbstracted(x: string, t: Type) =
         let tO, tN, tT = tp t
-        tO, tN, abstractRel(x, tO, tN, tT)
+        tO, tN, (abstractRel(x, tO, tN, (fst tT)), abstractRel(x, tN, tO, (snd tT)))
         
 
     /// translates expression e:t to the proof that it is in the t-relation

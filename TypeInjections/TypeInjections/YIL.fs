@@ -449,7 +449,7 @@ module YIL =
         | EToString of expr: Expr list
         | EInt of BigInteger * tp: Type
         | EReal of BigDec * tp: Type
-        // Dafny allows quantifiers in computations if the domain is finite; cond is a prediate that restricts the domain of the bound variables
+        // Dafny allows quantifiers in computations if the domain is finite; cond is a predicate that restricts the domain of the bound variables
         | EQuant of quant: Quantifier * ld: LocalDecl list * cond: Expr option * body: Expr
         | EOld of Expr // used in ensures conditions of methods in classes to refer to previous state
         | ETuple of elems: Expr list
