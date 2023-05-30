@@ -143,13 +143,10 @@ module Translation =
             let xN = localDeclTerm xtN
             let body =
               if isNew then
-                // new types are new primitive types, so return diagonal relation/identity map
-                if relational then
-                  EEqual(xO, xN)
-                else
-                  xO
+                // new types are new primitive types, so return identity map
+                xO
               else
-                // otherwise, call relation/function of supertype
+                // otherwise, call function of supertype
                 let _, _, superT = tp super
                 (fst superT) xO
                    
@@ -336,10 +333,13 @@ module Translation =
             // new requires clauses applied to new arguments
             let _,inputRequiresN,_ =
                 ins_n.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
-            let inputsRelated =
+            let inputsTranslations =
                 if isStatic then insT else instancesRelated :: insT
-            // only needs backward compatibility so we only take the first?
-            let inputsRelated = List.map fst inputsRelated
+            // inputsTranslations is (f1(old), f2(new))
+            // backward compatibility: f1(old) == new
+            let inputsRelated = List.map (fun ((f1, f2), inN:LocalDecl) -> EEqual(f1, EVar(inN.name)))
+                                    (List.zip inputsTranslations insN)
+            
             let inSpec = InputSpec(inputs, inputRequiresO @ inputRequiresN @ inputsRelated)
             // we don't need the ensures-conditions of the method
             // because they can be proved from the verification of the method
