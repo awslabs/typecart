@@ -84,6 +84,10 @@ module Translation =
                 | _ -> this.tpDefault(ctx, t)
         }
     
+    /// get "f1(old) == new" from "[(f1(old), f2(new)), new]"
+    and backward_compatible (insT: (Expr * Expr) list) (insN: LocalDecl list) : Expr list =
+        List.map (fun ((f1, f2), inN:LocalDecl) -> EEqual(f1, EVar(inN.name))) (List.zip insT insN)
+    
     /// convenience for iteration over a list of declarations
     and decls (context: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
         List.collect (decl context) dsD.elements
@@ -333,14 +337,13 @@ module Translation =
             // new requires clauses applied to new arguments
             let _,inputRequiresN,_ =
                 ins_n.conditions |> List.map (fun c -> expr(c)) |> List.unzip3
-            let inputsTranslations =
-                if isStatic then insT else instancesRelated :: insT
-            // inputsTranslations is (f1(old), f2(new))
+            // insT is (f1(old), f2(new))
             // backward compatibility: f1(old) == new
-            let inputsRelated = List.map (fun ((f1, f2), inN:LocalDecl) -> EEqual(f1, EVar(inN.name)))
-                                    (List.zip inputsTranslations insN)
+            let inputsTranslations = backward_compatible insT insN
+            let inputsTranslations2 = if isStatic then inputsTranslations else
+                                      (backward_compatible [instancesRelated] [newInstDecl]) @ inputsTranslations
             
-            let inSpec = InputSpec(inputs, inputRequiresO @ inputRequiresN @ inputsRelated)
+            let inSpec = InputSpec(inputs, inputRequiresO @ inputRequiresN @ inputsTranslations2)
             // we don't need the ensures-conditions of the method
             // because they can be proved from the verification of the method
             // but we might add them if that helps
