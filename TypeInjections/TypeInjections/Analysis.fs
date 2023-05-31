@@ -177,7 +177,7 @@ module Analysis =
               decls = List.map prD prog.decls
               meta = prog.meta }
 
-    /// makes path unqualified if they are relative to the current module or an opened one
+    /// makes path unqualified if they are relative to the current method or an opened module
     /// (Dafny complains when we print out fully qualified names in some cases)
     type UnqualifyPaths() =
         inherit Traverser.Identity()
@@ -192,8 +192,8 @@ module Analysis =
 
         override this.path(ctx: Context, p: Path) =
             if p.name = "STRING" then ()
-            let currModulePath = ctx.modulePath ()
-            let p2 = currModulePath.relativize (p)
+            let currentMethodPath = ctx.currentDecl.parent
+            let p2 = currentMethodPath.relativize p
             let imports = ctx.importPaths
             List.fold this.consumeImportPath p2 imports
 
