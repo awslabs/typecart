@@ -9,7 +9,12 @@ module Differ =
     /// similar(o,n) = true iff n != o but n is updated version of o
     /// diff(o,n): if similar(o,n) produce Some(diff o n), unspecified otherwise
     let rec complexSet<'y, 'd when 'y: equality>
-        (old: 'y list, nw: 'y list, similar: 'y * 'y -> bool, diff: 'y * 'y -> 'd option) : Diff.List<'y, 'd> =
+        (
+            old: 'y list,
+            nw: 'y list,
+            similar: 'y * 'y -> bool,
+            diff: 'y * 'y -> 'd option
+        ) : Diff.List<'y, 'd> =
         let mutable nwDiffed : 'y list = []
 
         let diffOne o =
@@ -21,13 +26,17 @@ module Differ =
                 | Some n ->
                     nwDiffed <- n :: nwDiffed
                     let d = Option.get (diff (o, n)) // succeeds by precondition
-                    Diff.Update (o,n,d)
+                    Diff.Update(o, n, d)
                 | None -> Diff.Delete o
+
         let changed = List.map diffOne old
         // append Add for the elements of nw that have not been used by diffOne
-        let diff = changed @ (List.map Diff.Add (Utils.listDiff (nw, nwDiffed)))
+        let diff =
+            changed
+            @ (List.map Diff.Add (Utils.listDiff (nw, nwDiffed)))
+
         Diff.UpdateList(diff)
-        
+
     /// compares two sets (given as sets)
     /// compare elements only by equality and never generates an update between two elements
     and simpleSet<'y, 'd when 'y: equality> (old: 'y list, nw: 'y list) : Diff.List<'y, 'd> =
@@ -49,7 +58,9 @@ module Differ =
                 // old declarations deleted at the end
                 [ Diff.Delete o ]
             else
-                let iO = List.tryFindIndex (fun n -> similar (o, n)) nwLeft
+                let iO =
+                    List.tryFindIndex (fun n -> similar (o, n)) nwLeft
+
                 match iO with
                 | Some i ->
                     // similar element comes later, assume everything in between (if anything) is added
@@ -59,10 +70,11 @@ module Differ =
                     nwLeft <- nwLeft.Tail
                     // the diff between the two similar elements
                     let elem =
-                        if o = n then Diff.Same o
+                        if o = n then
+                            Diff.Same o
                         else
-                          let d = Option.get (diff (o, n)) // succeeds by precondition
-                          Diff.Update (o,n,d)
+                            let d = Option.get (diff (o, n)) // succeeds by precondition
+                            Diff.Update(o, n, d)
                     // now o = n
                     (List.map Diff.Add added) @ [ elem ]
                 | None ->
@@ -108,8 +120,8 @@ module Differ =
         | ClassConstructor (nO, tsO, insO, outsO, bO, _), ClassConstructor (nN, tsN, insN, outsN, bN, _) -> nO = nN
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) ->
             nO = nN && gO = gN && sO = sN && mO = mN
-        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) ->
-            nO = nN && lO = lN && gO = gN && sO = sN
+        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _),
+          Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) -> nO = nN && lO = lN && gO = gN && sO = sN
         | _ -> false
 
     /// diffs two similar declarations
@@ -125,18 +137,29 @@ module Differ =
         | Datatype (nO, tsO, csO, msO, _), Datatype (nN, tsN, csN, msN, _) ->
             Some(Diff.Datatype(name (nO, nN), typeargs (tsO, tsN), datatypeConstructors (csO, csN), decls (msO, msN)))
         | ClassConstructor (nO, tsO, insO, outsO, bO, _), ClassConstructor (nN, tsN, insN, outsN, bN, _) ->
-            Some(Diff.ClassConstructor(name (nO, nN), typeargs (tsO, tsN), inputSpec(insO, insN),
-                                       conditions(outsO, outsN), exprO (bO, bN)))
+            Some(
+                Diff.ClassConstructor(
+                    name (nO, nN),
+                    typeargs (tsO, tsN),
+                    inputSpec (insO, insN),
+                    conditions (outsO, outsN),
+                    exprO (bO, bN)
+                )
+            )
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) when gO = gN && sO = sN && mO = mN ->
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
-        | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, _), Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) when
-            lO = lN && gO = gN && sO = sN ->
-            Some(Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec(iO, iN), outputSpec (oO, oN), exprO (bO, bN)))
-        | TypeDef(nO, tsO, spO, prO, isNO, _), TypeDef(nN, tsN, spN, prN, isNN, _) when
-           // changing variable name (fst pr) not supported
-           isNO = isNN && (prO.IsNone && prN.IsNone || (fst prO.Value) = (fst prN.Value)) ->
+        | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, _),
+          Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) when lO = lN && gO = gN && sO = sN ->
+            Some(
+                Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec (iO, iN), outputSpec (oO, oN), exprO (bO, bN))
+            )
+        | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) when
+            // changing variable name (fst pr) not supported
+            isNO = isNN
+            && (prO.IsNone && prN.IsNone
+                || (fst prO.Value) = (fst prN.Value)) ->
             let s = Option.map snd
-            Some(Diff.TypeDef(name(nO,nN), typeargs(tsO,tsN), tp(spO,spN), exprO(s prO, s prN)))
+            Some(Diff.TypeDef(name (nO, nN), typeargs (tsO, tsN), tp (spO, spN), exprO (s prO, s prN)))
         | _ -> None
 
     /// diffs two sets of datatype constructors
@@ -200,13 +223,13 @@ module Differ =
         | None, Some n -> Diff.AddExpr n
     /// diffs two expressions
     and expr (old: Expr, nw: Expr) =
-        if old = nw then Diff.SameExprO (Some old)
-        else Diff.UpdateExpr nw
+        if old = nw then
+            Diff.SameExprO(Some old)
+        else
+            Diff.UpdateExpr nw
     /// diffs two types, no recursion: types are either equal or not
     and tp (old: Type, nw: Type) =
         if old = nw then
             Diff.SameType old
         else
             Diff.UpdateType nw
-
-        

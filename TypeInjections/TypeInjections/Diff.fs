@@ -22,17 +22,44 @@ module Diff =
     /// change in a list of YIL.y elements with comparison type Diff.d
     type List<'y, 'd> =
         | UpdateList of Elem<'y, 'd> list
-        member this.elements = match this with UpdateList l -> l
+        member this.elements =
+            match this with
+            | UpdateList l -> l
         /// true if all elements are unchanged
-        member this.isSame = List.forall (fun (e: Elem<'y, 'd>) -> e.isSame) this.elements
+        member this.isSame =
+            List.forall (fun (e: Elem<'y, 'd>) -> e.isSame) this.elements
         /// the unchanged elements
-        member this.getSame() = List.choose (fun e -> match e with Same y -> Some y | _ -> None) this.elements
+        member this.getSame() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y -> Some y
+                    | _ -> None)
+                this.elements
         /// the updated elements
-        member this.getUpdate() = List.choose (fun e -> match e with Update (yo,yn,_) -> Some (yo,yn) | _ -> None) this.elements
+        member this.getUpdate() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Update (yo, yn, _) -> Some(yo, yn)
+                    | _ -> None)
+                this.elements
         /// the added elements
-        member this.getAdd() = List.choose (fun e -> match e with Add y -> Some y | _ -> None) this.elements
+        member this.getAdd() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Add y -> Some y
+                    | _ -> None)
+                this.elements
         /// the deleted elements
-        member this.getDelete() = List.choose (fun e -> match e with Delete y -> Some y | _ -> None) this.elements
+        member this.getDelete() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Delete y -> Some y
+                    | _ -> None)
+                this.elements
 
     /// change in an element of a list of YIL.y with comparision type Diff.d
     and Elem<'y, 'd> =
@@ -44,12 +71,13 @@ module Diff =
             match this with
             | Same _ -> true
             | _ -> false
+
         member this.yil =
             match this with
             | Same y
             | Add y
             | Delete y
-            | Update (y,_,_) -> y
+            | Update (y, _, _) -> y
 
     type Name =
         | SameName of string
@@ -72,24 +100,26 @@ module Diff =
         | DUnimplemented
         member this.name =
             match this with
-            | Module(n,_) -> n
-            | Class(n,_,_,_) -> n
-            | Datatype(n,_,_,_) -> n
-            | ClassConstructor(n,_,_,_,_) -> n
-            | TypeDef(n,_,_,_) -> n
-            | Field(n,_,_) -> n
-            | Method(n,_,_,_,_) -> n
+            | Module (n, _) -> n
+            | Class (n, _, _, _) -> n
+            | Datatype (n, _, _, _) -> n
+            | ClassConstructor (n, _, _, _, _) -> n
+            | TypeDef (n, _, _, _) -> n
+            | Field (n, _, _) -> n
+            | Method (n, _, _, _, _) -> n
             // these should be impossible but it's more convenient to make the function total
             | DUnimplemented -> SameName "DUnimplemented"
             | Import _ -> SameName "IMPORT"
             | Export _ -> SameName "EXPORT"
-            
+
 
     and DeclList = List<Y.Decl, Decl>
 
     and DatatypeConstructor =
         | DatatypeConstructor of Name * LocalDeclList
-            member this.ins() = match this with | DatatypeConstructor(_,ds) -> ds
+        member this.ins() =
+            match this with
+            | DatatypeConstructor (_, ds) -> ds
 
     and DatatypeConstructorList = List<Y.DatatypeConstructor, DatatypeConstructor>
 
@@ -111,16 +141,30 @@ module Diff =
 
     and InputSpec =
         | InputSpec of LocalDeclList * ConditionList
-        member this.decls = match this with | InputSpec(lds,_) -> lds
-        member this.conditions = match this with | InputSpec(_,cs) -> cs
-        member this.isSame = this.decls.isSame && this.conditions.isSame
+        member this.decls =
+            match this with
+            | InputSpec (lds, _) -> lds
+
+        member this.conditions =
+            match this with
+            | InputSpec (_, cs) -> cs
+
+        member this.isSame =
+            this.decls.isSame && this.conditions.isSame
 
     // change between output type and output decls is an add-delete
     and OutputSpec =
         | OutputSpec of LocalDeclList * ConditionList
-        member this.decls = match this with | OutputSpec(lds,_) -> lds
-        member this.conditions = match this with | OutputSpec(_,cs) -> cs
-        member this.isSame = this.decls.isSame && this.conditions.isSame
+        member this.decls =
+            match this with
+            | OutputSpec (lds, _) -> lds
+
+        member this.conditions =
+            match this with
+            | OutputSpec (_, cs) -> cs
+
+        member this.isSame =
+            this.decls.isSame && this.conditions.isSame
 
     /// change to an optional expression
     and ExprO =
@@ -128,36 +172,54 @@ module Diff =
         | AddExpr of Y.Expr
         | UpdateExpr of Y.Expr
         | DeleteExpr of Y.Expr
-        member this.isSame = match this with SameExprO _ -> true | _ -> false
+        member this.isSame =
+            match this with
+            | SameExprO _ -> true
+            | _ -> false
 
     /// change to a type
     and Type =
         | SameType of Y.Type
         | UpdateType of Y.Type
-        member this.isSame = match this with SameType _ -> true | _ -> false
+        member this.isSame =
+            match this with
+            | SameType _ -> true
+            | _ -> false
 
     // the identity diff of an object (occurrences of SameX are pushed one level down)
-    let rec idDecl(d: YIL.Decl) =
+    let rec idDecl (d: YIL.Decl) =
         let nD = SameName d.name
         let tvsD = idList d.tpvars
         let msD = idList d.children
+
         match d with
         | YIL.Include _ // doesn't matter, we never diff include statements.
         | YIL.DUnimplemented -> DUnimplemented
         | YIL.Export eT -> Export eT
         | YIL.Import iT -> Import iT
         | YIL.Module _ -> Module(nD, msD)
-        | YIL.Datatype(_,_,ctrs,_,_) -> Datatype(nD,tvsD, idList ctrs, msD)
-        | YIL.Class(_,_,_,ps,_,_) -> Class(nD, tvsD, idList ps, msD)
-        | YIL.ClassConstructor(_,_,ins,outs,bd,_) -> ClassConstructor(nD,tvsD, idInputSpec ins, idList outs, SameExprO bd)
-        | YIL.TypeDef(_,_,sp,pr,_,_) -> TypeDef(nD, tvsD, SameType sp, SameExprO (Option.map snd pr))
-        | YIL.Field(_,t,d,_,_,_,_) -> Field(nD, SameType t, SameExprO d)
-        | YIL.Method(_,_,_,ins,outs,_,_,_,bd,_,_,_) -> Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
-    and idList<'y,'d>(ys: 'y list): List<'y,'d> = UpdateList(List.map Same ys)
-    and idConstructor(ctr: YIL.DatatypeConstructor) = DatatypeConstructor(SameName ctr.name, idList ctr.ins)
-    and idInputSpec(ins: YIL.InputSpec) = InputSpec(idList ins.decls, idList ins.conditions)
-    and idOutputSpec(outs: YIL.OutputSpec) = OutputSpec(idList outs.decls, idList outs.conditions)
-    and idLocalDecl(ld: YIL.LocalDecl) = LocalDecl(SameName ld.name, SameType ld.tp)
+        | YIL.Datatype (_, _, ctrs, _, _) -> Datatype(nD, tvsD, idList ctrs, msD)
+        | YIL.Class (_, _, _, ps, _, _) -> Class(nD, tvsD, idList ps, msD)
+        | YIL.ClassConstructor (_, _, ins, outs, bd, _) ->
+            ClassConstructor(nD, tvsD, idInputSpec ins, idList outs, SameExprO bd)
+        | YIL.TypeDef (_, _, sp, pr, _, _) -> TypeDef(nD, tvsD, SameType sp, SameExprO(Option.map snd pr))
+        | YIL.Field (_, t, d, _, _, _, _) -> Field(nD, SameType t, SameExprO d)
+        | YIL.Method (_, _, _, ins, outs, _, _, _, bd, _, _, _) ->
+            Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
+
+    and idList<'y, 'd> (ys: 'y list) : List<'y, 'd> = UpdateList(List.map Same ys)
+
+    and idConstructor (ctr: YIL.DatatypeConstructor) =
+        DatatypeConstructor(SameName ctr.name, idList ctr.ins)
+
+    and idInputSpec (ins: YIL.InputSpec) =
+        InputSpec(idList ins.decls, idList ins.conditions)
+
+    and idOutputSpec (outs: YIL.OutputSpec) =
+        OutputSpec(idList outs.decls, idList outs.conditions)
+
+    and idLocalDecl (ld: YIL.LocalDecl) =
+        LocalDecl(SameName ld.name, SameType ld.tp)
 
     type Printer() =
         let mutable indentLevel = 0
@@ -207,7 +269,7 @@ module Diff =
             | Same y -> UNC + " " + py y
             | Add y -> ADD + " " + py y
             | Delete y -> DEL + " " + py y
-            | Update (_,_,y) -> UPD + " " + pd y
+            | Update (_, _, y) -> UPD + " " + pd y
 
         member this.prog(p: Program) = this.decls p.decls
 
@@ -219,7 +281,7 @@ module Diff =
         member this.typeargs(ts: TypeArgList) = this.List(ts, fst, fst, "<", ", ", ">")
 
         member this.decls(ds: DeclList) =
-            this.List(ds, (fun x -> P().decl(x, YIL.Context())), this.decl, "{\n", "\n", "\n}")
+            this.List(ds, (fun x -> P().decl (x, YIL.Context())), this.decl, "{\n", "\n", "\n}")
 
         member this.decl(d: Decl) =
             match d with
@@ -242,10 +304,10 @@ module Diff =
                 + (this.name n)
                 + (this.typeargs tpvs)
                 + (this.inputSpec ins)
-                + (this.conditions(false,outs))
+                + (this.conditions (false, outs))
                 + " = \n"
                 + this.exprO b
-            | TypeDef(n,tvs,sp,pr) ->
+            | TypeDef (n, tvs, sp, pr) ->
                 "type "
                 + (this.name n)
                 + " = "
@@ -268,12 +330,19 @@ module Diff =
                 + (this.outputSpec outs)
                 + " = \n"
                 + this.exprO b
-             | Import iT -> P().decl(YIL.Import iT, YIL.Context())
-             | Export eT -> P().decl(YIL.Export eT, YIL.Context())
-             | DUnimplemented -> "Unimplemented"
+            | Import iT -> P().decl (YIL.Import iT, YIL.Context())
+            | Export eT -> P().decl (YIL.Export eT, YIL.Context())
+            | DUnimplemented -> "Unimplemented"
 
         member this.datatypeConstructors(cs: DatatypeConstructorList) =
-            this.List(cs, (fun x -> P().datatypeConstructor(x, YIL.Context())), this.datatypeConstructor, "", " | ", "")
+            this.List(
+                cs,
+                (fun x -> P().datatypeConstructor (x, YIL.Context())),
+                this.datatypeConstructor,
+                "",
+                " | ",
+                ""
+            )
 
         member this.datatypeConstructor(c: DatatypeConstructor) =
             match c with
@@ -287,10 +356,16 @@ module Diff =
                 + this.conditions (true, cs)
 
         member this.outputSpec(s: OutputSpec) =
-            match s with | OutputSpec (ds, cs) -> this.localDecls ds + " " + (this.conditions(false,cs))
+            match s with
+            | OutputSpec (ds, cs) ->
+                this.localDecls ds
+                + " "
+                + (this.conditions (false, cs))
 
         member this.conditions(require: bool, cDs: ConditionList) =
-            let p = (fun c -> P().condition (require, c, YIL.Context()))
+            let p =
+                (fun c -> P().condition (require, c, YIL.Context()))
+
             this.List(cDs, p, p, "", ", ", "")
 
         member this.tps(ts: Type list) =

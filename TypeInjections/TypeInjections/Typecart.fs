@@ -24,7 +24,7 @@ module Typecart =
         let write (fileName: string, p: YIL.Program) =
             let f = IO.Path.Combine(outFolder, fileName)
             mkdir f
-            Console.WriteLine ("writing " + f)
+            Console.WriteLine("writing " + f)
             let s = YIL.printer().prog (p, YIL.Context(p))
             IO.File.WriteAllText(f, s)
 
@@ -130,31 +130,29 @@ module Typecart =
 
     // API entry
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =
-        let oldOrNewPrefix(old: bool) = if old then "Old" else "New"
+        let oldOrNewPrefix (old: bool) = if old then "Old" else "New"
         let jointPrefix = "Joint"
         // pipelines for transforming old, new, joint, translations
-        let oldOrNewPipeline(joint: YIL.Path list, old: bool) : Traverser.Transform list =
+        let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.FilterDecls(fun p -> not (List.contains p joint))
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(oldOrNewPrefix(old))
+              Analysis.PrefixTopDecls(oldOrNewPrefix (old))
               Analysis.PrefixUnfoundImports("Joint")
-              Analysis.AddImports(["joint.dfy"], ["Joint"])
+              Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
               Analysis.DeduplicateImportsIncludes()
-              Analysis.AddEmptyModuleIfProgramEmpty(oldOrNewPrefix(old))
-            ]
+              Analysis.AddEmptyModuleIfProgramEmpty(oldOrNewPrefix (old)) ]
 
-        let jointPipeline(joint: YIL.Path list) : Traverser.Transform list =
+        let jointPipeline (joint: YIL.Path list) : Traverser.Transform list =
             [ Analysis.FilterDecls(fun p -> List.contains p joint)
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
               Analysis.PrefixTopDecls(jointPrefix)
               Analysis.DeduplicateImportsIncludes()
-              Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix)
-            ]
+              Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
         let combinePipeline : Traverser.Transform list =
-            [ Analysis.AddImports(["joint.dfy";"old.dfy";"new.dfy"], ["Joint";"Old";"New"])
+            [ Analysis.AddImports([ "joint.dfy"; "old.dfy"; "new.dfy" ], [ "Joint"; "Old"; "New" ])
               Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
@@ -181,21 +179,38 @@ module Typecart =
 
             // generate translation
             this.logger "***** generating translation code"
-            let combineYIL, jointPaths = Translation.prog(oldYIL, "Combine", diff)
+
+            let combineYIL, jointPaths =
+                Translation.prog (oldYIL, "Combine", diff)
 
             // emitting output
             this.logger "************ emitting output"
             this.logger "***** joint"
-            Analysis.Pipeline(jointPipeline jointPaths).apply newYIL
+
+            Analysis
+                .Pipeline(jointPipeline jointPaths)
+                .apply newYIL
             |> outputWriter.processJoint
+
             this.logger "***** old"
-            Analysis.Pipeline(oldOrNewPipeline(jointPaths, true)).apply oldYIL
+
+            Analysis
+                .Pipeline(oldOrNewPipeline (jointPaths, true))
+                .apply oldYIL
             |> outputWriter.processOld
+
             this.logger "***** new"
-            Analysis.Pipeline(oldOrNewPipeline(jointPaths, false)).apply newYIL
+
+            Analysis
+                .Pipeline(oldOrNewPipeline (jointPaths, false))
+                .apply newYIL
             |> outputWriter.processNew
+
             this.logger "***** combine"
-            Analysis.Pipeline(combinePipeline).apply combineYIL
+
+            Analysis
+                .Pipeline(combinePipeline)
+                .apply combineYIL
             |> outputWriter.processCombine
 
     let typecart (oldYIL: Program, newYIL: Program, logger: string -> unit) = Typecart(oldYIL, newYIL, logger)

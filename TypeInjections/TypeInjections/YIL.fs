@@ -39,8 +39,9 @@ module YIL =
                 this.names
                 @ List.filter (fun x -> x <> "") ns.names
             )
-        /// prefix root component; used for adding "Old", "New", etc.        
-        member this.prefix(s: string) = Path((s + "." + this.names.Head) :: this.names.Tail)
+        /// prefix root component; used for adding "Old", "New", etc.
+        member this.prefix(s: string) =
+            Path((s + "." + this.names.Head) :: this.names.Tail)
         /// a.b.c ---> a.b
         member this.parent = Path(listDropLast this.names)
         /// a.b.c ---> c
@@ -48,7 +49,9 @@ module YIL =
         /// p = this . rest
         member this.isAncestorOf(p: Path) =
             let l = this.names.Length
-            p.names.Length >= l && p.names.[..l - 1] = this.names
+
+            p.names.Length >= l
+            && p.names.[..l - 1] = this.names
         /// this . that ---> that
         member this.relativize(that: Path) =
             if this.isAncestorOf that then
@@ -57,11 +60,13 @@ module YIL =
                 that
         /// dot-separated names
         override this.ToString() = listToString (this.names, ".")
-        
+
     // meta-information
-    [<CustomEquality;NoComparison>]
+    [<CustomEquality; NoComparison>]
     type Meta =
-        { comment: string option; position: Position option; prelude: string }
+        { comment: string option
+          position: Position option
+          prelude: string }
         override this.GetHashCode() = 0
         // we make all Meta objects equal so that they are ignored during diffing
         override this.Equals(that: Object) =
@@ -78,11 +83,14 @@ module YIL =
             $"{this.filename}@{this.line.ToString()}:{this.col.ToString()}"
 
     // ***** auxiliary methods
-    let emptyMeta = { comment = None; position = None; prelude = "" }
-    
+    let emptyMeta =
+        { comment = None
+          position = None
+          prelude = "" }
+
     /// name of nonymous variables
-    let anonymous = "_"        
-    
+    let anonymous = "_"
+
     (* toplevel declaration
        The program name corresponds to the package name or root namespace.
 
@@ -92,7 +100,10 @@ module YIL =
        - We way want to add information here later.
        - It is convenient to have a type of programs and not just a constructor.
     *)
-    type Program = { name: string; decls: Decl list; meta: Meta }
+    type Program =
+        { name: string
+          decls: Decl list
+          meta: Meta }
 
     (* declarations
        Modules and datatypes are child-bearing, i.e., can contain nested declarations.
@@ -131,7 +142,13 @@ module YIL =
             members: Decl list *
             meta: Meta
         (* Class constructor as opposed to the default constructor in Datatype *)
-        | ClassConstructor of name: string * tpvars: TypeArg list * ins: InputSpec * outs: Condition list * body: Expr option * meta: Meta
+        | ClassConstructor of
+            name: string *
+            tpvars: TypeArg list *
+            ins: InputSpec *
+            outs: Condition list *
+            body: Expr option *
+            meta: Meta
         (* Type definitions
            if predicate is given: HOL-style subtype definitions (omitting the witness here)
              else: type synonym
@@ -192,7 +209,7 @@ module YIL =
             | Method (_, n, _, _, _, _, _, _, _, _, _, _) -> n
             | Field (n, _, _, _, _, _, _) -> n
             | TypeDef (n, _, _, _, _, _) -> n
-            | Import _ 
+            | Import _
             | Export _
             | Include _
             | DUnimplemented -> "" // check if this causes problems
@@ -210,23 +227,28 @@ module YIL =
             | Export _ -> []
             | Include _ -> []
             | DUnimplemented -> []
+
         member this.children =
             match this with
             | Module (_, ds, _) -> ds
             | Datatype (_, _, _, ds, _) -> ds
             | Class (_, _, _, _, ds, _) -> ds
             | _ -> []
-        member this.filterChildren (mustPreserve: Decl -> bool) =
+
+        member this.filterChildren(mustPreserve: Decl -> bool) =
             let f ds = List.filter (mustPreserve) ds
+
             match this with
-            | Module (x, ds, y) -> Module (x, f ds, y)
-            | Datatype (a, b, c, ds, d) -> Datatype (a, b, c, ds, d)
-            | Class (a, b, c, d, ds, e) -> Class (a, b, c, d, ds, e)
+            | Module (x, ds, y) -> Module(x, f ds, y)
+            | Datatype (a, b, c, ds, d) -> Datatype(a, b, c, ds, d)
+            | Class (a, b, c, d, ds, e) -> Class(a, b, c, d, ds, e)
             | _ -> this
+
         member this.isModule() =
             match this with
             | Module _ -> true
             | _ -> false
+
     and TypeArg = string * (bool option * bool) // true/false for co/contravariant; true for equality required
     /// Three Dafny method types. This is going to matter when pretty-printing, since
     /// Dafny distinguishes the set of syntaxes allowed when printing different methods.
@@ -239,9 +261,13 @@ module YIL =
         | IsPredicateMethod
         member this.isGhost() =
             match this with
-            | IsMethod | IsFunctionMethod | IsPredicateMethod -> false
-            | IsFunction | IsLemma | IsPredicate -> true
-        
+            | IsMethod
+            | IsFunctionMethod
+            | IsPredicateMethod -> false
+            | IsFunction
+            | IsLemma
+            | IsPredicate -> true
+
         override this.ToString() =
             match this with
             | IsMethod -> "method"
@@ -255,30 +281,33 @@ module YIL =
         new() = ExportType([], [])
         member this.provides = provides
         member this.reveals = reveals
+
         override this.ToString() =
-            let lts (ps: Path list) = listToString(ps, ", ")
+            let lts (ps: Path list) = listToString (ps, ", ")
+
             match this.provides, this.reveals with
             | [], [] -> ""
-            | _ -> 
+            | _ ->
                 "export \n"
-                    + (match this.provides with
-                       | [] -> ""
-                       | _ -> "   provides " + (lts this.provides))
-                    + "\n"
-                    + (match this.reveals with
-                       | [] -> ""
-                       | _ -> "   reveals " + (lts this.reveals))
-                    
-        
-        
+                + (match this.provides with
+                   | [] -> ""
+                   | _ -> "   provides " + (lts this.provides))
+                + "\n"
+                + (match this.reveals with
+                   | [] -> ""
+                   | _ -> "   reveals " + (lts this.reveals))
+
+
+
         override this.Equals(that) =
             match that with
             | :? ExportType as that ->
-                this.provides.Equals(that.provides) && this.reveals.Equals(that.reveals)
+                this.provides.Equals(that.provides)
+                && this.reveals.Equals(that.reveals)
             | _ -> false
-    
+
         override this.GetHashCode() = this.ToString().GetHashCode()
-    
+
     and ImportType =
         | ImportDefault of Path
         | ImportOpened of Path
@@ -287,7 +316,11 @@ module YIL =
             match this with
             | ImportDefault p -> "import " + p.ToString()
             | ImportOpened p -> "import opened " + p.ToString()
-            | ImportEquals (lhs, rhs) -> "import " + lhs.ToString() + " = " + rhs.ToString()
+            | ImportEquals (lhs, rhs) ->
+                "import "
+                + lhs.ToString()
+                + " = "
+                + rhs.ToString()
         // for ImportEquals, compare rhsDir since it is the given name to the import.
         member this.pathEquals(p': Path) =
             match this with
@@ -300,11 +333,12 @@ module YIL =
             | ImportDefault p
             | ImportOpened p
             | ImportEquals (_, p) -> p
+
         member this.prefix(pre: string) =
             match this with
-            | ImportDefault p -> ImportDefault (p.prefix(pre))
-            | ImportOpened p -> ImportOpened (p.prefix(pre))
-            | ImportEquals (lhs, p) -> ImportEquals (lhs, p.prefix(pre))
+            | ImportDefault p -> ImportDefault(p.prefix (pre))
+            | ImportOpened p -> ImportOpened(p.prefix (pre))
+            | ImportEquals (lhs, p) -> ImportEquals(lhs, p.prefix (pre))
     (* types
        We do not allow module inheritance or Dafny classes.
        Therefore, there is no subtyping except for numbers.
@@ -334,10 +368,17 @@ module YIL =
         // dummy for missing cases
         | TUnimplemented
         override this.ToString() =
-            let tps(ts: Type list) =
-                if ts.IsEmpty then "" else "<" + listToString (ts, ",") + ">"
-            let product(ts: Type list) =
-                if ts.Length = 1 then ts.Head.ToString() else "(" + listToString (ts, ",") + ")"
+            let tps (ts: Type list) =
+                if ts.IsEmpty then
+                    ""
+                else
+                    "<" + listToString (ts, ",") + ">"
+
+            let product (ts: Type list) =
+                if ts.Length = 1 then
+                    ts.Head.ToString()
+                else
+                    "(" + listToString (ts, ",") + ")"
 
             match this with
             | TUnit -> "unit"
@@ -346,15 +387,19 @@ module YIL =
             | TNat b -> "nat" + b.ToString()
             | TChar -> "char"
             | TString b -> "string" + b.ToString()
-            | TReal b -> match b with | Bound (Some 32) -> "float" | Bound (Some 64) -> "double" | _ -> "real"
+            | TReal b ->
+                match b with
+                | Bound (Some 32) -> "float"
+                | Bound (Some 64) -> "double"
+                | _ -> "real"
             | TBitVector (w) -> "bv" + w.ToString()
             | TVar n -> n
             | TApply (op, args) -> (String.concat "." op.names) + (tps args)
             | TTuple (ts) -> product ts
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
-            | TSeq (b,t) -> "seq" + b.ToString() + (tps [ t ])
-            | TSet (b,t) -> "set" + b.ToString() + (tps [ t ])
-            | TArray (b,t) -> "arr" + b.ToString() + (tps [ t ])
+            | TSeq (b, t) -> "seq" + b.ToString() + (tps [ t ])
+            | TSet (b, t) -> "set" + b.ToString() + (tps [ t ])
+            | TArray (b, t) -> "arr" + b.ToString() + (tps [ t ])
             | TMap (b, d, r) -> "map" + b.ToString() + (tps [ d; r ])
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"
@@ -363,9 +408,12 @@ module YIL =
     // for size-limited version of types defined in Yucca's TypeUtil, gives the size in bits
     // See DafnyToYIL for the possibly bound values, usually 32 or 64
     and Bound =
-      | Bound of int option
-      override this.ToString() = match this with | Bound (Some i) -> i.ToString() | Bound None -> ""
-    
+        | Bound of int option
+        override this.ToString() =
+            match this with
+            | Bound (Some i) -> i.ToString()
+            | Bound None -> ""
+
     (* typed variable declaration used in method input/output, binders, and local variables declararations
        All of those can be ghosts, i.e., only needed for specifications and proofs.
        Those can be removed when compiling for computation.
@@ -375,12 +423,15 @@ module YIL =
         member this.name =
             match this with
             | LocalDecl (n, _, _) -> n
+
         member this.tp =
             match this with
             | LocalDecl (_, t, _) -> t
+
         member this.ghost =
             match this with
             | LocalDecl (_, _, g) -> g
+
         member this.isAnonymous() = this.name = anonymous
 
 
@@ -399,27 +450,42 @@ module YIL =
        constructor of the datatype being matched on and the x1 are the local decls.
        But we might generate more general constructors.
      *)
-    and Case = { vars: LocalDecl list; pattern: Expr; body: Expr }
+    and Case =
+        { vars: LocalDecl list
+          pattern: Expr
+          body: Expr }
 
     /// input specification: typed variables and preconditions
     and InputSpec =
-       | InputSpec of LocalDecl list * Condition list
-       member this.decls = match this with InputSpec(ds,_) -> ds
-       member this.conditions = match this with InputSpec(_,cs) -> cs
+        | InputSpec of LocalDecl list * Condition list
+        member this.decls =
+            match this with
+            | InputSpec (ds, _) -> ds
+
+        member this.conditions =
+            match this with
+            | InputSpec (_, cs) -> cs
 
     /// output specification: typed variables and postconditions
     // to avoid case distinctions, the case of an unnamed output type is represented as a single anonymous variable
     and OutputSpec =
         | OutputSpec of LocalDecl list * Condition list
-        member this.decls = match this with | OutputSpec (ds, _) -> ds
+        member this.decls =
+            match this with
+            | OutputSpec (ds, _) -> ds
         /// the unnamed output type if any
         member this.outputType =
             match this.decls with
-            | [ld] when ld.isAnonymous() -> Some ld.tp
+            | [ ld ] when ld.isAnonymous () -> Some ld.tp
             | _ -> None
         /// the output declarations (i.e., without the dummy declaration for an output type)
-        member this.namedDecls = this.decls |> List.filter (fun ld -> not (ld.isAnonymous())) 
-        member this.conditions = match this with | OutputSpec (_, cs) -> cs
+        member this.namedDecls =
+            this.decls
+            |> List.filter (fun ld -> not (ld.isAnonymous ()))
+
+        member this.conditions =
+            match this with
+            | OutputSpec (_, cs) -> cs
 
     (* a reference to a module or class with all its type parameters instantiated
     *)
@@ -461,11 +527,11 @@ module YIL =
         | ESeq of tp: Type * elems: Expr list
         | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
         | EMapKeys of map: Expr
-        | EMapDisplay of map : (Expr * Expr) list // explicit map represented as a list
+        | EMapDisplay of map: (Expr * Expr) list // explicit map represented as a list
         // map comprehension where tL is an expression over the preimage and tR is an expression mapping preimage to
         // image. If tL = Some tLF, generates the map tLF(p(lds)) -> tR(p(lds)). Otherwise, generates the map
         // p(lds) -> tR(p(lds)).
-        | EMapComp of lds : LocalDecl list * p : Expr * tL : Expr Option * tR : Expr
+        | EMapComp of lds: LocalDecl list * p: Expr * tL: Expr Option * tR: Expr
         /// Dafny's ad hoc polymorphic selection expression
         /// expr can be anything sequence-like, e.g., sequence, map, string, tp stores its type
         /// returns element or slice depending on which indices are given; redundantly stored in 'element'
@@ -524,8 +590,8 @@ module YIL =
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
         | EAssert of Expr
-        | EExpect of Expr  // dafny expect statement (non-ghost variant of assert statement)
-        | EAssume of Expr  // dafny implication introduction
+        | EExpect of Expr // dafny expect statement (non-ghost variant of assert statement)
+        | EAssume of Expr // dafny implication introduction
         | EReveal of Expr list // dafny `reveal ... ;` proof directive
         | ECommented of string * Expr
         // temporary dummy for missing cases
@@ -569,17 +635,21 @@ module YIL =
 
     // result type for imports analysis
     type ModuleImports(modulePath: Path, imports: ImportType list) =
-        new() = ModuleImports(Path[], [])
+        new() = ModuleImports(Path [], [])
         member this.modulePath = modulePath
         member this.imports = imports
         member this.setModulePath(modulePath: Path) = ModuleImports(modulePath, this.imports)
+
         member this.addImport(importPath: Path, importType: ImportType) =
             ModuleImports(this.modulePath, importType :: this.imports)
-    
+
     // auxiliary methods
     /// dummy program
-    let emptyProgram = {name = ""; decls = []; meta = emptyMeta}
-    
+    let emptyProgram =
+        { name = ""
+          decls = []
+          meta = emptyMeta }
+
     /// wrapping lists of expressions in a block
     let listToExpr (es: Expr list) : Expr =
         if es.Length = 1 then
@@ -592,31 +662,31 @@ module YIL =
         match b with
         | EBlock es -> es
         | e -> [ e ]
-    
+
     /// wraps in a block if not yet a block
-    let block(b: Expr): Expr =
+    let block (b: Expr) : Expr =
         match b with
         | EBlock _ -> b
-        | _ -> EBlock [b]
-    
+        | _ -> EBlock [ b ]
+
     /// invariant type argument given by name
-    let plainTypeArg n = (n,(None,false))
-    
+    let plainTypeArg n = (n, (None, false))
+
     /// the corresponding list of TVars
-    let typeargsToTVars (tvs: TypeArg list) = List.map (fun (n,_) -> TVar n) tvs
-    
+    let typeargsToTVars (tvs: TypeArg list) = List.map (fun (n, _) -> TVar n) tvs
+
     let NoBound = Bound None
-    let Bound8 = Bound (Some 8)
-    let Bound16 = Bound (Some 16)
-    let Bound32 = Bound (Some 32)
-    let Bound64 = Bound (Some 64)
+    let Bound8 = Bound(Some 8)
+    let Bound16 = Bound(Some 16)
+    let Bound32 = Bound(Some 32)
+    let Bound64 = Bound(Some 64)
     /// Some Java-specific types.
-    let Bound31 = Bound (Some 31)
-    let Bound63 = Bound (Some 63)
-    
+    let Bound31 = Bound(Some 31)
+    let Bound63 = Bound(Some 63)
+
     /// empty command
     let ESKip = EBlock []
-    
+
     /// s = t
     let EEqual (s: Expr, t: Expr) = EBinOpApply("EqCommon", s, t)
     /// conjunction of some expressions
@@ -625,25 +695,27 @@ module YIL =
             EBool true
         else
             List.fold (fun sofar next -> EBinOpApply("And", sofar, next)) es.Head es.Tail
+
     let EDisj (es: Expr list) =
         if es.IsEmpty then
             EBool false
         else
             List.fold (fun sofar next -> EBinOpApply("Or", sofar, next)) es.Head es.Tail
-    
+
     /// the special variable _ (must only be used in patterns)
-    let EWildcard = EVar anonymous 
-    
+    let EWildcard = EVar anonymous
+
     // True if a datatype is simply an enum, i.e.,
     // it has more than one constructor---all without arguments, and no type parameters
     let isEnum (d: Decl) =
         match d with
         | Datatype (_, [], ctors, _, _) -> List.forall (fun c -> c.ins.IsEmpty) ctors
         | _ -> false
-    
+
     /// OutputSpec with a plain return type
-    let outputType(t: Type, cs: Condition list) = OutputSpec([LocalDecl(anonymous, t, false)], cs)
-    
+    let outputType (t: Type, cs: Condition list) =
+        OutputSpec([ LocalDecl(anonymous, t, false) ], cs)
+
     /// name of a local declaration
     let localDeclName (l: LocalDecl) = l.name
     /// type of a local Declaration
@@ -660,7 +732,7 @@ module YIL =
         // type arguments to EConstructorApply(...) are empty because there is no matching on types
         let pat = EConstructorApply(c, [], lts)
         { vars = lds; pattern = pat; body = bd }
-   
+
     // local variables introduced by an expression (relevant when extending the context during traversal)
     // also defines which variables are visible to later statements in the same block
     let exprDecl (e: Expr) : LocalDecl list =
@@ -687,12 +759,17 @@ module YIL =
     let rec implicitChildren (d: Decl) : Decl list =
         let mkField (ld: LocalDecl) =
             Field(ld.name, ld.tp, None, ld.ghost, isStatic = false, isMutable = false, meta = emptyMeta)
+
         match d with
         | Datatype (_, _, cs, _, _) ->
-            let selectors = List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
-            let testers = List.map (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name, TBool, false)) cs
+            let selectors =
+                List.collect (fun (c: DatatypeConstructor) -> c.ins) cs
+
+            let testers =
+                List.map (fun (c: DatatypeConstructor) -> LocalDecl(testerName c.name, TBool, false)) cs
+
             List.map mkField (List.append (List.distinct selectors) testers)
-        | Module(_, decls, _) -> List.collect implicitChildren decls
+        | Module (_, decls, _) -> List.collect implicitChildren decls
         | _ -> []
 
     (* retrieves all nested declarations in a program that lead to a given one
@@ -701,18 +778,22 @@ module YIL =
     *)
     let rec lookupAncestorsByPath (prog: Program, path: Path) : Decl list =
         if path.isRoot then
-            [Module(prog.name, prog.decls, emptyMeta)]
+            [ Module(prog.name, prog.decls, emptyMeta) ]
         else
             // if we use classes, maybe copy over lookup code from YuccaDafnyCompiler to look up in parent classes
-            let ancestorDecls = lookupAncestorsByPath (prog, path.parent)
+            let ancestorDecls =
+                lookupAncestorsByPath (prog, path.parent)
+
             let parentDecl = ancestorDecls.Head
             let children = parentDecl.children
+
             match List.tryFind (fun (x: Decl) -> x.name = path.name) children with
-            | Some d -> d::ancestorDecls
+            | Some d -> d :: ancestorDecls
             | None ->
                 let implChildren = (implicitChildren parentDecl)
+
                 match List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren with
-                | Some d -> d::ancestorDecls
+                | Some d -> d :: ancestorDecls
                 | None -> error $"Path [{path}] not valid in {prog.name}"
     (* retrieves a declaration in a program by traversing into children, e.g.,
        lookupByPath(p, []): p itself (wrapped as a module)
@@ -720,20 +801,24 @@ module YIL =
 
        precondition: name must exist
     *)
-    let lookupByPath(prog: Program, path: Path) : Decl =
-        lookupAncestorsByPath(prog,path).Head
+    let lookupByPath (prog: Program, path: Path) : Decl = lookupAncestorsByPath(prog, path).Head
 
     (* as above, but returns a constructor *)
     let lookupConstructor (prog: Program, path: Path) : DatatypeConstructor =
         match lookupByPath (prog, path.parent) with
         | Datatype (_, _, ctrs, _, _) -> List.find (fun c -> c.name = path.name) ctrs
         | _ -> error $"parent not a datatype: {path}"
-    
+
     /// used in Context to track where we are
     /// adjust this if we ever need to track the position in a more refined way, e.g.,
     /// to track if we are in the return position of an expression
-    type ContextPosition = BodyPosition | InForLoopInitializer | InForLoopBody | PatternPosition | OtherPosition
-    
+    type ContextPosition =
+        | BodyPosition
+        | InForLoopInitializer
+        | InForLoopBody
+        | PatternPosition
+        | OtherPosition
+
     (* ***** contexts: built during traversal and used for lookup of iCodeIdentifiers
 
        A Context stores an entire program plus information about where we are during its traversal:
@@ -746,31 +831,49 @@ module YIL =
        - pos: tracks if we are in the body of a method
 
        invariant: currentDecl is always a valid path in prog, i.e., lookupByPath succeeds for every prefix
-       
+
        TODO: remove importPaths and just collect imports from the AST
     *)
-    type Context(prog: Program, currentDecl: Path, tpvars: TypeArg list, vars: LocalDecl list, pos: ContextPosition,
-                 importPaths: ImportType list) =
+    type Context
+        (
+            prog: Program,
+            currentDecl: Path,
+            tpvars: TypeArg list,
+            vars: LocalDecl list,
+            pos: ContextPosition,
+            importPaths: ImportType list
+        ) =
         /// convenience constructor and accessor methods
         new(p: Program) = Context(p, Path([]), [], [], OtherPosition, [])
         /// dummy context, use carefully
         new() = Context(emptyProgram, Path([]), [], [], OtherPosition, [])
-            
+
         member this.prog = prog
         member this.currentDecl = currentDecl
         member this.tpvars = tpvars
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.pos = pos
+
         member this.modulePath() =
-            let ancs = listDropLast (lookupAncestorsByPath(prog, currentDecl)) // drop pseudo-module for whole program
-            let firstModO = ancs |> List.tryFindIndex (fun (d: Decl) -> d.isModule())
+            let ancs =
+                listDropLast (lookupAncestorsByPath (prog, currentDecl)) // drop pseudo-module for whole program
+
+            let firstModO =
+                ancs
+                |> List.tryFindIndex (fun (d: Decl) -> d.isModule ())
+
             let firstMod =
                 match firstModO with
                 | Some m -> m
                 | None -> failwith "no module path"
-            let modNames = ancs.GetSlice(Some firstMod, None) |> List.map (fun d -> d.name)
+
+            let modNames =
+                ancs.GetSlice(Some firstMod, None)
+                |> List.map (fun d -> d.name)
+
             Path(List.rev modNames)
+
         member this.importPaths = importPaths
 
         /// lookup of a type variable by name
@@ -808,9 +911,8 @@ module YIL =
             + " and variables "
             + listToString (List.map localDeclName vars, ", ")
 
-        member this.currentMeta() =
-            this.lookupCurrent().meta
-        
+        member this.currentMeta() = this.lookupCurrent().meta
+
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
             Context(prog, currentDecl.child (n), tpvars, vars, pos, importPaths)
@@ -827,100 +929,129 @@ module YIL =
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
 
         /// remembers where we are
-        member this.setPos(p: ContextPosition) = Context(prog, currentDecl, tpvars, vars, p, importPaths)
-        member this.enterBody() = this.setPos(BodyPosition)
-        
+        member this.setPos(p: ContextPosition) =
+            Context(prog, currentDecl, tpvars, vars, p, importPaths)
+
+        member this.enterBody() = this.setPos (BodyPosition)
+
         // add and remove imports
         member this.addImport(importType: ImportType) =
             Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths)
-               
+
     (* ***** printer for the language above
 
        This is implemented as a class so that we can use state for indentation or overriding for variants.
        A new instance should be created for every print job.
-       
+
        strict: print parsable Dafny syntax; if set, the passed contexts must be correct
     *)
     // F# has string interpolation now, so this code could be made more readable
     type Printer(strict: bool) =
         let UNIMPLEMENTED = "<UNIMPLEMENTED>"
         let indentString = "  "
-        let indented(s: string, braced: Boolean) =
-            let s = ("\n"+s).Replace("\n","\n"+indentString)
+
+        let indented (s: string, braced: Boolean) =
+            let s =
+                ("\n" + s).Replace("\n", "\n" + indentString)
+
             if braced then " {" + s + "\n}\n" else s
-        let indentedBraced(s: string) = indented(s,true)
-        
+
+        let indentedBraced (s: string) = indented (s, true)
+
         member this.prog(p: Program, pctx: Context) =
             // Print out includes first because Dafny enforces this.
             // For future work, consider making includes meta-information instead of
             // AST information, as this along with the design of Dafny includes as a
             // preprocessor-level syntax construct.
             let iPath (p: Path) =
-                let toSysPath (Path plist) =
-                    String.concat "/" plist                
-                "include " + "\"" + toSysPath(p) + "\""
+                let toSysPath (Path plist) = String.concat "/" plist
+                "include " + "\"" + toSysPath (p) + "\""
+
             let includes =
-                List.collect (function | Include p -> [iPath p] | _ -> []) p.decls
+                List.collect
+                    (function
+                    | Include p -> [ iPath p ]
+                    | _ -> [])
+                    p.decls
                 |> String.concat "\n"
+
             includes
             + "\n"
-            + if not(p.meta.prelude = "") then
-                "/***** TYPECART PRELUDE START *****/\n"
-                + p.meta.prelude
-                + "\n/***** TYPECART PRELUDE END *****/"
-              else "\n"
-            + this.declsGeneral(p.decls, pctx, false)
+            + if not (p.meta.prelude = "") then
+                  "/***** TYPECART PRELUDE START *****/\n"
+                  + p.meta.prelude
+                  + "\n/***** TYPECART PRELUDE END *****/"
+              else
+                  "\n"
+            + this.declsGeneral (p.decls, pctx, false)
 
-        member this.tpvar(inDecl: bool) (a: TypeArg) =
+        member this.tpvar (inDecl: bool) (a: TypeArg) =
             // Only print out variance type info for declaration-level printing.
             // variance: prefix "+" for Some true and "-" for Some false)
             // equality: suffix "(==)" for equality types
-            let (n,(v,e)) = a
+            let (n, (v, e)) = a
+
             if inDecl then
-                let vS = match v with | Some true -> "+" | Some false -> "-" | _ -> ""
+                let vS =
+                    match v with
+                    | Some true -> "+"
+                    | Some false -> "-"
+                    | _ -> ""
+
                 let eS = if e then "(==)" else ""
-                vS+n+eS
+                vS + n + eS
             else
                 n
         // inDecl should only be set to true when printing out class or datatype declarations.
         // These are the only places when variance type signature should be print out.
-        member this.tpvars(inDecl: bool)(ns: TypeArg list) =
+        member this.tpvars (inDecl: bool) (ns: TypeArg list) =
             if ns.IsEmpty then
                 ""
             else
-                "<" + listToString (List.map (this.tpvar inDecl) ns, ", ") + ">"
+                "<"
+                + listToString (List.map (this.tpvar inDecl) ns, ", ")
+                + ">"
 
         member this.declsGeneral(ds: Decl list, pctx: Context, braced: Boolean) =
-                indented(listToString (List.map (fun d -> this.decl(d, pctx) + "\n\n") ds, ""), braced)
-        member this.decls(ds: Decl list, pctx: Context) =
-                this.declsGeneral(ds, pctx, true) 
+            indented (listToString (List.map (fun d -> this.decl (d, pctx) + "\n\n") ds, ""), braced)
+
+        member this.decls(ds: Decl list, pctx: Context) = this.declsGeneral (ds, pctx, true)
         // array dimensions/indices
         member this.dims(ds: Expr list, pctx: Context) = "[" + this.exprsNoBr ds ", " pctx + "]"
         member this.meta(_: Meta) = ""
-        
+
         member this.ghost(g: bool) = if g then "ghost " else ""
+
         member this.stat(s: bool, ctx: Context) =
-            if s && not (strict && ctx.lookupCurrent().isModule()) then "static " else ""
-             
+            if
+                s
+                && not (strict && ctx.lookupCurrent().isModule ())
+            then
+                "static "
+            else
+                ""
+
         member this.decl(d: Decl, pctx: Context) =
-            let comm = d.meta.comment |> Option.map (fun s -> "/* " + s + " */\n") |> Option.defaultValue ""
-            let decls ds = this.decls(ds, pctx.enter(d.name))
+            let comm =
+                d.meta.comment
+                |> Option.map (fun s -> "/* " + s + " */\n")
+                |> Option.defaultValue ""
+
+            let decls ds = this.decls (ds, pctx.enter (d.name))
             let expr (e: Expr) : string = this.expr e pctx
             // comm +
             match d with
-            | Include _ -> "" (* includes are printed out first *)
-            | Module (n, ds, a) ->
-                "module "
-                + (this.meta a)
-                + n
-                + (decls ds)
+            | Include _ -> ""
+            | Module (n, ds, a) -> "module " + (this.meta a) + n + (decls ds)
             | Datatype (n, tpvs, cons, ds, a) ->
-                let consS = List.map (fun x -> this.datatypeConstructor(x, pctx)) cons
+                let consS =
+                    List.map (fun x -> this.datatypeConstructor (x, pctx)) cons
+
                 "datatype "
                 + (this.meta a)
                 + n
                 + (this.tpvars true tpvs)
-                + " = " 
+                + " = "
                 + listToString (consS, " | ")
                 + (decls ds)
             | Class (n, isTrait, tpvs, p, ds, a) ->
@@ -941,10 +1072,14 @@ module YIL =
                 + (this.tpvars true tpvs)
                 + " = "
                 + (match predO with
-                   | Some (x, p) -> this.localDecl(LocalDecl(x,sup,false)) + " | " + (this.expr p pctx)
+                   | Some (x, p) ->
+                       this.localDecl (LocalDecl(x, sup, false))
+                       + " | "
+                       + (this.expr p pctx)
                    | None -> this.tp sup)
             | Field (n, t, eO, g, s, _, a) ->
-                this.stat(s, pctx) + this.ghost(g)
+                this.stat (s, pctx)
+                + this.ghost (g)
                 + "const "
                 + (this.meta a)
                 + n
@@ -956,39 +1091,58 @@ module YIL =
                     match outs.outputType with
                     | Some t -> this.tp t
                     | None -> this.localDecls outs.decls
-                let methodCtx = pctx.enter(n)
-                this.stat(s, pctx) + (if methodType = IsLemma then "" else this.ghost(g))
-                + methodType.ToString() + " "
+
+                let methodCtx = pctx.enter (n)
+
+                this.stat (s, pctx)
+                + (if methodType = IsLemma then
+                       ""
+                   else
+                       this.ghost (g))
+                + methodType.ToString()
+                + " "
                 + n
                 + (this.tpvars false tpvs)
                 + (this.localDecls ins.decls)
                 + (match methodType with
-                   | IsLemma | IsPredicate | IsPredicateMethod -> ""
+                   | IsLemma
+                   | IsPredicate
+                   | IsPredicateMethod -> ""
                    | IsMethod -> " returns " + outputsS
                    | _ -> ":" + outputsS)
                 + (match modifies with
                    | [] -> ""
-                   | _ -> "\n\tmodifies " + (List.map expr modifies |> String.concat ", "))
+                   | _ ->
+                       "\n\tmodifies "
+                       + (List.map expr modifies |> String.concat ", "))
                 + (match reads with
                    | [] -> ""
-                   | _ -> "\n\treads " + (List.map expr reads |> String.concat ", "))
+                   | _ ->
+                       "\n\treads "
+                       + (List.map expr reads |> String.concat ", "))
                 + (match decreases with
                    | [] -> ""
-                   | _ -> "\n\tdecreases " + (List.map expr decreases |> String.concat ", "))
-                + (this.conditions(true, ins.conditions, methodCtx))
-                + (this.conditions(false, outs.conditions, methodCtx))
+                   | _ ->
+                       "\n\tdecreases "
+                       + (List.map expr decreases |> String.concat ", "))
+                + (this.conditions (true, ins.conditions, methodCtx))
+                + (this.conditions (false, outs.conditions, methodCtx))
                 + "\n"
-                + Option.fold (fun _ e ->
-                    match methodType with
-                    | IsLemma | IsMethod -> this.statement e methodCtx
-                    | _ -> indentedBraced(this.expr e methodCtx)) "" b
+                + Option.fold
+                    (fun _ e ->
+                        match methodType with
+                        | IsLemma
+                        | IsMethod -> this.statement e methodCtx
+                        | _ -> indentedBraced (this.expr e methodCtx))
+                    ""
+                    b
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
                 + if n <> "_ctor" then n else ""
                 + (this.tpvars false tpvs)
-                + this.inputSpec(ins, pctx)
-                + (this.conditions(false, outs, pctx))
+                + this.inputSpec (ins, pctx)
+                + (this.conditions (false, outs, pctx))
                 + "\n"
                 + match b with
                   | Some e -> this.statement e pctx
@@ -1004,16 +1158,26 @@ module YIL =
                 + this.conditions (true, rs, pctx)
 
         member this.outputSpec(outs: OutputSpec, pctx: Context) =
-          let r = match outs.outputType with
-                  | Some t -> this.tp t
-                  | None -> this.localDecls outs.decls
-          r + this.conditions (false, outs.conditions, pctx)
+            let r =
+                match outs.outputType with
+                | Some t -> this.tp t
+                | None -> this.localDecls outs.decls
+
+            r + this.conditions (false, outs.conditions, pctx)
 
         member this.conditions(require: bool, cs: Condition list, pctx: Context) =
-            if cs.IsEmpty then "" else indented(listToString (List.map (fun c -> this.condition (require, c, pctx)) cs, "\n"), false)
+            if cs.IsEmpty then
+                ""
+            else
+                indented (listToString (List.map (fun c -> this.condition (require, c, pctx)) cs, "\n"), false)
 
         member this.condition(require: bool, c: Condition, pctx: Context) =
-            let kw = if require then "requires" else "ensures"
+            let kw =
+                if require then
+                    "requires"
+                else
+                    "ensures"
+
             kw + " " + (this.expr c pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) = c.name + (this.localDecls c.ins)
@@ -1028,91 +1192,117 @@ module YIL =
 
         member this.tp(t: Type) = t.ToString()
 
-        member this.exprsNoBr (es: Expr list)(sep: string)(pctx: Context) =
+        member this.exprsNoBr (es: Expr list) (sep: string) (pctx: Context) =
             listToString (List.map (fun e -> this.expr e pctx) es, sep)
 
-        member this.exprs (es: Expr list) (pctx: Context) = "(" + (this.exprsNoBr es ", " pctx) + ")"
+        member this.exprs (es: Expr list) (pctx: Context) =
+            "(" + (this.exprsNoBr es ", " pctx) + ")"
 
-        member this.exprO (eO: Expr option, sep: string, pctx: Context) : string =
+        member this.exprO(eO: Expr option, sep: string, pctx: Context) : string =
             Option.defaultValue "" (Option.map (fun e -> sep + (this.expr e pctx)) eO)
 
         member this.noPrintSep(e: Expr) =
             match e with
-            | EIf _  // If-stmt without then-block
-            | EFor _  // no trailing separator after for body-block
+            | EIf _ // If-stmt without then-block
+            | EFor _ // no trailing separator after for body-block
             | EWhile _ -> true
             | _ -> false
-        
+
         member this.statement (e: Expr) (pctx: Context) =
             let expr e = this.expr e pctx
-            let exprsNoBr es sep = this.exprsNoBr es sep pctx 
+            let exprsNoBr es sep = this.exprsNoBr es sep pctx
+
             match e with
             | EAssert e -> "assert(" + (expr e) + ");"
             | EAssume e -> "assume(" + (expr e) + ");"
             | EExpect e -> "expect(" + (expr e) + ");"
             | EBlock es ->
-                let sts = List.map (fun x -> this.statement x pctx) es
-                indentedBraced(String.concat "\n" sts)
+                let sts =
+                    List.map (fun x -> this.statement x pctx) es
+
+                indentedBraced (String.concat "\n" sts)
             | EBreak l ->
                 let label =
-                   match l with
-                   | Some l -> sprintf " %s" l
-                   | None -> ""
+                    match l with
+                    | Some l -> sprintf " %s" l
+                    | None -> ""
+
                 $"break %s{label};"
             (* CalcStmt *)
             (* ExpectStmt *)
-            | EQuant(Forall as q, lds, r, b) ->
-                "(forall" + q.ToString()
+            | EQuant (Forall as q, lds, r, b) ->
+                "(forall"
+                + q.ToString()
                 + " "
-                + this.localDeclsBr (lds,false)
+                + this.localDeclsBr (lds, false)
                 + " :: "
                 + (match r with
                    | Some e -> expr e + (if q = Forall then " ==> " else " && ")
                    | None -> "")
-                + (expr b) + ");"
-            | EIf(c, t, e) ->
+                + (expr b)
+                + ");"
+            | EIf (c, t, e) ->
                 let elsePart =
                     match e with
                     | None -> "" // avoid using exprO which prints out ";".
                     | Some e -> " else " + this.statement e pctx
+
                 "if "
-                + "(" + (expr c) + ") "
+                + "("
+                + (expr c)
+                + ") "
                 + (this.statement t pctx)
                 + elsePart
-            | EMatch(e, t, cases, dfltO) ->
+            | EMatch (e, t, cases, dfltO) ->
                 let defCase =
                     match dfltO with
                     | None -> []
-                    | Some e -> [{vars = []; pattern = EWildcard; body = e}] // case _ => e
+                    | Some e ->
+                        [ { vars = []
+                            pattern = EWildcard
+                            body = e } ] // case _ => e
+
                 let csS =
                     List.map (fun (c: Case) -> this.case c pctx) (cases @ defCase)
+
                 "match "
                 + (expr e)
-                + indentedBraced(listToString(csS, "\n"))
+                + indentedBraced (listToString (csS, "\n"))
             (* ModifyStmt *)
-            | EPrint es -> "print" + (String.concat ", " (List.map expr es)) + ";"
+            | EPrint es ->
+                "print"
+                + (String.concat ", " (List.map expr es))
+                + ";"
             | EReturn es -> "return " + (exprsNoBr es ", ") + ";"
             | EReveal es ->
                 if es.IsEmpty then
-                   "" // happens when unresolved expressions are dropped in DafnyToYIL
+                    "" // happens when unresolved expressions are dropped in DafnyToYIL
                 else
-                   "reveal " + (String.concat ", " (List.map expr es)) + ";"
+                    "reveal "
+                    + (String.concat ", " (List.map expr es))
+                    + ";"
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map expr ns
-                listToString (lhsExprs, ",") + (this.update u pctx) + ";"
+
+                listToString (lhsExprs, ",")
+                + (this.update u pctx)
+                + ";"
             | EVar _ -> expr e + ";"
-            | EMemberRef (r, m, _) -> this.receiver(r, pctx) + m.name + ";"
+            | EMemberRef (r, m, _) -> this.receiver (r, pctx) + m.name + ";"
             | EWhile (c, e, l) ->
                 let label =
                     match l with
                     | Some l -> sprintf "%s: " l
                     | None -> ""
+
                 sprintf "%s while (%s) %s" label (expr c) (this.statement e pctx)
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
-                let forInitCtx = pctx.setPos(InForLoopInitializer)
-                let forBodyCtx = pctx.setPos(InForLoopBody)
+
+                let forInitCtx = pctx.setPos (InForLoopInitializer)
+                let forBodyCtx = pctx.setPos (InForLoopBody)
+
                 "for "
                 + this.expr d forInitCtx
                 + (if up then " to " else " downto ")
@@ -1128,39 +1318,45 @@ module YIL =
                 + (expr d)
                 + "; "
                 + (this.statement e pctx)
-            | EDecls _ | EMethodApply _ as e -> expr e
+            | EDecls _
+            | EMethodApply _ as e -> expr e
             | EDeclChoice (ld, e) ->
                 "var "
                 + (this.localDecl ld)
                 + " where "
                 + (expr e)
-            | ECommented(c,e) -> "/* " + c + " */" + this.statement e pctx 
+            | ECommented (c, e) -> "/* " + c + " */" + this.statement e pctx
             | EUnimplemented -> "/* UNIMPLEMENTED */"
-            | _ as b -> failwith "encountered non-statement in statement: " + (b.ToString())
-            
-        
+            | b ->
+                failwith "encountered non-statement in statement: "
+                + (b.ToString())
+
+
         member this.expr (e: Expr) (pctx: Context) : string =
             let expr e = this.expr e pctx
             let exprs es = this.exprs es pctx
             let exprO e sep = this.exprO (e, sep, pctx)
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
-                        
-            let dims ds = this.dims(ds, pctx)
-            let receiver r = this.receiver(r, pctx)
+
+            let dims ds = this.dims (ds, pctx)
+            let receiver r = this.receiver (r, pctx)
             let case c = this.case c pctx
             let tp = this.tp
             let tps = this.tps
 
             match e with
-            | EVar n -> 
-                let n1 = n.Replace("_mcc#","mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
+            | EVar n ->
+                let n1 = n.Replace("_mcc#", "mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
                 let n2 = if n1.StartsWith("_") then "_" else n1 // Dafny-generated anonymous variables
                 n2
             | EThis -> "this"
             | ENew (ct, _) -> "new " + this.classType (ct) + "()"
             | ENull _ -> "null"
             | EMemberRef (r, m, _) -> (receiver r) + m.name
-            | EBool (v) -> match v with true -> "true" | false -> "false"
+            | EBool (v) ->
+                match v with
+                | true -> "true"
+                | false -> "false"
             | EChar (v) -> "'" + v.ToString() + "'"
             | EString (v) -> "\"" + v.ToString() + "\""
             // EToString compile from sequence display expressions of char sequences
@@ -1168,24 +1364,33 @@ module YIL =
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToString()
             | EQuant (q, lds, r, b) ->
-                "(" + q.ToString()
+                "("
+                + q.ToString()
                 + " "
-                + this.localDeclsBr (lds,false)
+                + this.localDeclsBr (lds, false)
                 + " :: "
                 + (match r with
                    | Some e -> expr e + (if q = Forall then " ==> " else " && ")
-                   | None -> ""
-                ) + (expr b) + ")"
+                   | None -> "")
+                + (expr b)
+                + ")"
             | EOld e -> "old(" + (expr e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
             | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
             | ESet (_, es) -> "{" + (exprsNoBr es ", ") + "}"
             | ESetComp (lds, predicate, body) ->
-                let ldsStr = List.map this.localDecl lds |> String.concat ", "
-                "set " + ldsStr + " | " + (expr predicate) + " :: " + (expr body)
+                let ldsStr =
+                    List.map this.localDecl lds |> String.concat ", "
+
+                "set "
+                + ldsStr
+                + " | "
+                + (expr predicate)
+                + " :: "
+                + (expr body)
             | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
-            | ESeqConstr(_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
+            | ESeqConstr (_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
             | ESeqSelect (s, _, elem, f, t) ->
                 if elem then
                     (expr s) + "[" + (expr (Option.get f)) + "]"
@@ -1198,34 +1403,51 @@ module YIL =
                     + "]"
             | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] := " + (expr e)
             | EArray (t, d) -> "new " + t.ToString() + dims (d)
-            | EMultiSelect(a, i) -> (expr a) + dims (i)
+            | EMultiSelect (a, i) -> (expr a) + dims (i)
             | EArrayUpdate (a, i, e) -> (expr a) + dims (i) + " := " + (expr e)
             | EMapKeys (e) -> (expr e) + ".Keys"
             | EMapDisplay (elts) ->
-                let str = List.fold (fun l (k, v) -> (String.concat " := " [expr k; expr v]) :: l) [] elts
+                let str =
+                    List.fold (fun l (k, v) -> (String.concat " := " [ expr k; expr v ]) :: l) [] elts
+
                 let str = String.concat " , " str
                 "map [" + str + "]"
             | EMapComp (lds, p, tL, tR) ->
-                let ldsStr = List.map this.localDecl lds |> String.concat ", "
-                "map " + ldsStr + " | " + (expr p) + " :: " +
-                match tL with
-                | None -> expr tR
-                | Some tL -> (expr tL) + " := " + (expr tR)
+                let ldsStr =
+                    List.map this.localDecl lds |> String.concat ", "
+
+                "map "
+                + ldsStr
+                + " | "
+                + (expr p)
+                + " :: "
+                + match tL with
+                  | None -> expr tR
+                  | Some tL -> (expr tL) + " := " + (expr tR)
             | EUnOpApply (op, e) -> this.unaryOperator op (expr e)
             | EBinOpApply (op, e1, e2) -> this.binaryOperator op (expr e1) (expr e2)
             | EAnonApply (f, es) -> (expr f) + (exprs es)
-            | EMethodApply (r, m, ts, es, _) ->
-                (receiver r)
-                + m.name
-                + (exprs es)
+            | EMethodApply (r, m, ts, es, _) -> (receiver r) + m.name + (exprs es)
             | EConstructorApply (c, ts, es) ->
-                let cS = if pctx.pos = PatternPosition then c.name else c.ToString()
+                let cS =
+                    if pctx.pos = PatternPosition then
+                        c.name
+                    else
+                        c.ToString()
+
                 cS + (exprs es)
             | EBlock es ->
                 // throw out empty blocks; these are usually artifacts of the processing
-                let notEmptyBlock e = match e with | EBlock [] | ECommented(_,EBlock[]) -> false | _ -> true
-                let esS = exprsNoBr (List.filter notEmptyBlock es) "; "
-                let s = indented(esS, false) // no braces - Dafny parses them as sets
+                let notEmptyBlock e =
+                    match e with
+                    | EBlock []
+                    | ECommented (_, EBlock []) -> false
+                    | _ -> true
+
+                let esS =
+                    exprsNoBr (List.filter notEmptyBlock es) "; "
+
+                let s = indented (esS, false) // no braces - Dafny parses them as sets
                 s
             | ELet (n, t, x, d, e) ->
                 "var "
@@ -1241,18 +1463,18 @@ module YIL =
                     match e with
                     | None -> "" // avoid using exprO which prints out ";".
                     | Some e -> " else " + expr e
+
                 let s =
-                    "if "
-                    + (expr c)
-                    + " then "
-                    + (expr t)
-                    + elsePart
+                    "if " + (expr c) + " then " + (expr t) + elsePart
+
                 s
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
-                let forInitCtx = pctx.setPos(InForLoopInitializer)
-                let forBodyCtx = pctx.setPos(InForLoopBody)
+
+                let forInitCtx = pctx.setPos (InForLoopInitializer)
+                let forBodyCtx = pctx.setPos (InForLoopBody)
+
                 "for "
                 + this.expr d forInitCtx
                 + (if up then " to " else " downto ")
@@ -1278,16 +1500,25 @@ module YIL =
                 let defCase =
                     match dfltO with
                     | None -> []
-                    | Some e -> [{vars = []; pattern = EWildcard; body = e}] // case _ => e
+                    | Some e ->
+                        [ { vars = []
+                            pattern = EWildcard
+                            body = e } ] // case _ => e
+
                 let csS =
                     List.map (fun (c: Case) -> case c) (cases @ defCase)
+
                 "match "
                 + (expr e)
-                + indentedBraced(listToString(csS, "\n"))
+                + indentedBraced (listToString (csS, "\n"))
             | EDecls (ds) ->
                 let doOne (ld: LocalDecl, uO: UpdateRHS option) =
                     let varQual =
-                        if pctx.pos = InForLoopInitializer then "" else "var "
+                        if pctx.pos = InForLoopInitializer then
+                            ""
+                        else
+                            "var "
+
                     varQual
                     + (this.localDecl ld)
                     + (Option.defaultValue "" (Option.map (fun x -> this.update x pctx) uO))
@@ -1295,38 +1526,47 @@ module YIL =
                 listToString (List.map doOne ds, ", ")
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map expr ns
-                listToString (lhsExprs, ",") + (this.update u pctx)
-            | EDeclChoice (ld, e) ->
-                "var "
-                + (this.localDecl ld)
-                + " :| "
-                + (expr e)
+
+                listToString (lhsExprs, ",")
+                + (this.update u pctx)
+            | EDeclChoice (ld, e) -> "var " + (this.localDecl ld) + " :| " + (expr e)
             | ETypeConversion (e, t) -> (expr e) + " as " + (tp t)
-            | ETypeTest(e,t) -> (expr e) + " is " + (tp t)
+            | ETypeTest (e, t) -> (expr e) + " is " + (tp t)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
-            | EAssert e -> "assert " + (expr e) 
-            | EAssume e -> "assume " + (expr e) 
+            | EAssert e -> "assert " + (expr e)
+            | EAssume e -> "assume " + (expr e)
             | EExpect e -> "expect " + (expr e)
             | EReveal es ->
                 if es.IsEmpty then
-                   "reveal true" // empty reveal not allowed in Dafny
+                    "reveal true" // empty reveal not allowed in Dafny
                 else
-                   "reveal " + (String.concat ", " (List.map expr es))
-            | ECommented(s,e) -> "/* " + s + " */ " + expr e
+                    "reveal "
+                    + (String.concat ", " (List.map expr es))
+            | ECommented (s, e) -> "/* " + s + " */ " + expr e
             | EUnimplemented -> UNIMPLEMENTED
 
-        member this.binaryOperator(op: string) (eSL : string) (eSR : string) : string =
+        member this.binaryOperator (op: string) (eSL: string) (eSR: string) : string =
             // TODO: handle operator precedence? See dafny Printer.cs for precedence.
             // reconstruct dafny Opcode by converting string back to enum.
-            let mutable eOp = BinaryExpr.ResolvedOpcode.YetUndetermined
+            let mutable eOp =
+                BinaryExpr.ResolvedOpcode.YetUndetermined
+
             if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op, &eOp) then
-                "(" + eSL + " " + (eOp |> BinaryExpr.ResolvedOp2SyntacticOp |> BinaryExpr.OpcodeString) + " " + eSR + ")"
+                "("
+                + eSL
+                + " "
+                + (eOp
+                   |> BinaryExpr.ResolvedOp2SyntacticOp
+                   |> BinaryExpr.OpcodeString)
+                + " "
+                + eSR
+                + ")"
             else
                 failwith $"unsupported binary operator %s{op}"
-            
+
 
         // For reference, see unary expression handling in dafny Printer.cs file.
-        member this.unaryOperator(op : string) (eS : string) =
+        member this.unaryOperator (op: string) (eS: string) =
             match op with
             | "Not" -> "!" + eS
             | "Cardinality" -> "|" + eS + "|"
@@ -1334,38 +1574,40 @@ module YIL =
             | "Allocated" -> "allocated(" + eS + ")"
             | "Lit" -> "Lit(" + eS + ")"
             | _ -> failwith $"unsupported unary operator %s{op}"
-            
-        
+
+
         member this.localDeclsBr(lds: LocalDecl list, brackets: bool) =
             (if brackets then "(" else "")
             + listToString (List.map this.localDecl lds, ", ")
             + (if brackets then ")" else "")
-        member this.localDecls(lds: LocalDecl list) = this.localDeclsBr(lds,true)
 
-        member this.update(u: UpdateRHS)(pctx: Context) =
+        member this.localDecls(lds: LocalDecl list) = this.localDeclsBr (lds, true)
+
+        member this.update (u: UpdateRHS) (pctx: Context) =
             let op = if u.monadic.IsSome then ":-" else ":="
             " " + op + " " + (this.expr u.df pctx)
 
         member this.localDecl(ld: LocalDecl) = ld.name + ": " + (this.tp ld.tp)
-        
+
         member this.classType(ct: ClassType) =
             ct.path.ToString() + (this.tps ct.tpargs)
-        
-        member this.receiver (rcv: Receiver, pctx: Context) =
+
+        member this.receiver(rcv: Receiver, pctx: Context) =
             // do not print out the "." separator if receiver is empty.
             let dot s =
                 match s with
                 | "" -> ""
                 | _ -> s + "."
+
             match rcv with
-            | StaticReceiver (ct) -> this.classType(ct) |> dot // ClassType --> path, tpargs
+            | StaticReceiver (ct) -> this.classType (ct) |> dot // ClassType --> path, tpargs
             | ObjectReceiver (e) -> this.expr e pctx |> dot
 
-        member this.case(case: Case)(pctx: Context) =
-            "case " + this.expr case.pattern (pctx.setPos PatternPosition)
+        member this.case (case: Case) (pctx: Context) =
+            "case "
+            + this.expr case.pattern (pctx.setPos PatternPosition)
             + " => "
-            + indented(this.expr case.body pctx, false)
- 
+            + indented (this.expr case.body pctx, false)
+
     /// shortcut to create a fresh strict printer
     let printer () = Printer(true)
-   
