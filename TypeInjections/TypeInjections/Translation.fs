@@ -186,47 +186,33 @@ module Translation =
                     if not (ctrD.ins().getUpdate().IsEmpty) then
                         failwith (unsupported "update to datatype constructor argument")
                     List.unzip3 (List.map localDecl (ctrD.ins().getSame()))
+                let insT1, insT2 = List.unzip insT
                 let argsO = List.map localDeclTerm insO
                 let argsN = List.map localDeclTerm insN
-                let patO = EConstructorApply(pO.child (ctrO.name), [], argsO) // type parameters do not matter in a pattern
-                let patN = EConstructorApply(pN.child (ctrN.name), [], argsN)
+                let patO = EConstructorApply(pO.child ctrO.name, [], argsO) // type parameters do not matter in a pattern
+                // apply the new constructor on the old variables
+                let patN = EConstructorApply(pN.child ctrN.name, [], argsO)
                 // to share code between two cases below
                 // "case (p1,p2) -> body // comment" where vs_i are the variables in p_i
-                let buildCase(vs1, vs2, p1, p2, comment, body) =
-                     [{ vars = if relational then vs1 @ vs2 else vs1
-                        pattern = if relational then ETuple([ p1; p2 ]) else p1
-                        body = ECommented(comment, body) }]
+                let buildCase(vars, pattern, comment, body) =
+                    [{ vars = vars
+                       pattern = pattern
+                       body = ECommented(comment, body) }]
                 match elem with
-                // no cases to generate for Add and Delete, but we generate stubs for customization
+                // no cases to generate for Delete, but we generate stubs for customization
                 | Diff.Add _ ->
-                    if relational then
-                       // case (_,n) -> false
-                       buildCase([], insN, EWildcard, patN, "added constructor", EBool false)
-                    else
-                       // nothing to do
-                       []
+                    // nothing to do
+                    []
                 | Diff.Delete _ ->
-                    if relational then
-                       // case (o,_) -> false
-                       buildCase(insO, [], patO, EWildcard, "deleted constructor", EBool false)
-                    else
-                       // case o -> ???
-                       buildCase(insO, [], patO, EWildcard, "deleted constructor", missingTerm) 
+                    // case o -> ???
+                    buildCase(insO, patO, "deleted constructor", missingTerm)
                 | Diff.Same _ ->
-                    // if relational then
-                       // case (o,n) -> arguments of o,n related
-                       // buildCase(insO, insN, patO, patN, "unchanged constructor", EConj(insT))
-                    // else
-                       // TODO this case is unfinished
-                       buildCase(insO, [], patO, EWildcard, "unchanged constructor", patN)
+                    // case o -> o
+                    buildCase(insO, patO, "unchanged constructor", patN)
                 | Diff.Update _ ->
-                    // if relational then
-                        // for updates, we only generate the conditions that the unchanged arguments are related
-                        // the relation must be customized in a way that takes the added/deleted arguments into account 
-                        // buildCase(insO, insN, patO, patN, "added/deleted constructor arguments", EConj(insT))
-                    // else
-                        // TODO this case is unfinished
-                        buildCase(insO, [], patO, EWildcard, "added/deleted constructor arguments", patN)
+                    // for updates, we only generate the translations for the unchanged arguments
+                    buildCase(insO, patO, "added/deleted constructor arguments",
+                              EConstructorApply(pN.child ctrN.name, [], insT1))
             let dflt = if relational then Some (EBool false) else None
             let xO, xN = localDeclTerm xtO, localDeclTerm xtN
             let tO, tN = localDeclType xtO, localDeclType xtN
