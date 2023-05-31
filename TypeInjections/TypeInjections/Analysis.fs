@@ -191,7 +191,6 @@ module Analysis =
             | _ -> p
 
         override this.path(ctx: Context, p: Path) =
-            if p.name = "STRING" then ()
             let currentMethodPath = ctx.currentDecl.parent
             let p2 = currentMethodPath.relativize p
             let imports = ctx.importPaths
