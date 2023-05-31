@@ -188,10 +188,7 @@ module Translation =
                     List.unzip3 (List.map localDecl (ctrD.ins().getSame()))
                 let insT1, insT2 = List.unzip insT
                 let argsO = List.map localDeclTerm insO
-                let argsN = List.map localDeclTerm insN
                 let patO = EConstructorApply(pO.child ctrO.name, [], argsO) // type parameters do not matter in a pattern
-                // apply the new constructor on the old variables
-                let patN = EConstructorApply(pN.child ctrN.name, [], argsO)
                 // to share code between two cases below
                 // "case (p1,p2) -> body // comment" where vs_i are the variables in p_i
                 let buildCase(vars, pattern, comment, body) =
@@ -208,7 +205,7 @@ module Translation =
                     buildCase(insO, patO, "deleted constructor", missingTerm)
                 | Diff.Same _ ->
                     // case o -> o
-                    buildCase(insO, patO, "unchanged constructor", patN)
+                    buildCase(insO, patO, "unchanged constructor", EConstructorApply(pN.child ctrN.name, [], insT1))
                 | Diff.Update _ ->
                     // for updates, we only generate the translations for the unchanged arguments
                     buildCase(insO, patO, "added/deleted constructor arguments",
