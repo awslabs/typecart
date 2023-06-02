@@ -53,9 +53,10 @@ module YIL =
             p.names.Length >= l
             && p.names.[..l - 1] = this.names
         /// this . that ---> that
+        /// this == that == a.b.c ---> c
         member this.relativize(that: Path) =
-            if this.isAncestorOf that then
-                Path that.names.[this.names.Length..]
+            if this.names.Length >= 1 && that.names.Length >= 2 && this.names[0] = that.names[0] then
+                (Path this.names[1..]).relativize(Path that.names[1..])
             else
                 that
         /// dot-separated names
@@ -291,11 +292,11 @@ module YIL =
                 "export \n"
                 + (match this.provides with
                    | [] -> ""
-                   | _ -> "   provides " + (lts this.provides))
+                   | _ -> "  provides " + (lts this.provides))
                 + "\n"
                 + (match this.reveals with
                    | [] -> ""
-                   | _ -> "   reveals " + (lts this.reveals))
+                   | _ -> "  reveals " + (lts this.reveals))
 
 
 
@@ -854,6 +855,17 @@ module YIL =
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.pos = pos
+        
+        member this.pathWithoutPseudoModule() =
+            let p = this.currentDecl
+            if p.names.Length = 0 then
+                p
+            else if p.names[0].Contains(".") then
+                let topName = p.names[0].Split(".")
+                assert (topName.Length = 2)
+                Path (topName[1]::p.names[1..])
+            else
+                p
 
         member this.modulePath() =
             let ancs =
@@ -1339,7 +1351,13 @@ module YIL =
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
 
             let dims ds = this.dims (ds, pctx)
-            let receiver r = this.receiver (r, pctx)
+            let receiver r = match r with
+                        | StaticReceiver s ->
+                            if s.path.isAncestorOf(pctx.pathWithoutPseudoModule()) then
+                                ""
+                            else
+                                this.receiver (r, pctx)
+                        | ObjectReceiver _ -> this.receiver (r, pctx)
             let case c = this.case c pctx
             let tp = this.tp
             let tps = this.tps

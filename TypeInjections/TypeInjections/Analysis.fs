@@ -191,7 +191,12 @@ module Analysis =
             | _ -> p
 
         override this.path(ctx: Context, p: Path) =
-            let currentMethodPath = ctx.currentDecl.parent
+            let currentMethodPath =
+                if ctx.currentDecl.names.Length = 1 then
+                    ctx.currentDecl
+                else
+                    ctx.currentDecl.parent
+
             let p2 = currentMethodPath.relativize p
             let imports = ctx.importPaths
             List.fold this.consumeImportPath p2 imports

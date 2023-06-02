@@ -152,8 +152,9 @@ module DafnyToYIL =
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
                 | :? MemberDecl as md -> Some(pathOfMemberDecl md)
-                | :? NonNullTypeDecl as td -> Some(pathOfTopLevelDecl td)
+                | :? TypeSynonymDecl as sd -> Some(Y.Path [ sd.Name ])
                 | :? IndDatatypeDecl as dd -> Some(pathOfTopLevelDecl dd)
+                | :? AliasModuleDecl as ad -> Some(pathOfTopLevelDecl ad)
                 | _ -> None
 
             let exports = d.Exports |> List.ofSeq
