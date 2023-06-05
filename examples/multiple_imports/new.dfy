@@ -1,5 +1,9 @@
 module IntType {
   newtype my_type = x: int | -0x80 <= x <= 0x7f
+  function zero(): my_type
+  {
+    0
+  }
 }
 
 module RealType {

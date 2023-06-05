@@ -151,10 +151,10 @@ module DafnyToYIL =
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
-                | :? MemberDecl as md -> Some(pathOfMemberDecl md)
+                | :? MemberDecl as md -> Some(Y.Path [ md.Name ])
                 | :? TypeSynonymDecl as sd -> Some(Y.Path [ sd.Name ])
-                | :? IndDatatypeDecl as dd -> Some(pathOfTopLevelDecl dd)
-                | :? AliasModuleDecl as ad -> Some(pathOfTopLevelDecl ad)
+                | :? IndDatatypeDecl as dd -> Some(Y.Path [ dd.Name ])
+                | :? AliasModuleDecl as ad -> Some(Y.Path [ ad.Name ])
                 | _ -> None
 
             let exports = d.Exports |> List.ofSeq
@@ -424,7 +424,10 @@ module DafnyToYIL =
             // Detection of type parameters: https://github.com/dafny-lang/dafny/pull/1188
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
+            | :? NewtypeDecl -> Y.TVar(t.Name)
+            | :? IndDatatypeDecl -> Y.TVar(t.Name)
             | _ ->
+                // ArrowTypeDecl, TraitDecl, SubsetTypeDecl, TypeSynonymDecl
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
                 // the default treatment

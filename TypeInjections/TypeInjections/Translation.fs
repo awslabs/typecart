@@ -53,7 +53,7 @@ module Translation =
             // the translation declaration is still generated because e.g.,
             // a joint type can be called with non-joint type parameters
             if List.exists (fun (j: Path) -> j.isAncestorOf p) jointDecls then
-                (p.prefix "Joint", p.prefix "Joint", p.prefix "Translations")
+                (p.prefix "Joint", p.prefix "Joint", p)
             else
                 (p.prefix "Old", p.prefix "New", p)
         and name (s: string) = s + "_O", s + "_N", s
