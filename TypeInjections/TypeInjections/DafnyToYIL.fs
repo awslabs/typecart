@@ -425,7 +425,7 @@ module DafnyToYIL =
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
             | :? NewtypeDecl -> Y.TVar(t.Name)
-            | :? IndDatatypeDecl -> Y.TVar(t.Name)
+            | :? IndDatatypeDecl -> Y.TApply(Y.Path [ t.Name ], tp @ t.TypeArgs)
             | _ ->
                 // ArrowTypeDecl, TraitDecl, SubsetTypeDecl, TypeSynonymDecl
                 let p = pathOfUserDefinedType (t)
@@ -695,7 +695,7 @@ module DafnyToYIL =
                     // make sure we caught all the built-in names
                     unsupported $"special name: {n}"
 
-                Y.EConstructorApply(path, tpargs, args)
+                Y.EConstructorApply(Y.Path [ n ], tpargs, args)
         // others
         | :? ConversionExpr as e -> Y.ETypeConversion(expr e.E, tp e.ToType)
         | :? TypeTestExpr as e -> Y.ETypeTest(expr e.E, tp e.ToType)
