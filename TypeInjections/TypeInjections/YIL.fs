@@ -1380,7 +1380,7 @@ module YIL =
             // EToString compile from sequence display expressions of char sequences
             | EToString es -> "[" + (exprsNoBr es ", ") + "]"
             | EInt (v, _) -> v.ToString()
-            | EReal (v, _) -> v.ToString()
+            | EReal (v, _) -> v.ToDecimalString()
             | EQuant (q, lds, r, b) ->
                 "("
                 + q.ToString()

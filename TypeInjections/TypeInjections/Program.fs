@@ -41,7 +41,10 @@ module Program =
 
         Utils.log "***** calling typeCart API"
 
-        typecart(oldProject.toYILProgram ("Old", reporter), newProject.toYILProgram ("New", reporter), Utils.log)
+        let oldYIL = oldProject.toYILProgram ("Old", reporter)
+        let newYIL = newProject.toYILProgram ("New", reporter)
+
+        typecart(oldYIL, newYIL, Utils.log)
             .go (DefaultTypecartOutput(outFolder))
 
         0
