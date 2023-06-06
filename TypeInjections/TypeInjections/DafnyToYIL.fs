@@ -151,7 +151,11 @@ module DafnyToYIL =
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
-                | :? MemberDecl as md -> Some(Y.Path [ md.Name ])
+                // For MemberDecl:
+                // Inside A, we must change A.B.C to B.C (not done yet)
+                // Inside A, we can change A.B to B
+                // Inside A, we must not change B.C to anything else
+                | :? MemberDecl as md -> Some(pathOfMemberDecl md)
                 | :? TypeSynonymDecl as sd -> Some(Y.Path [ sd.Name ])
                 | :? IndDatatypeDecl as dd -> Some(Y.Path [ dd.Name ])
                 | :? AliasModuleDecl as ad -> Some(Y.Path [ ad.Name ])
