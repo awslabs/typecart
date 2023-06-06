@@ -152,10 +152,15 @@ module DafnyToYIL =
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
                 // For MemberDecl:
-                // Inside A, we must change A.B.C to B.C (not done yet)
-                // Inside A, we can change A.B to B
-                // Inside A, we must not change B.C to anything else
-                | :? MemberDecl as md -> Some(pathOfMemberDecl md)
+                | :? MemberDecl as md ->
+                    // Suppose we have A.B.C and D.E.
+                    // Inside A, we may refer to A.B by B (preferred) or A.B;
+                    // we may refer to A.B.C only by B.C;
+                    // we may refer to D.E only by D.E.
+                    // In any case, classID.md should do the job.
+                    match expSig.ClassId with
+                    | null -> Some(Y.Path [ md.Name ])
+                    | classId -> Some(Y.Path [ classId; md.Name ])
                 | :? TypeSynonymDecl as sd -> Some(Y.Path [ sd.Name ])
                 | :? IndDatatypeDecl as dd -> Some(Y.Path [ dd.Name ])
                 | :? AliasModuleDecl as ad -> Some(Y.Path [ ad.Name ])
