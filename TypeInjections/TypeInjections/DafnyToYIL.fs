@@ -434,7 +434,11 @@ module DafnyToYIL =
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
             | :? NewtypeDecl -> Y.TVar(t.Name)
-            | :? IndDatatypeDecl -> Y.TApply(Y.Path [ t.Name ], tp @ t.TypeArgs)
+            | :? IndDatatypeDecl ->
+                match t.NamePath with
+                // keep explicitly dotted names
+                | :? ExprDotName as name -> Y.TApply((parseExprDotName name).Value, tp @ t.TypeArgs)
+                | _ -> Y.TApply(Y.Path [ t.Name ], tp @ t.TypeArgs)
             | _ ->
                 // ArrowTypeDecl, TraitDecl, SubsetTypeDecl, TypeSynonymDecl
                 let p = pathOfUserDefinedType (t)
@@ -562,6 +566,26 @@ module DafnyToYIL =
         | :? TypeProxy as t -> tp t.T // e.g., wrapper for inferred types
         | :? BitvectorType as t -> Y.TBitVector(t.Width)
         | _ -> unsupported $"Type {t.ToString()}"
+    
+    and parseExprDotName (e: ExprDotName) : Y.Path option =
+        match e.Lhs with
+        | :? NameSegment as lhsName ->
+            Some (Y.Path [ lhsName.Name; e.SuffixName ])
+        | :? ExprDotName as lhsExpr ->
+            let lhs = parseExprDotName lhsExpr
+            if lhs.IsNone then
+                None
+            else
+                Some (lhs.Value.child(e.SuffixName))
+        | _ ->
+            // TODO: more types
+            None
+    
+    and replacePath (e: Y.Expr) (p: Y.Path option) : Y.Expr =
+        if p.IsNone then
+            e
+        else
+            Y.replacePath(e, p.Value)
 
     and exprO (e: Expression) : Y.Expr option =
         if e = null then
@@ -571,8 +595,9 @@ module DafnyToYIL =
 
     and expr (e: Expression) : Y.Expr =
         match e with
+        // LetOrFailExpr, ExprDotName, and ApplySuffix are subtypes of ConcreteSyntaxExpression,
+        // so we need to pattern match on these cases before.
         // case: `var foo :- MonadicExpr;` in function methods
-        // LetOrFailExpr is a subtype of ConcreteSyntaxExpression, so we need to pattern match on this case before
         // LetOrFailExpr desugars to LetExpr (i.e. e.ResolvedExpression is a LetExpr), so we lose the information
         // about the if-then-else structure by doing that.
         | :? LetOrFailExpr as e ->
@@ -599,11 +624,20 @@ module DafnyToYIL =
                         Y.ELet(var.Name, tp var.Type, e.Exact, rhs, body)
                     | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
+        | :? ExprDotName as e ->
+            let result = expr e.ResolvedExpression
+            replacePath result (parseExprDotName e)
+        | :? ApplySuffix as e ->
+            if e.ResolvedExpression = null then
+                YIL.EUnimplemented // a few expressions are not resolved by Dafny
+            else
+                let result = expr e.ResolvedExpression
+                match e.Lhs with
+                | :? ExprDotName as lhsExpr -> replacePath result (parseExprDotName lhsExpr)
+                | _ -> result
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
-            let r = e.ResolvedExpression
-
-            if r = null then
+            if e.ResolvedExpression = null then
                 YIL.EUnimplemented // a few expressions are not resolved by Dafny
             else
                 expr e.ResolvedExpression
@@ -634,7 +668,7 @@ module DafnyToYIL =
                 let tpargs = tp @ e.TypeApplication_AtEnclosingClass
                 // const field vs field
                 let isPrivate = e.Member.WhatKind.Equals("field")
-                Y.EMemberRef(r, p, tpargs)
+                Y.EMemberRef(unqualifyReceiver r, p, tpargs)
         | :? ThisExpr -> Y.EThis
         // literals
         | :? CharLiteralExpr as e -> Y.EChar(string e.Value) // always a string according to Dafny spec
@@ -670,13 +704,15 @@ module DafnyToYIL =
         | :? FunctionCallExpr as e ->
             let r = e.Receiver
             let recv = receiver (r.Resolved)
+            let recvUnqualified = unqualifyReceiver recv
+
             let args = expr @ e.Args
 
             let tpargs =
                 // e.TypeApplication_AtEnclosingClass: type arguments for the datatype, not part of concrete syntax
                 tp @ e.TypeApplication_JustFunction
 
-            Y.EMethodApply(recv, pathOfMemberDecl (e.Function), tpargs, args, false)
+            Y.EMethodApply(recvUnqualified, pathOfMemberDecl (e.Function), tpargs, args, false)
         | :? ApplyExpr as e -> Y.EAnonApply(expr e.Function, expr @ e.Args)
         | :? UnaryOpExpr as e ->
             let o = e.Op.ToString()
@@ -1071,6 +1107,17 @@ module DafnyToYIL =
             let ct = classType (r.Type)
             Y.StaticReceiver(ct)
         | _ -> Y.ObjectReceiver(expr r)
+
+    and unqualifyReceiver (recv: Y.Receiver) : Y.Receiver =
+        match recv with
+        | Y.StaticReceiver s ->
+            if s.path.names.Length >= 2 then
+                Y.StaticReceiver
+                    { path = Y.Path [ s.path.name ]
+                      tpargs = s.tpargs }
+            else
+                recv
+        | _ -> recv
 
     and assignmentRhs (r: AssignmentRhs) : Y.Expr =
         match r with

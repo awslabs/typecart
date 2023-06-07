@@ -650,6 +650,21 @@ module YIL =
         { name = ""
           decls = []
           meta = emptyMeta }
+    
+    /// replace the top-level Path of a Receiver during DafnyToYIL
+    let replaceReceiverPath(r: Receiver, path: Path) : Receiver =
+        match r with
+        | StaticReceiver classType -> StaticReceiver({path=path; tpargs =  classType.tpargs})
+        | _ -> r
+    
+    /// replace the top-level Path of an Expr during DafnyToYIL
+    let replacePath (e: Expr, path: Path) : Expr =
+        match e with
+        | EConstructorApply(_, tpargs, args) -> EConstructorApply(path, tpargs, args)
+        | EMethodApply(receiver, method, tpargs, args, ghost) ->
+            EMethodApply(replaceReceiverPath(receiver, path), method, tpargs, args, ghost)
+        | _ -> e
+    
 
     /// wrapping lists of expressions in a block
     let listToExpr (es: Expr list) : Expr =
