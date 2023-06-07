@@ -242,7 +242,7 @@ module Analysis =
                 [ Module(name, List.rev newDecls, meta) ]
             | _ -> this.declDefault (ctx, d)
 
-    /// pulls MapBuiltinTypes.dfy, RelateBuiltinTypes.dfy from the assembly and inserts them into a program
+    /// pulls MapBuiltinTypes.dfy, from the assembly and inserts them into a program
     type InsertTranslationFunctionsForBuiltinTypeOperators() =
         inherit Traverser.Identity()
 
@@ -255,9 +255,6 @@ module Analysis =
             let reader = new StreamReader(stream)
             reader.ReadToEnd()
 
-        let relateBuiltinTypes =
-            retrieveResource "RelateBuiltinTypes.dfy"
-
         let mapBuiltinTypes = retrieveResource "MapBuiltinTypes.dfy"
 
         override this.ToString() =
@@ -267,7 +264,7 @@ module Analysis =
             { prog with
                   meta =
                       { prog.meta with
-                            prelude = relateBuiltinTypes + "\n" + mapBuiltinTypes } }
+                            prelude = mapBuiltinTypes } }
 
     /// add an empty module if the program is effectively empty
     type AddEmptyModuleIfProgramEmpty(moduleName: string) =

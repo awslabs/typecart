@@ -11,9 +11,6 @@
         <EmbeddedResource Include="Resources\MapBuiltinTypes.dfy">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </EmbeddedResource>
-        <EmbeddedResource Include="Resources\RelateBuiltinTypes.dfy">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </EmbeddedResource>
         
         <Compile Include="Utils.fs" />
         <Compile Include="YIL.fs" />
