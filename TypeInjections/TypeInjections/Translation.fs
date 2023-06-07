@@ -396,20 +396,11 @@ module Translation =
                     let typeParams =
                         Utils.listInterleave (parentTvsO @ tvsO, parentTvsN @ tvsN)
                     // old inputs and new inputs
-                    let prependCurrentDecl (decl: LocalDecl) =
-                        match decl.tp with
-                        | TApply(path, types) ->
-                            // Path ["New.a", "b"] => Path ["New.currentDecl", "a", "b"]
-                            let firstName = path.names[0].Split('.')
-                            assert (firstName.Length = 2)
-                            let currentDeclWithPrefix = context.currentDecl.prefix(firstName[0])
-                            let newPath = currentDeclWithPrefix.append(Path(firstName[1]::path.names[1..]))
-                            LocalDecl(decl.name, TApply(newPath, types), decl.ghost)
-                        | _ -> decl
-                    let insO_original, _, _ = List.unzip3 (List.map localDecl ins_o.decls)
-                    let insO = List.map prependCurrentDecl insO_original
-                    let _, insN_original, _ = List.unzip3 (List.map localDecl ins_n.decls)
-                    let insN = List.map prependCurrentDecl insN_original
+                    let insO, _, _ =
+                        List.unzip3 (List.map localDecl ins_o.decls)
+
+                    let _, insN, _ =
+                        List.unzip3 (List.map localDecl ins_n.decls)
                     // assumptions that the inputs occuring in both old and new are related
                     let _, _, insT =
                         List.unzip3 (List.map localDecl (insD.decls.getSame ()))

@@ -136,7 +136,7 @@ module Typecart =
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.FilterDecls(fun p -> not (List.contains p joint))
               Analysis.LemmasToAxioms()
-              // Analysis.UnqualifyPaths()
+              Analysis.UnqualifyPaths()
               Analysis.PrefixTopDecls(oldOrNewPrefix (old))
               Analysis.PrefixUnfoundImports("Joint")
               Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
@@ -146,14 +146,14 @@ module Typecart =
         let jointPipeline (joint: YIL.Path list) : Traverser.Transform list =
             [ Analysis.FilterDecls(fun p -> List.contains p joint)
               Analysis.LemmasToAxioms()
-              // Analysis.UnqualifyPaths()
+              Analysis.UnqualifyPaths()
               Analysis.PrefixTopDecls(jointPrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
         let combinePipeline : Traverser.Transform list =
             [ Analysis.AddImports([ "joint.dfy"; "old.dfy"; "new.dfy" ], [ "Joint"; "Old"; "New" ])
-              // Analysis.UnqualifyPaths()
+              Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
 

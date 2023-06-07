@@ -151,19 +151,10 @@ module DafnyToYIL =
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
-                // For MemberDecl:
-                | :? MemberDecl as md ->
-                    // Suppose we have A.B.C and D.E.
-                    // Inside A, we may refer to A.B by B (preferred) or A.B;
-                    // we may refer to A.B.C only by B.C;
-                    // we may refer to D.E only by D.E.
-                    // In any case, classID.md should do the job.
-                    match expSig.ClassId with
-                    | null -> Some(Y.Path [ md.Name ])
-                    | classId -> Some(Y.Path [ classId; md.Name ])
+                | :? MemberDecl as md -> Some(pathOfMemberDecl md)
                 | :? TypeSynonymDecl as sd -> Some(Y.Path [ sd.Name ])
-                | :? IndDatatypeDecl as dd -> Some(Y.Path [ dd.Name ])
-                | :? AliasModuleDecl as ad -> Some(Y.Path [ ad.Name ])
+                | :? IndDatatypeDecl as dd -> Some(pathOfTopLevelDecl dd)
+                | :? AliasModuleDecl as ad -> Some(pathOfTopLevelDecl ad)
                 | _ -> None
 
             let exports = d.Exports |> List.ofSeq
@@ -433,13 +424,8 @@ module DafnyToYIL =
             // Detection of type parameters: https://github.com/dafny-lang/dafny/pull/1188
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
-            | :? NewtypeDecl -> Y.TVar(t.Name)
-            | :? IndDatatypeDecl ->
-                match t.NamePath with
-                // keep explicitly dotted names
-                | :? ExprDotName as name -> Y.TApply((parseExprDotName name).Value, tp @ t.TypeArgs)
-                | _ -> Y.TApply(Y.Path [ t.Name ], tp @ t.TypeArgs)
             | _ ->
+                // NewTypeDecl, IndDatatypeDecl,
                 // ArrowTypeDecl, TraitDecl, SubsetTypeDecl, TypeSynonymDecl
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
@@ -595,9 +581,8 @@ module DafnyToYIL =
 
     and expr (e: Expression) : Y.Expr =
         match e with
-        // LetOrFailExpr, ExprDotName, and ApplySuffix are subtypes of ConcreteSyntaxExpression,
-        // so we need to pattern match on these cases before.
         // case: `var foo :- MonadicExpr;` in function methods
+        // LetOrFailExpr is a subtype of ConcreteSyntaxExpression, so we need to pattern match on this case before
         // LetOrFailExpr desugars to LetExpr (i.e. e.ResolvedExpression is a LetExpr), so we lose the information
         // about the if-then-else structure by doing that.
         | :? LetOrFailExpr as e ->
@@ -624,17 +609,6 @@ module DafnyToYIL =
                         Y.ELet(var.Name, tp var.Type, e.Exact, rhs, body)
                     | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
-        | :? ExprDotName as e ->
-            let result = expr e.ResolvedExpression
-            replacePath result (parseExprDotName e)
-        | :? ApplySuffix as e ->
-            if e.ResolvedExpression = null then
-                YIL.EUnimplemented // a few expressions are not resolved by Dafny
-            else
-                let result = expr e.ResolvedExpression
-                match e.Lhs with
-                | :? ExprDotName as lhsExpr -> replacePath result (parseExprDotName lhsExpr)
-                | _ -> result
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
             if e.ResolvedExpression = null then
@@ -668,7 +642,7 @@ module DafnyToYIL =
                 let tpargs = tp @ e.TypeApplication_AtEnclosingClass
                 // const field vs field
                 let isPrivate = e.Member.WhatKind.Equals("field")
-                Y.EMemberRef(unqualifyReceiver r, p, tpargs)
+                Y.EMemberRef(r, p, tpargs)
         | :? ThisExpr -> Y.EThis
         // literals
         | :? CharLiteralExpr as e -> Y.EChar(string e.Value) // always a string according to Dafny spec
@@ -704,15 +678,13 @@ module DafnyToYIL =
         | :? FunctionCallExpr as e ->
             let r = e.Receiver
             let recv = receiver (r.Resolved)
-            let recvUnqualified = unqualifyReceiver recv
-
             let args = expr @ e.Args
 
             let tpargs =
                 // e.TypeApplication_AtEnclosingClass: type arguments for the datatype, not part of concrete syntax
                 tp @ e.TypeApplication_JustFunction
 
-            Y.EMethodApply(recvUnqualified, pathOfMemberDecl (e.Function), tpargs, args, false)
+            Y.EMethodApply(recv, pathOfMemberDecl (e.Function), tpargs, args, false)
         | :? ApplyExpr as e -> Y.EAnonApply(expr e.Function, expr @ e.Args)
         | :? UnaryOpExpr as e ->
             let o = e.Op.ToString()
@@ -740,7 +712,7 @@ module DafnyToYIL =
                     // make sure we caught all the built-in names
                     unsupported $"special name: {n}"
 
-                Y.EConstructorApply(Y.Path [ n ], tpargs, args)
+                Y.EConstructorApply(path, tpargs, args)
         // others
         | :? ConversionExpr as e -> Y.ETypeConversion(expr e.E, tp e.ToType)
         | :? TypeTestExpr as e -> Y.ETypeTest(expr e.E, tp e.ToType)
