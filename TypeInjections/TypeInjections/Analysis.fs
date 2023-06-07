@@ -111,7 +111,8 @@ module Analysis =
                 [ Module(name, is @ decls, meta) ]
             | _ -> this.declDefault (ctx, decl)
 
-    /// adds a prefix to every import not found in the current AST
+    /// adds a given prefix to every import not found in the current AST;
+    /// note that a module with an extra prefix in the current AST is considered as found
     type PrefixUnfoundImports(prefix: string) =
         inherit Traverser.Identity()
 
@@ -124,6 +125,16 @@ module Analysis =
                 | Some _ -> true
                 | None -> false
 
+            let importDifferByPrefix (importPath: ImportType) =
+                match List.tryFind
+                          (fun (p: ImportType) ->
+                              importPath
+                                  .getPath()
+                                  .onlyDifferByPrefix (p.getPath ()))
+                          ctx.importPaths with
+                | Some p -> p.getPath().names[0].Split(".")[0]  // the prefix
+                | None -> ""
+
             match decl with
             | Module (name, decls, meta) ->
                 let filtDecls =
@@ -134,7 +145,11 @@ module Analysis =
                                 if importIn it then
                                     decl
                                 else
-                                    Import(it.prefix (prefix))
+                                    let existingPrefix = importDifferByPrefix it
+                                    if existingPrefix <> "" then
+                                        decl  // do not prefix it
+                                    else
+                                        Import(it.prefix prefix)
                             | _ -> decl)
                         decls
 

@@ -59,6 +59,15 @@ module YIL =
                 (Path this.names[1..]).relativize(Path that.names[1..])
             else
                 that
+        /// (Old.a).b.c == a.b.c == (New.a).b.c
+        member this.onlyDifferByPrefix(p: Path) =
+            if this.names.Length <> p.names.Length then
+                false
+            elif this.names.Length = 0 then
+                true
+            else
+                Array.last(this.names[0].Split(".")) = Array.last(p.names[0].Split(".")) &&
+                    this.names[1..] = p.names[1..]
         /// dot-separated names
         override this.ToString() = listToString (this.names, ".")
 
