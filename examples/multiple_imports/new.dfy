@@ -4,6 +4,7 @@ module IntType {
   {
     0
   }
+  // A ghost function is removed here.
 }
 
 module RealType {

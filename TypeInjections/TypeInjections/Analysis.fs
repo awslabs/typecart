@@ -107,8 +107,8 @@ module Analysis =
                 let is =
                     imps
                     |> List.map (fun i -> Import(ImportDefault(Path [ i ])))
-
-                [ Module(name, is @ decls, meta) ]
+                // We may also need to add imports to submodules.
+                this.declDefault (ctx, Module(name, is @ decls, meta))
             | _ -> this.declDefault (ctx, decl)
 
     /// adds a given prefix to every import not found in the current AST;
@@ -202,7 +202,8 @@ module Analysis =
         /// remove opened imported path from a path
         member this.consumeImportPath (p: Path) (import: ImportType) =
             match import with
-            | ImportOpened q -> q.relativize p
+            // TODO: return the minimal unambiguous path
+            | ImportOpened q -> p // q.relativize p
             | _ -> p
 
         override this.path(ctx: Context, p: Path) =
