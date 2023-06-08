@@ -76,6 +76,11 @@ module Translation =
                         else
                             let nO, nN, _ = name n
                             EVar(if old then nO else nN)
+                    | EThis ->
+                        if ctx.thisDecl.IsSome then
+                            EVar(ctx.thisDecl.Value.name)
+                        else
+                            EThis
                     | _ -> this.exprDefault (ctx, e)
 
                 override this.tp(ctx: Context, t: Type) =
@@ -432,15 +437,26 @@ module Translation =
 
                     let inputs =
                         instanceInputs @ parentTvsT @ tvsT @ insO @ insN
+                    
                     // old requires clauses applied to old arguments
+                    let oldCtx =
+                        if isStatic then
+                            ctx
+                        else
+                            ctx.setThisDecl(oldInstDecl)
                     let inputRequiresO, _, _ =
                         ins_o.conditions
-                        |> List.map (fun c -> expr (c))
+                        |> List.map (fun c -> expr oldCtx c)
                         |> List.unzip3
                     // new requires clauses applied to new arguments
+                    let newCtx =
+                        if isStatic then
+                            ctx
+                        else
+                            ctx.setThisDecl(newInstDecl)
                     let _, inputRequiresN, _ =
                         ins_n.conditions
-                        |> List.map (fun c -> expr (c))
+                        |> List.map (fun c -> expr newCtx c)
                         |> List.unzip3
                     // insT is (f1(old), f2(new))
                     // backward compatibility: f1(old) == new
@@ -494,7 +510,7 @@ module Translation =
                         | Diff.SameExprO bdO ->
                             // unchanged body: try to generate proof sketch
                             bdO
-                            |> Option.bind (fun b -> let _, _, pf = expr b in pf)
+                            |> Option.bind (fun b -> let _, _, pf = expr ctx b in pf)
                         | _ ->
                             // changed body: generate empty proof
                             Some(EBlock [])
@@ -677,9 +693,9 @@ module Translation =
         and tpAbstracted (x: string, t: Type) =
             let tO, tN, tT = tp t
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
-        and expr (e: Expr) : Expr * Expr * (Expr option) =
-            let eO = NameTranslator(true).expr (ctx, e)
-            let eN = NameTranslator(false).expr (ctx, e)
+        and expr (exprCtx: Context) (e: Expr) : Expr * Expr * (Expr option) =
+            let eO = NameTranslator(true).expr (exprCtx, e)
+            let eN = NameTranslator(false).expr (exprCtx, e)
             eO, eN, None
 
         /// entry point for running the translation

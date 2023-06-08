@@ -866,12 +866,13 @@ module YIL =
             tpvars: TypeArg list,
             vars: LocalDecl list,
             pos: ContextPosition,
-            importPaths: ImportType list
+            importPaths: ImportType list,
+            thisDecl: LocalDecl option
         ) =
         /// convenience constructor and accessor methods
-        new(p: Program) = Context(p, Path([]), [], [], OtherPosition, [])
+        new(p: Program) = Context(p, Path([]), [], [], OtherPosition, [], None)
         /// dummy context, use carefully
-        new() = Context(emptyProgram, Path([]), [], [], OtherPosition, [])
+        new() = Context(emptyProgram, Path([]), [], [], OtherPosition, [], None)
 
         member this.prog = prog
         member this.currentDecl = currentDecl
@@ -879,6 +880,8 @@ module YIL =
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.pos = pos
+        
+        member this.thisDecl = thisDecl
         
         member this.pathWithoutPseudoModule() =
             let p = this.currentDecl
@@ -951,28 +954,37 @@ module YIL =
 
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
-            Context(prog, currentDecl.child (n), tpvars, vars, pos, importPaths)
+            Context(prog, currentDecl.child (n), tpvars, vars, pos, importPaths, None)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, importPaths)
+            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, importPaths, None)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(tvs: TypeArg list) : Context =
-            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, importPaths)
+            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, importPaths, None)
 
         member this.add(ds: LocalDecl list) : Context =
-            Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths)
+            Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths, None)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
+        
+        // set the LocalDecl for "this"
+        member this.setThisDecl(d: LocalDecl) : Context =
+            Context(prog, currentDecl, tpvars, vars, pos, importPaths, Some(d))
+        
+        // unset the LocalDecl for "this"
+        member this.unsetThisDecl(d: LocalDecl) : Context =
+            Context(prog, currentDecl, tpvars, vars, pos, importPaths, None)
+
 
         /// remembers where we are
         member this.setPos(p: ContextPosition) =
-            Context(prog, currentDecl, tpvars, vars, p, importPaths)
+            Context(prog, currentDecl, tpvars, vars, p, importPaths, None)
 
         member this.enterBody() = this.setPos (BodyPosition)
 
         // add and remove imports
         member this.addImport(importType: ImportType) =
-            Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths)
+            Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths, None)
 
     (* ***** printer for the language above
 
