@@ -1167,7 +1167,7 @@ module YIL =
                    | IsPredicate
                    | IsPredicateMethod -> ""
                    | IsMethod -> " returns " + outputsS
-                   | _ -> ":" + outputsS)
+                   | _ -> ": " + outputsS)
                 + (match modifies with
                    | [] -> ""
                    | _ ->
@@ -1186,14 +1186,14 @@ module YIL =
                 + (this.conditions (true, ins.conditions, methodCtx))
                 + (this.conditions (false, outs.conditions, methodCtx))
                 + "\n"
-                + Option.fold
+                + (Option.fold
                     (fun _ e ->
                         match methodType with
                         | IsLemma
                         | IsMethod -> this.statement e methodCtx
                         | _ -> indentedBraced (this.expr e methodCtx))
                     ""
-                    b
+                    b)[1..]  // remove the initial space
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
                 + (this.meta a)
