@@ -132,6 +132,7 @@ module Typecart =
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =
         let oldOrNewPrefix (old: bool) = if old then "Old" else "New"
         let jointPrefix = "Joint"
+        let combinePrefix = "Combine"
         // pipelines for transforming old, new, joint, translations
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.FilterDecls(fun p -> not (List.contains p joint))
@@ -154,6 +155,7 @@ module Typecart =
         let combinePipeline : Traverser.Transform list =
             [ Analysis.AddImports([ "joint.dfy"; "old.dfy"; "new.dfy" ], [ "Joint"; "Old"; "New"; "Translations" ])
               Analysis.UnqualifyPaths()
+              Analysis.PrefixTopDecls(combinePrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
 

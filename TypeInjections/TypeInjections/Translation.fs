@@ -144,7 +144,7 @@ module Translation =
                 // Depending on how we treat classes, we could generate a lemma here.
                 // With the current minimal treatment of classes, nothing is needed.
                 []
-            | Diff.Import _
+            | Diff.Import _ -> [ declO ] // Preserve all import statements
             | Diff.Export _ -> [ ] // Remove all export statements
             | Diff.DUnimplemented -> [ declO ]
             | Diff.Module (_, msD) -> [ Module(n, decls ctxI msD, context.currentMeta ()) ]

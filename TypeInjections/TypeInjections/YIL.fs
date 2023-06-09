@@ -1388,12 +1388,12 @@ module YIL =
 
             let dims ds = this.dims (ds, pctx)
             let receiver r = match r with
-                        | StaticReceiver s ->
-                            if s.path.isAncestorOf(pctx.pathWithoutPseudoModule()) then
-                                ""
-                            else
-                                this.receiver (r, pctx)
-                        | ObjectReceiver _ -> this.receiver (r, pctx)
+                                | StaticReceiver s ->
+                                    if s.path.isAncestorOf(pctx.pathWithoutPseudoModule()) then
+                                        ""
+                                    else
+                                        this.receiver (r, pctx)
+                                | ObjectReceiver _ -> this.receiver (r, pctx)
             let case c = this.case c pctx
             let tp = this.tp
             let tps = this.tps
