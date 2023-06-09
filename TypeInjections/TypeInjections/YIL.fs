@@ -1431,7 +1431,7 @@ module YIL =
             | EOld e -> "old(" + (expr e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr (e) + "." + i.ToString()
-            | EFun (vs, _, e) -> (this.localDecls vs) + " => " + (expr e)
+            | EFun (vs, _, e) -> "(" + (this.localDecls vs) + " => " + (expr e) + ")"
             | ESet (_, es) -> "{" + (exprsNoBr es ", ") + "}"
             | ESetComp (lds, predicate, body) ->
                 let ldsStr =

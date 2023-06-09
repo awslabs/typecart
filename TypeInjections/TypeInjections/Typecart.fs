@@ -152,7 +152,7 @@ module Typecart =
               Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
         let combinePipeline : Traverser.Transform list =
-            [ Analysis.AddImports([ "joint.dfy"; "old.dfy"; "new.dfy" ], [ "Joint"; "Old"; "New" ])
+            [ Analysis.AddImports([ "joint.dfy"; "old.dfy"; "new.dfy" ], [ "Joint"; "Old"; "New"; "Translations" ])
               Analysis.UnqualifyPaths()
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
