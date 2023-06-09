@@ -167,7 +167,8 @@ module Translation =
                     let body =
                         if isNew then
                             // new types are new primitive types, so return identity map
-                            xO
+                            // but we may need explicit type conversion
+                            ETypeConversion(xO, xtN.tp)
                         else
                             // otherwise, call function of supertype
                             let _, _, superT = tp super
