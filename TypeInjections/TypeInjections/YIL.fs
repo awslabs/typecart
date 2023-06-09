@@ -1154,6 +1154,10 @@ module YIL =
                    else
                        this.ghost (g))
                 + methodType.ToString()
+                + (if b.IsNone then
+                       " {:axiom}"
+                   else
+                       "")
                 + " "
                 + n
                 + (this.tpvars false tpvs)

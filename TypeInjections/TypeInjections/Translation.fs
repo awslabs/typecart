@@ -731,7 +731,7 @@ module Translation =
             let eO = NameTranslator(true).expr (exprCtx, e)
             let eN = NameTranslator(false).expr (exprCtx, e)
             // TODO: generate proof at the 3rd argument here
-            eO, eN, Some(EBlock [])
+            eO, eN, None
 
         /// entry point for running the translation
         member this.doTranslate() = decls ctx declsD
