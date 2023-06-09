@@ -51,7 +51,13 @@ module YIL =
             let l = this.names.Length
 
             p.names.Length >= l
-            && p.names.[..l - 1] = this.names
+            && p.names[..l - 1] = this.names
+        /// p = rest . this
+        member this.isSuffixOf(p: Path) =
+            let l = this.names.Length
+
+            p.names.Length >= l
+            && p.names[p.names.Length - l..] = this.names
         /// this . that ---> that
         /// this == that == a.b.c ---> c
         member this.relativize(that: Path) =

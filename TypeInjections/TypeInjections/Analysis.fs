@@ -191,20 +191,43 @@ module Analysis =
             { name = prog.name
               decls = List.map prD prog.decls
               meta = prog.meta }
+    
+    type GatherAllPaths() =
+        inherit Traverser.Identity()
+        
+        let mutable result: Set<Path> = Set.empty
+        
+        override this.path(ctx: Context, p: Path) =
+            result <- result.Add(p)
+            p
+        
+        member this.gather (prog: Program) =
+            this.progDefault(prog) |> ignore
+            result
 
     /// makes path unqualified if they are relative to the current method or an opened module
     /// (Dafny complains when we print out fully qualified names in some cases)
     type UnqualifyPaths() =
         inherit Traverser.Identity()
+        
+        let mutable allPaths: Set<Path> = Set.empty
 
         override this.ToString() =
             "shortening paths by removing redundant qualification"
         /// remove opened imported path from a path
-        member this.consumeImportPath (p: Path) (import: ImportType) =
-            match import with
-            // TODO: return the minimal unambiguous path
-            | ImportOpened q -> p // q.relativize p
-            | _ -> p
+        member this.consumeImportPath (p: Path) (imports: ImportType list) =
+            // Return the minimal unambiguous path.
+            // Note that directly returning "p" here is also OK, just resulting in longer Dafny code.
+            let openedImports = List.map (fun import -> match import with | ImportOpened q -> q | _ -> Path[]) imports |> List.filter (fun (q: Path) -> q.names.Length > 0)
+            let visiblePaths = Set.filter (fun (q: Path) -> q.name = p.name && List.exists (fun (importPath: Path) -> importPath.isAncestorOf(q)) openedImports) allPaths
+            let minimalPath = List.fold (fun (p1: Path) (q: Path) -> q.relativize p1) p openedImports
+            let minimalUnambiguousPathLength = Seq.tryFindIndexBack (fun i -> 
+                let currentPath = Path p.names[i..]
+                let visiblePathsWithSameSuffix = Set.filter (fun (q: Path) -> currentPath.isSuffixOf(q)) visiblePaths
+                visiblePathsWithSameSuffix.Count = 1) (seq {0 .. p.names.Length - minimalPath.names.Length})
+            match minimalUnambiguousPathLength with
+            | Some len -> Path p.names[len..]
+            | None -> p
 
         override this.path(ctx: Context, p: Path) =
             let currentMethodPath =
@@ -215,7 +238,11 @@ module Analysis =
 
             let p2 = currentMethodPath.relativize p
             let imports = ctx.importPaths
-            List.fold this.consumeImportPath p2 imports
+            this.consumeImportPath p2 imports
+        
+        override this.prog(prog: Program) =
+            allPaths <- GatherAllPaths().gather(prog)
+            this.progDefault(prog)
 
     /// removes duplicate includes in programs or imports in modules
     type DeduplicateImportsIncludes() =
