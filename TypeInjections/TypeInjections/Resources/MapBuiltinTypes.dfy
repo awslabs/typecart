@@ -5,8 +5,7 @@ module Translations.MapBuiltinTypes {
     ensures |e| == |f|
     ensures forall i : int :: (0 <= i < |e| ==> f[i] == t(e[i]))
     {
-        if |e| == 0 then [] else
-        seq(|e|, i => if 0 <= i < |e| then t(e[i]) else t(e[0]))
+        seq(|e|, i requires 0 <= i < |e| => t(e[i]))
     }
     function Set<o,n>(t: o -> n, e: set<o>) : (f : set<n>)
     ensures forall x : o :: x in e ==> t(x) in f
