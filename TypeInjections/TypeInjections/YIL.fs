@@ -1191,8 +1191,8 @@ module YIL =
                    | Some e -> (match methodType with
                                 | IsLemma
                                 | IsMethod -> this.statement e methodCtx
-                                | _ -> (indentedBraced (this.expr e methodCtx))[1..]  // remove the initial space
-                                )
+                                | _ -> indentedBraced (this.expr e methodCtx)
+                                )[1..]  // remove the initial space
                    )
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
