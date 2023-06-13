@@ -28,6 +28,16 @@ module Diff =
         /// true if all elements are unchanged
         member this.isSame =
             List.forall (fun (e: Elem<'y, 'd>) -> e.isSame) this.elements
+        /// true if there are no added or deleted elements
+        /// (no guarantee on whether or not updated elements have added or deleted subfields)
+        member this.isSameOrUpdated =
+            List.forall
+                (fun (e: Elem<'y, 'd>) ->
+                    (match e with
+                     | Same _
+                     | Update _ -> true
+                     | _ -> false))
+                this.elements
         /// the unchanged elements
         member this.getSame() =
             List.choose
@@ -41,6 +51,15 @@ module Diff =
             List.choose
                 (fun e ->
                     match e with
+                    | Update (yo, yn, _) -> Some(yo, yn)
+                    | _ -> None)
+                this.elements
+        /// the unchanged or updated elements
+        member this.getSameOrUpdate() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y -> Some (y, y)
                     | Update (yo, yn, _) -> Some(yo, yn)
                     | _ -> None)
                 this.elements

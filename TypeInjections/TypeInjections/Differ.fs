@@ -184,7 +184,10 @@ module Differ =
     // Renamings are not spotted either.
 
     /// diffs two lists of type arguments
-    and typeargs (old: TypeArg list, nw: TypeArg list) = simpleList (old, nw)
+    /// insertions and deletions are detected, but renamings and reorderings generate Delete+Add
+    and typeargs (old: TypeArg list, nw: TypeArg list) =
+        let similar (o: TypeArg, n: TypeArg) = (fst o) = (fst n)
+        complexList (old, nw, similar, (fun (o, n) -> Some(o)))  // TODO: store both typeargs
 
     /// diffs two lists of local decls
     /// insertions and deletions are detected, but renamings and reorderings generate Delete+Add

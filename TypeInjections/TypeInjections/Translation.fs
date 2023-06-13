@@ -64,6 +64,10 @@ module Translation =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
             s + "_O", s + "_N", (s, s + "_back")
+        and name2 (s: string, t: string) =
+            // old variable name, new variable name,
+            // (forward translation function name, backward translation function name)
+            s + "_O", t + "_N", (s + "_to_" + t, t + "_to_" + s)
         and typearg (a: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
             let v = snd a
             let aO, aN, aT = name (fst a)
@@ -71,6 +75,16 @@ module Translation =
             (aO, v),
             (aN, v),
             (LocalDecl(fst aT, TFun([ TVar aO ], TVar aN), false), LocalDecl(snd aT, TFun([ TVar aN ], TVar aO), false))
+        and typearg2 (a: TypeArg, b: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
+            if a = b then
+                typearg a
+            else
+                let nameO, nameN, nameT = name2 (fst a, fst b)
+
+                (nameO, snd a),
+                (nameN, snd b),
+                (LocalDecl(fst nameT, TFun([ TVar nameO ], TVar nameN), false),
+                 LocalDecl(snd nameT, TFun([ TVar nameN ], TVar nameO), false))
         and varname (n: string) = n.Chars(0).ToString()
         and NameTranslator (old: bool) =
             { new Traverser.Identity() with
@@ -162,7 +176,7 @@ module Translation =
                 match declO with
                 | TypeDef (_, _, super, _, isNew, _) ->
                     // TypeDefs produce methods
-                    let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, declO)
+                    let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, declO, declN)
                     let xO = localDeclTerm xtO
                     let xN = localDeclTerm xtN
 
@@ -172,9 +186,12 @@ module Translation =
                             // but we may need explicit type conversion
                             ETypeConversion(xO, xtN.tp)
                         else
-                            // otherwise, call function of supertype
-                            let _, _, superT = tp super
-                            (fst superT) xO
+                            match declN with
+                            | TypeDef (_, _, superN, _, _, _) ->
+                                // otherwise, call function of supertype
+                                let _, _, superT = tp(super, superN)
+                                (fst superT) xO
+                            | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     [ Method(
                           IsFunction,
@@ -195,22 +212,30 @@ module Translation =
             | Diff.Datatype (nameD, tvsD, ctrsD, msD) ->
                 // generate translation functions
 
-                if not tvsD.isSame then
+                if not tvsD.isSameOrUpdated then
                     failwith (
-                        unsupported "change in type parameters: "
+                        unsupported "addition or deletion in type parameters: "
                         + p.ToString()
                     )
 
-                let tvs = tvsD.getSame ()
-                // datatype p.name<u,v> = con1(a,u) | con2(b,v) --->
+                let tvsO =
+                    match declO with
+                    | Datatype (_, tpvars, _, _, _) -> tpvars
+                    | _ -> failwith ("impossible") // Diff.Datatype must go with YIL.Datatype
+                let tvsN =
+                    match declN with
+                    | Datatype (_, tpvars, _, _, _) -> tpvars
+                    | _ -> failwith ("impossible") // Diff.Datatype must go with YIL.Datatype
+
+                // datatype p.name<u,v> = con1(a,u) | con2(b,v) ---> p.name<u,w> = con1(a,u) | con2(b,w)
+                // ---->
                 // datatype pO<uO,vO> = con1(aO,uO) | con2(bO,vO)
-                // datatype pN<uN,vN> = con1(aN,uN) | con2(bN,vN)
-                // function pT<uO,uN,vO,vN>(uT:uO*uN->bool, vT:vO*vN->bool, xO:pO(uO,vO), xN:pN(uN,vN)) = match xO,xN
-                //   | con1(x1,x2), con1(y1,y2) => aT(x1,y1) && uT(x2,y2)
-                //   | con2(x1,x2), con2(y1,y2) => bT(x1,y1) && vT(x2,y2)
-                //   | _ -> false
+                // datatype pN<uN,wN> = con1(aN,uN) | con2(bN,wN)
+                // function pT<uO,uN,vO,wN>(u:uO->uN, v_to_w:vO->wN, xO:pO<uO,vO>) = match xO
+                //   | con1(x1,x2) => con1(a(x1),u(x2))
+                //   | con2(x1,x2) => con2(b(x1),v_to_w(x2))
                 // and accordingly for the general case.
-                let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvs)
+                let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvsO, tvsN)
 
                 let mkCase (elem: Diff.Elem<YIL.DatatypeConstructor, Diff.DatatypeConstructor>) =
                     // to share code between the cases, we interpret the change as an update
@@ -351,7 +376,9 @@ module Translation =
                     if not tpD.isSame then
                         failwith (unsupported "change in type: " + p.ToString())
 
-                    let tO, tN, tT = tp t
+                    let tO, tN, tT = match declN with
+                                     | Field (_, tN, _, _, _, _, _) -> tp(t, tN)
+                                     | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
                     let tT1, tT2 = tT
 
                     let recO, recN =
@@ -379,30 +406,30 @@ module Translation =
                           true,
                           emptyMeta
                       ) ]
-                | _ -> failwith ("impossible") // Diff.Field must occur with YIL.Field
+                | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
             // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
             | Diff.Method (_, tvsD, insD, outsD, bdD) ->
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
-                | Method (_, _, tvs, ins_o, outs, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _),
-                  Method (_, _, _, ins_n, _, modifiesN, readsN, decreasesN, _, _, _, _) ->
+                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _),
+                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, _) ->
                     // we ignore bodyO, i.e., ignore changes in the body
-                    if not tvsD.isSame then
+                    if not tvsD.isSameOrUpdated then
                         failwith (
-                            unsupported "change in type parameters: "
+                            unsupported "addition or deletion in type parameters: "
                             + p.ToString()
                         )
                     // we ignore changes in in/output conditions here and only compare declarations
                     // in fact, ensures clauses (no matter if changed) are ignored entirely
-                    if not (insD.decls.getUpdate().IsEmpty) then
+                    (*if not (insD.decls.getUpdate().IsEmpty) then
                         failwith (
                             unsupported "update to individual inputs: "
                             + p.ToString()
                         )
 
                     if not outsD.decls.isSame then
-                        failwith (unsupported "change in outputs: " + p.ToString())
+                        failwith (unsupported "change in outputs: " + p.ToString())*)
                     // if modifies, reads, decreases clauses change, throw an error
                     // TODO here
                     // as "methods", we only consider pure functions here
@@ -420,18 +447,18 @@ module Translation =
                     // and accordingly for the general case. If not static, the lemma additionally quantifies over the receivers.
                     let parentDecl = context.lookupCurrent ()
                     // the following are only needed if the method is not static, but it's easier to compute them in any case
-                    let parentTvs = parentDecl.tpvars
+                    let parentTvs_o = parentDecl.tpvars
                     let parentO, parentN, parentT = path (context.currentDecl)
 
                     let parentTvsO, parentTvsN, parentTvsT =
                         if isStatic then
                             [], [], []
                         else
-                            List.unzip3 (List.map typearg parentTvs)
+                            List.unzip3 (List.map typearg parentTvs_o)  // TODO: typearg2 parentTvs_o parentTvs_n
 
                     let oldInstDecl, newInstDecl, instancesTranslation =
                         let t =
-                            TApply(context.currentDecl, typeargsToTVars parentTvs)
+                            TApply(context.currentDecl, typeargsToTVars parentTvs_o)
 
                         localDecl (LocalDecl(varname parentDecl.name, t, false))
 
@@ -453,7 +480,7 @@ module Translation =
                             objRec oldInstDecl, objRec newInstDecl
                     // the input types and arguments and the translations for the arguments
                     // parent type parameters and instanceInputs are empty if static
-                    let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg tvs)
+                    let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg2 (List.zip tvs_o tvs_n))
 
                     let typeParams =
                         Utils.listInterleave (parentTvsO @ tvsO, parentTvsN @ tvsN)
@@ -464,8 +491,8 @@ module Translation =
                     let _, insN, _ =
                         List.unzip3 (List.map localDecl ins_n.decls)
                     // translations from old inputs to new inputs
-                    let _, _, insT =
-                        List.unzip3 (List.map localDecl (insD.decls.getSame ()))
+                    let _, insN_translated, insT =
+                        List.unzip3 (List.map localDecl2 (insD.decls.getSameOrUpdate()))
 
                     // TODO: remove unused backward translation functions
                     let inputs =
@@ -502,17 +529,17 @@ module Translation =
                     // backward compatibility: f1(old) == new
                     let inputsTranslations =
                         if isStatic then
-                            backward_compatible insT insN
+                            backward_compatible insT insN_translated
                         else
-                            backward_compatible (instancesTranslation :: insT) (newInstDecl :: insN)
+                            backward_compatible (instancesTranslation :: insT) (newInstDecl :: insN_translated)
 
                     // lossless assumptions
                     let losslessAssumptions =
                         List.map
-                            (fun (tpargO: TypeArg, tparg: TypeArg) ->
-                                let _, _, tT = tp (TVar(fst tparg))
+                            (fun (tpargO: TypeArg, tparg_o: TypeArg, tparg_n: TypeArg) ->
+                                let _, _, tT = tp (TVar(fst tparg_o), TVar(fst tparg_n))
                                 lossless (TVar(fst tpargO)) tT)
-                            (List.zip (parentTvsO @ tvsO) (parentTvs @ tvs))
+                            (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_o @ tvs_n))  // TODO: parentTvs_n @ tvs_n
 
                     let inSpec =
                         InputSpec(
@@ -528,10 +555,10 @@ module Translation =
 
                     // the outputs and the translation function
                     let outputTypeT =
-                        match outs with
-                        | OutputSpec ([], _) -> None
-                        | OutputSpec ([ hd ], _) ->
-                            let _, _, ot = tp hd.tp
+                        match outs_o, outs_n with
+                        | OutputSpec ([], _), OutputSpec ([], _) -> None
+                        | OutputSpec ([ hdO ], _), OutputSpec ([ hdN ], _) ->
+                            let _, _, ot = tp(hdO.tp, hdN.tp)
                             Some ot
                         | _ -> failwith (unsupported "multiple output declarations")
 
@@ -562,11 +589,15 @@ module Translation =
 
                     [ Method(IsLemma, pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
-        and typeDeclHeader (p: Path, d: Decl) =
-            typeDeclHeaderMain (p, d.name, d.tpvars)
-        and typeDeclHeaderMain (p: Path, n: string, tvs: TypeArg list) =
+        and typeDeclHeader (p: Path, dO: Decl, dN: Decl) =
+            assert (dO.name = dN.name)
+            typeDeclHeaderMain (p, dO.name, dO.tpvars, dN.tpvars)
+        and typeDeclHeaderMain (p: Path, n: string, tvs_o: TypeArg list, tvs_n: TypeArg list) =
             let pO, pN, pT = path p
-            let tvsO, tvsN, tvsT = List.unzip3 (List.map typearg tvs)
+
+            let tvsO, tvsN, tvsT =
+                List.unzip3 (List.map typearg2 (List.zip tvs_o tvs_n))
+
             let typeParams = Utils.listInterleave (tvsO, tvsN)
             let oldType = TApply(pO, typeargsToTVars tvsO)
             let newType = TApply(pN, typeargsToTVars tvsN)
@@ -599,9 +630,13 @@ module Translation =
                 failwith (unsupported "change in type/term arguments")
         and localDecl (ld: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
             let nO, nN, _ = name ld.name
-            let tO, tN, tT = tp ld.tp
+            let tO, tN, tT = tp(ld.tp, ld.tp)
             let g = ld.ghost
             LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), ((fst tT) (EVar nO), (snd tT) (EVar nN))
+        and localDecl2 (ldO: LocalDecl, ldN: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
+            let nO, nN, _ = name2(ldO.name, ldN.name)
+            let tO, tN, tT = tp(ldO.tp, ldN.tp)
+            LocalDecl(nO, tO, ldO.ghost), LocalDecl(nN, tN, ldN.ghost), ((fst tT) (EVar nO), (snd tT) (EVar nN))
         and listOfFuncToFuncOfList (l: (Expr -> Expr) List) =
             (fun x -> List.map (fun (a, b) -> a b) (List.zip l x))
         and diag (x: Expr, y: Expr) = EEqual(x, y)
@@ -615,7 +650,21 @@ module Translation =
                 EFun([ LocalDecl(xO, tO, false) ], tN, bodyXOE)
 
             reduce abs // reduce eta-contracts
-        and tp (t: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
+        and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
+            match tO, tN with
+            | TUnit, TUnit
+            | TBool, TBool
+            | TInt _, TInt _
+            | TNat _, TNat _
+            | TChar, TChar
+            | TString _, TString _
+            | TReal _, TReal _
+            | TBitVector _, TBitVector _
+            | TObject, TObject -> tO, tN, (id, id)
+            | TInt _, TReal _
+            | TReal _, TInt _ -> tO, tN, ((fun e -> ETypeConversion(e, tN)), (fun e -> ETypeConversion(e, tO)))
+            | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+        and tp (t: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
             match t with
             | TUnit
             | TBool
@@ -625,7 +674,7 @@ module Translation =
             | TString _
             | TReal _
             | TBitVector _
-            | TObject -> t, t, (id, id)
+            | TObject -> tpBuiltinTypes(t, tN)
             | TVar a ->
                 let aO, aN, aT = name a
                 // apply the function of the type variable to the old/new value
@@ -638,7 +687,7 @@ module Translation =
                 let r =
                     StaticReceiver({ path = pT.parent; tpargs = [] })
 
-                let tsONT = List.map tp ts
+                let tsONT = List.map tp (List.zip ts ts)  // TODO: finish the change on tp
 
                 let tsT =
                     List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", o, n, t2))) tsONT
@@ -653,7 +702,7 @@ module Translation =
                  (fun x -> EMethodApply(r, pT, tsN, tsT2 @ [ x ], false)))
             | TTuple ts ->
                 // element-wise translations on tuples
-                let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
+                let tsO, tsN, tsT = List.unzip3 (List.map tp (List.zip ts ts))
                 let its = List.indexed tsT
 
                 let T1 x =
@@ -687,7 +736,7 @@ module Translation =
                 let inputsO = List.map localDeclTerm ldsO
                 let inputsN = List.map localDeclTerm ldsN
                 // input type translation functions
-                let tsO, tsN, tsT = List.unzip3 (List.map tp ts)
+                let tsO, tsN, tsT = List.unzip3 (List.map tp (List.zip ts ts))
                 let its = List.indexed tsT
 
                 let T1 x =
@@ -696,7 +745,7 @@ module Translation =
                 let T2 x =
                     List.map (fun ((_, t2), x) -> t2 x) (List.zip tsT x)
                 // output type translation functions
-                let outputTypeO, outputTypeN, (outputT1, outputT2) = tp u
+                let outputTypeO, outputTypeN, (outputT1, outputT2) = tp(u, u)
                 // To translate fO(xO) to fN(xN), we need to translate xN to xO, apply fO,
                 // then translate the result to outputTypeN
                 let funsTranslation1 fO =
@@ -715,7 +764,7 @@ module Translation =
 
                 TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), (funsTranslation1, funsTranslation2)
             | TNullable t ->
-                let tO, tN, tT = tp t
+                let tO, tN, tT = tp (t, t)
 
                 let tT1 =
                     fun x -> EIf(EEqual(x, ENull tO), ENull tN, Some((fst tT) x))
@@ -742,7 +791,7 @@ module Translation =
                 TArray(b, tO), TArray(b, tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
             | TUnimplemented -> TUnimplemented, TUnimplemented, ((fun _ -> EUnimplemented), (fun _ -> EUnimplemented))
         and tpAbstracted (x: string, t: Type) =
-            let tO, tN, tT = tp t
+            let tO, tN, tT = tp (t, t)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
         and expr (exprCtx: Context) (e: Expr) : Expr * Expr * (Expr option) =
             let eO = NameTranslator(true).expr (exprCtx, e)
