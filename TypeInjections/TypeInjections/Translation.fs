@@ -67,7 +67,7 @@ module Translation =
         and name2 (s: string, t: string) =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
-            s + "_O", t + "_N", (s + "_to_" + t, t + "_to_" + s)
+            s + "_O", t + "_N", if s = t then (s, s + "_back") else (s + "_to_" + t, t + "_back_to_" + s)
         and typearg (a: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
             let v = snd a
             let aO, aN, aT = name (fst a)
@@ -651,6 +651,7 @@ module Translation =
 
             reduce abs // reduce eta-contracts
         and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
+            let realToInt eReal tInt = EMemberRef(ObjectReceiver(eReal), Path [ "Floor" ], [])
             match tO, tN with
             | TUnit, TUnit
             | TBool, TBool
@@ -661,11 +662,11 @@ module Translation =
             | TReal _, TReal _
             | TBitVector _, TBitVector _
             | TObject, TObject -> tO, tN, (id, id)
-            | TInt _, TReal _
-            | TReal _, TInt _ -> tO, tN, ((fun e -> ETypeConversion(e, tN)), (fun e -> ETypeConversion(e, tO)))
+            | TInt _, TReal _ -> tO, tN, ((fun e -> ETypeConversion(e, tN)), (fun e -> realToInt e tO))
+            | TReal _, TInt _ -> tO, tN, ((fun e -> realToInt e tN), (fun e -> ETypeConversion(e, tO)))
             | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
-        and tp (t: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
-            match t with
+        and tp (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
+            match tO with
             | TUnit
             | TBool
             | TInt _
@@ -674,20 +675,29 @@ module Translation =
             | TString _
             | TReal _
             | TBitVector _
-            | TObject -> tpBuiltinTypes(t, tN)
+            | TObject -> tpBuiltinTypes(tO, tN)
             | TVar a ->
-                let aO, aN, aT = name a
-                // apply the function of the type variable to the old/new value
-                TVar aO,
-                TVar aN,
-                ((fun e -> EAnonApply(EVar(fst aT), [ e ])), (fun e -> EAnonApply(EVar(snd aT), [ e ])))
-            | TApply (p, ts) ->
-                let pO, pN, pT = path p
+                match tN with
+                | TVar b ->
+                    let aO, aN, aT = name2(a, b)
+                    // apply the function of the type variable to the old/new value
+                    TVar aO,
+                    TVar aN,
+                    ((fun e -> EAnonApply(EVar(fst aT), [ e ])), (fun e -> EAnonApply(EVar(snd aT), [ e ])))
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TApply (p_o, ts_o) ->
+                let p_n, ts_n = match tN with
+                                | TApply (p_n, ts_n) -> p_n, ts_n
+                                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+
+                // we do not support different function names for different types of TApply for now
+                let pO, _, pT = path p_o
+                let _, pN, _ = path p_n
 
                 let r =
                     StaticReceiver({ path = pT.parent; tpargs = [] })
-
-                let tsONT = List.map tp (List.zip ts ts)  // TODO: finish the change on tp
+                
+                let tsONT = List.map tp (List.zip ts_o ts_n)
 
                 let tsT =
                     List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", o, n, t2))) tsONT
@@ -700,98 +710,123 @@ module Translation =
                 TApply(pN, tsN),
                 ((fun x -> EMethodApply(r, pT, tsO, tsT1 @ [ x ], false)),
                  (fun x -> EMethodApply(r, pT, tsN, tsT2 @ [ x ], false)))
-            | TTuple ts ->
-                // element-wise translations on tuples
-                let tsO, tsN, tsT = List.unzip3 (List.map tp (List.zip ts ts))
-                let its = List.indexed tsT
+            | TTuple ts_o ->
+                match tN with
+                | TTuple ts_n ->
+                    // element-wise translations on tuples
+                    assert(ts_o.Length = ts_n.Length)
+                    let tsO, tsN, tsT = List.unzip3 (List.map tp (List.zip ts_o ts_n))
+                    let its = List.indexed tsT
 
-                let T1 x =
-                    let esT1 =
-                        its
-                        |> List.map (fun (i, (t1, _)) -> t1 (reduce (EProj(x, i)))) // reduce eliminates projections from tuples
+                    let T1 x =
+                        let esT1 =
+                            its
+                            |> List.map (fun (i, (t1, _)) -> t1 (reduce (EProj(x, i)))) // reduce eliminates projections from tuples
 
-                    ETuple(esT1) // tuple of component mappings
+                        ETuple(esT1) // tuple of component mappings
 
-                let T2 x =
-                    let esT2 =
-                        its
-                        |> List.map (fun (i, (_, t2)) -> t2 (reduce (EProj(x, i)))) // reduce eliminates projections from tuples
+                    let T2 x =
+                        let esT2 =
+                            its
+                            |> List.map (fun (i, (_, t2)) -> t2 (reduce (EProj(x, i)))) // reduce eliminates projections from tuples
 
-                    ETuple(esT2) // tuple of component mappings
+                        ETuple(esT2) // tuple of component mappings
 
-                TTuple tsO, TTuple tsN, (T1, T2)
-            | TFun (ts, u) ->
-                // translate functions
-                // x1:t1, ..., xn:tn
-                let lds =
-                    List.indexed ts
-                    |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
-                // ldsO = x1O:t1O, ..., xnO:tnO
-                // ldsN = x1N:t1N, ..., xnN:tnN
-                // ldsT = t1-translations(x1O,x1N), ..., tN-translations(xnO,xnN)
-                let ldsO, ldsN, ldsT = List.unzip3 (List.map localDecl lds)
-                let ldsT1, ldsT2 = List.unzip ldsT // unused... is ldsT1 the same as T1 inputsO?
-                let inputTypesO = List.map localDeclType ldsO
-                let inputTypesN = List.map localDeclType ldsN
-                let inputsO = List.map localDeclTerm ldsO
-                let inputsN = List.map localDeclTerm ldsN
-                // input type translation functions
-                let tsO, tsN, tsT = List.unzip3 (List.map tp (List.zip ts ts))
-                let its = List.indexed tsT
+                    TTuple tsO, TTuple tsN, (T1, T2)
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TFun (ts_o, u_o) ->
+                match tN with
+                | TFun (ts_n, u_n) ->
+                    // translate functions
+                    // x1:t1, ..., xn:tn
+                    let lds_o =
+                        List.indexed ts_o
+                        |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+                    let lds_n =
+                        List.indexed ts_n
+                        |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+                    // ldsO = x1O:t1O, ..., xnO:tnO
+                    // ldsN = x1N:t1N, ..., xnN:tnN
+                    // ldsT = t1-translations(x1O,x1N), ..., tN-translations(xnO,xnN)
+                    let ldsO, ldsN, ldsT = List.unzip3 (List.map localDecl2 (List.zip lds_o lds_n))
+                    let ldsT1, ldsT2 = List.unzip ldsT // unused... is ldsT1 the same as T1 inputsO?
+                    let inputTypesO = List.map localDeclType ldsO
+                    let inputTypesN = List.map localDeclType ldsN
+                    let inputsO = List.map localDeclTerm ldsO
+                    let inputsN = List.map localDeclTerm ldsN
+                    // input type translation functions
+                    let tsO, tsN, tsT = List.unzip3 (List.map tp (List.zip ts_o ts_n))
+                    let its = List.indexed tsT
 
-                let T1 x =
-                    List.map (fun ((t1, _), x) -> t1 x) (List.zip tsT x)
+                    let T1 x =
+                        List.map (fun ((t1, _), x) -> t1 x) (List.zip tsT x)
 
-                let T2 x =
-                    List.map (fun ((_, t2), x) -> t2 x) (List.zip tsT x)
-                // output type translation functions
-                let outputTypeO, outputTypeN, (outputT1, outputT2) = tp(u, u)
-                // To translate fO(xO) to fN(xN), we need to translate xN to xO, apply fO,
-                // then translate the result to outputTypeN
-                let funsTranslation1 fO =
-                    let varsN = inputsN
-                    let varsO = T2 varsN
-                    let bodyO = EAnonApply(fO, varsO)
-                    let bodyN = outputT1 bodyO
-                    EFun(ldsN, outputTypeN, bodyN)
+                    let T2 x =
+                        List.map (fun ((_, t2), x) -> t2 x) (List.zip tsT x)
+                    // output type translation functions
+                    let outputTypeO, outputTypeN, (outputT1, outputT2) = tp(u_o, u_n)
+                    // To translate fO(xO) to fN(xN), we need to translate xN to xO, apply fO,
+                    // then translate the result to outputTypeN
+                    let funsTranslation1 fO =
+                        let varsN = inputsN
+                        let varsO = T2 varsN
+                        let bodyO = EAnonApply(fO, varsO)
+                        let bodyN = outputT1 bodyO
+                        EFun(ldsN, outputTypeN, bodyN)
 
-                let funsTranslation2 fN =
-                    let varsO = inputsO
-                    let varsN = T1 varsO
-                    let bodyN = EAnonApply(fN, varsN)
-                    let bodyO = outputT2 bodyN
-                    EFun(ldsO, outputTypeO, bodyO)
+                    let funsTranslation2 fN =
+                        let varsO = inputsO
+                        let varsN = T1 varsO
+                        let bodyN = EAnonApply(fN, varsN)
+                        let bodyO = outputT2 bodyN
+                        EFun(ldsO, outputTypeO, bodyO)
 
-                TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), (funsTranslation1, funsTranslation2)
-            | TNullable t ->
-                let tO, tN, tT = tp (t, t)
+                    TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), (funsTranslation1, funsTranslation2)
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TNullable t_o ->
+                match tN with
+                | TNullable t_n ->
+                    let tO, tN, tT = tp (t_o, t_n)
 
-                let tT1 =
-                    fun x -> EIf(EEqual(x, ENull tO), ENull tN, Some((fst tT) x))
+                    let tT1 =
+                        fun x -> EIf(EEqual(x, ENull tO), ENull tN, Some((fst tT) x))
 
-                let tT2 =
-                    fun x -> EIf(EEqual(x, ENull tN), ENull tO, Some((snd tT) x))
+                    let tT2 =
+                        fun x -> EIf(EEqual(x, ENull tN), ENull tO, Some((snd tT) x))
 
-                TNullable tO, TNullable tN, (tT1, tT2)
-            | TSeq (b, t) ->
-                let tO, tN, tT = tpAbstracted ("sq", t)
-                TSeq(b, tO), TSeq(b, tN), (seqRel tO tN (fst tT), seqRel tN tO (snd tT))
-            | TSet (b, t) ->
-                let tO, tN, tT = tpAbstracted ("st", t)
-                TSet(b, tO), TSet(b, tN), (setRel tO tN (fst tT), setRel tN tO (snd tT))
-            | TMap (b, s, t) ->
-                let sO, sN, sT = tpAbstracted ("mp", s)
-                let tO, tN, tT = tpAbstracted ("mp", t)
+                    TNullable tO, TNullable tN, (tT1, tT2)
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TSeq (b_o, t_o) ->
+                match tN with
+                | TSeq (b_n, t_n) ->
+                    let tO, tN, tT = tpAbstracted ("sq", t_o, t_n)
+                    TSeq(b_o, tO), TSeq(b_n, tN), (seqRel tO tN (fst tT), seqRel tN tO (snd tT))
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TSet (b_o, t_o) ->
+                match tN with
+                | TSet (b_n, t_n) ->
+                    let tO, tN, tT = tpAbstracted ("st", t_o, t_n)
+                    TSet(b_o, tO), TSet(b_n, tN), (setRel tO tN (fst tT), setRel tN tO (snd tT))
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TMap (b_o, s_o, t_o) ->
+                match tN with
+                | TMap (b_n, s_n, t_n) ->
+                    let sO, sN, sT = tpAbstracted ("mp", s_o, s_n)
+                    let tO, tN, tT = tpAbstracted ("mp", t_o, t_n)
 
-                TMap(b, sO, tO),
-                TMap(b, sN, tN),
-                ((mapRel sO sN sT tO tN tT), (mapRel sN sO (snd sT, fst sT) tN tO (snd tT, fst tT)))
-            | TArray (b, t) ->
-                let tO, tN, tT = tpAbstracted ("ar", t)
-                TArray(b, tO), TArray(b, tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
+                    TMap(b_o, sO, tO),
+                    TMap(b_n, sN, tN),
+                    ((mapRel sO sN sT tO tN tT), (mapRel sN sO (snd sT, fst sT) tN tO (snd tT, fst tT)))
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
+            | TArray (b_o, t_o) ->
+                match tN with
+                | TArray (b_n, t_n) ->
+                    let tO, tN, tT = tpAbstracted ("ar", t_o, t_n)
+                    TArray(b_o, tO), TArray(b_n, tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
+                | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
             | TUnimplemented -> TUnimplemented, TUnimplemented, ((fun _ -> EUnimplemented), (fun _ -> EUnimplemented))
-        and tpAbstracted (x: string, t: Type) =
-            let tO, tN, tT = tp (t, t)
+        and tpAbstracted (x: string, t_o: Type, t_n: Type) =
+            let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
         and expr (exprCtx: Context) (e: Expr) : Expr * Expr * (Expr option) =
             let eO = NameTranslator(true).expr (exprCtx, e)
