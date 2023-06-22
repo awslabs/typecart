@@ -165,18 +165,10 @@ module Translation =
             | Diff.DUnimplemented -> [ declO ]
             | Diff.Module (_, msD) -> [ Module(n, decls ctxI msD, context.currentMeta ()) ]
             | Diff.TypeDef (_, tvsD, superD, exprD) ->
-                if not tvsD.isSame
-                   || not superD.isSame
-                   || not exprD.isSame then
-                    failwith (
-                        unsupported "change in type declaration: "
-                        + p.ToString()
-                    )
-
                 match declO with
                 | TypeDef (_, _, super, _, isNew, _) ->
                     // TypeDefs produce methods
-                    let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeader (p, declO, declN)
+                    let typeParams, inSpec, outSpec, xtO, xtN, inSpecBack, outSpecBack = typeDeclHeader (p, declO, declN)
                     let xO = localDeclTerm xtO
                     let xN = localDeclTerm xtN
 
@@ -193,9 +185,24 @@ module Translation =
                                 (fst superT) xO
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
+                    let body_back =
+                        if isNew then
+                            // new types are new primitive types, so return identity map
+                            // but we may need explicit type conversion
+                            ETypeConversion(xN, xtO.tp)
+                        else
+                            match declN with
+                            | TypeDef (_, _, superN, _, _, _) ->
+                                // otherwise, call function of supertype
+                                let _, _, superT = tp(super, superN)
+                                (snd superT) xN
+                            | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
+                    
+                    let _, _, names = name p.name
+                    
                     [ Method(
                           IsFunction,
-                          pT.name,
+                          fst names,
                           typeParams,
                           inSpec,
                           outSpec,
@@ -203,6 +210,20 @@ module Translation =
                           [],
                           [],
                           Some body,
+                          false,
+                          true,
+                          context.currentMeta ()
+                      );
+                    Method(
+                          IsFunction,
+                          snd names,
+                          typeParams,
+                          inSpecBack,
+                          outSpecBack,
+                          [],
+                          [],
+                          [],
+                          Some body_back,
                           false,
                           true,
                           context.currentMeta ()
@@ -235,7 +256,7 @@ module Translation =
                 //   | con1(x1,x2) => con1(a(x1),u(x2))
                 //   | con2(x1,x2) => con2(b(x1),v_to_w(x2))
                 // and accordingly for the general case.
-                let typeParams, inSpec, outSpec, xtO, xtN = typeDeclHeaderMain (p, n, tvsO, tvsN)
+                let typeParams, inSpec, outSpec, xtO, xtN, _, _ = typeDeclHeaderMain (p, n, tvsO, tvsN)
 
                 let mkCase (elem: Diff.Elem<YIL.DatatypeConstructor, Diff.DatatypeConstructor>) =
                     // to share code between the cases, we interpret the change as an update
@@ -606,11 +627,15 @@ module Translation =
             let xtN = LocalDecl(xN, newType, false)
 
             let inputs = (fst (List.unzip tvsT)) @ [ xtO ]
-
             let inSpec = InputSpec(inputs, [])
             let outType = newType
             let outSpec = outputType (outType, [])
-            typeParams, inSpec, outSpec, xtO, xtN
+            
+            let inputs_back = (snd (List.unzip tvsT)) @ [ xtN ]
+            let inSpec_back = InputSpec(inputs_back, [])
+            let outType_back = oldType
+            let outSpec_back = outputType (outType_back, [])
+            typeParams, inSpec, outSpec, xtO, xtN, inSpec_back, outSpec_back
         and context
             (
                 tpDs: Diff.TypeArgList,
@@ -691,11 +716,13 @@ module Translation =
                                 | _ -> failwith (unsupported "trying to translate " + tO.ToString() + " to another type: " + tN.ToString())
 
                 // we do not support different function names for different types of TApply for now
-                let pO, _, pT = path p_o
+                let par = p_o.parent
+                let pO, _, _ = path p_o
                 let _, pN, _ = path p_n
+                let _, _, names = name2(p_o.name, p_n.name)
 
                 let r =
-                    StaticReceiver({ path = pT.parent; tpargs = [] })
+                    StaticReceiver({ path = par; tpargs = [] })
                 
                 let tsONT = List.map tp (List.zip ts_o ts_n)
 
@@ -708,8 +735,8 @@ module Translation =
 
                 TApply(pO, tsO),
                 TApply(pN, tsN),
-                ((fun x -> EMethodApply(r, pT, tsO, tsT1 @ [ x ], false)),
-                 (fun x -> EMethodApply(r, pT, tsN, tsT2 @ [ x ], false)))
+                ((fun x -> EMethodApply(r, par.child(fst names), tsO, tsT1 @ [ x ], false)),
+                 (fun x -> EMethodApply(r, par.child(snd names), tsN, tsT2 @ [ x ], false)))
             | TTuple ts_o ->
                 match tN with
                 | TTuple ts_n ->

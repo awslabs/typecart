@@ -122,6 +122,10 @@ module Differ =
             nO = nN && gO = gN && sO = sN && mO = mN
         | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _),
           Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) -> nO = nN && lO = lN && gO = gN && sO = sN
+        | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) ->
+            isNO = isNN
+            && (prO.IsNone && prN.IsNone
+                || (prO.IsSome && prN.IsSome && (fst prO.Value) = (fst prN.Value)))
         | _ -> false
 
     /// diffs two similar declarations
@@ -157,7 +161,7 @@ module Differ =
             // changing variable name (fst pr) not supported
             isNO = isNN
             && (prO.IsNone && prN.IsNone
-                || (fst prO.Value) = (fst prN.Value)) ->
+                || (prO.IsSome && prN.IsSome && (fst prO.Value) = (fst prN.Value))) ->
             let s = Option.map snd
             Some(Diff.TypeDef(name (nO, nN), typeargs (tsO, tsN), tp (spO, spN), exprO (s prO, s prN)))
         | _ -> None
@@ -187,7 +191,7 @@ module Differ =
     /// insertions and deletions are detected, but renamings and reorderings generate Delete+Add
     and typeargs (old: TypeArg list, nw: TypeArg list) =
         let similar (o: TypeArg, n: TypeArg) = (fst o) = (fst n)
-        complexList (old, nw, similar, (fun (o, n) -> Some(o)))  // TODO: store both typeargs
+        complexList (old, nw, similar, (fun (o, n) -> Some(o))) // TODO: store both typeargs
 
     /// diffs two lists of local decls
     /// insertions and deletions are detected, but renamings and reorderings generate Delete+Add
