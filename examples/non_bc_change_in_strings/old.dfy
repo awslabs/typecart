@@ -6,10 +6,10 @@ module Matching {
     match r {
       case Empty => false
       case Cons(f, v, tl) =>
-        if p.field == f then 
-           p.value == v
-        else 
-            hasMatchingField(tl, p)
+        if p.field == f then
+          p.value == v
+        else
+          hasMatchingField(tl, p)
     }
   }
 }
