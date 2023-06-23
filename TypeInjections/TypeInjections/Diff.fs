@@ -59,7 +59,7 @@ module Diff =
             List.choose
                 (fun e ->
                     match e with
-                    | Same y -> Some (y, y)
+                    | Same y -> Some(y, y)
                     | Update (yo, yn, _) -> Some(yo, yn)
                     | _ -> None)
                 this.elements

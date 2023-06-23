@@ -552,26 +552,26 @@ module DafnyToYIL =
         | :? TypeProxy as t -> tp t.T // e.g., wrapper for inferred types
         | :? BitvectorType as t -> Y.TBitVector(t.Width)
         | _ -> unsupported $"Type {t.ToString()}"
-    
+
     and parseExprDotName (e: ExprDotName) : Y.Path option =
         match e.Lhs with
-        | :? NameSegment as lhsName ->
-            Some (Y.Path [ lhsName.Name; e.SuffixName ])
+        | :? NameSegment as lhsName -> Some(Y.Path [ lhsName.Name; e.SuffixName ])
         | :? ExprDotName as lhsExpr ->
             let lhs = parseExprDotName lhsExpr
+
             if lhs.IsNone then
                 None
             else
-                Some (lhs.Value.child(e.SuffixName))
+                Some(lhs.Value.child (e.SuffixName))
         | _ ->
             // TODO: more types
             None
-    
+
     and replacePath (e: Y.Expr) (p: Y.Path option) : Y.Expr =
         if p.IsNone then
             e
         else
-            Y.replacePath(e, p.Value)
+            Y.replacePath (e, p.Value)
 
     and exprO (e: Expression) : Y.Expr option =
         if e = null then

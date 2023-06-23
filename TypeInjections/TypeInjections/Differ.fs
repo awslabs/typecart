@@ -125,7 +125,9 @@ module Differ =
         | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) ->
             isNO = isNN
             && (prO.IsNone && prN.IsNone
-                || (prO.IsSome && prN.IsSome && (fst prO.Value) = (fst prN.Value)))
+                || (prO.IsSome
+                    && prN.IsSome
+                    && (fst prO.Value) = (fst prN.Value)))
         | _ -> false
 
     /// diffs two similar declarations
@@ -161,7 +163,9 @@ module Differ =
             // changing variable name (fst pr) not supported
             isNO = isNN
             && (prO.IsNone && prN.IsNone
-                || (prO.IsSome && prN.IsSome && (fst prO.Value) = (fst prN.Value))) ->
+                || (prO.IsSome
+                    && prN.IsSome
+                    && (fst prO.Value) = (fst prN.Value))) ->
             let s = Option.map snd
             Some(Diff.TypeDef(name (nO, nN), typeargs (tsO, tsN), tp (spO, spN), exprO (s prO, s prN)))
         | _ -> None
