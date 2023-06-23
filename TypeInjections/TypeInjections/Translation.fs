@@ -63,14 +63,14 @@ module Translation =
         and name (s: string) =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
-            s + "_O", s + "_N", (s, s + "_back")
+            s + "_O", s + "_N", (s + "_forward", s + "_backward")
         and name2 (s: string, t: string) =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
             s + "_O",
             t + "_N",
             if s = t then
-                (s, s + "_back")
+                (s + "_forward", s + "_backward")
             else
                 (s + "_to_" + t, t + "_back_to_" + s)
         and typearg (a: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
@@ -264,9 +264,10 @@ module Translation =
                 //   | con1(x1,x2) => con1(a(x1),u(x2))
                 //   | con2(x1,x2) => con2(b(x1),v_to_w(x2))
                 // and accordingly for the general case.
-                let typeParams, inSpec, outSpec, xtO, xtN, _, _ = typeDeclHeaderMain (p, n, tvsO, tvsN)
+                let typeParams, inSpec, outSpec, xtO, xtN, inSpecBack, outSpecBack =
+                    typeDeclHeaderMain (p, n, tvsO, tvsN)
 
-                let mkCase (elem: Diff.Elem<YIL.DatatypeConstructor, Diff.DatatypeConstructor>) =
+                let mkCase (isForward: bool) (elem: Diff.Elem<YIL.DatatypeConstructor, Diff.DatatypeConstructor>) =
                     // to share code between the cases, we interpret the change as an update
                     // old and new constructor and the diff
                     let ctrO, ctrN, ctrD =
@@ -290,9 +291,13 @@ module Translation =
 
                     let insT1, insT2 = List.unzip insT
                     let argsO = List.map localDeclTerm insO
+                    let argsN = List.map localDeclTerm insN
 
                     let patO =
                         EConstructorApply(pO.child ctrO.name, [], argsO) // type parameters do not matter in a pattern
+
+                    let patN =
+                        EConstructorApply(pN.child ctrN.name, [], argsN)
                     // to share code between two cases below
                     // "case (p1,p2) -> body // comment" where vs_i are the variables in p_i
                     let buildCase (vars, pattern, comment, body) =
@@ -303,30 +308,47 @@ module Translation =
                     match elem with
                     // no cases to generate for Delete, but we generate stubs for customization
                     | Diff.Add _ ->
-                        // nothing to do
-                        []
+                        if isForward then
+                            // nothing to do
+                            []
+                        else
+                            // case n -> ???
+                            buildCase (insN, patN, "deleted constructor", missingTerm)
                     | Diff.Delete _ ->
-                        // case o -> ???
-                        buildCase (insO, patO, "deleted constructor", missingTerm)
+                        if isForward then
+                            // case o -> ???
+                            buildCase (insO, patO, "deleted constructor", missingTerm)
+                        else
+                            // nothing to do
+                            []
                     | Diff.Same _ ->
                         // case o -> o
                         buildCase (
-                            insO,
-                            patO,
+                            (if isForward then insO else insN),
+                            (if isForward then patO else patN),
                             "unchanged constructor",
-                            EConstructorApply(pN.child ctrN.name, [], insT1)
+                            EConstructorApply(
+                                (if isForward then
+                                     pN.child ctrN.name
+                                 else
+                                     pO.child ctrO.name),
+                                [],
+                                (if isForward then insT1 else insT2)
+                            )
                         )
                     | Diff.Update _ ->
                         // for updates, we only generate the translations for the unchanged arguments
                         buildCase (
-                            insO,
-                            patO,
+                            (if isForward then insO else insN),
+                            (if isForward then patO else patN),
                             "added/deleted constructor arguments",
                             EConstructorApply(pN.child ctrN.name, [], insT1)
                         )
 
                 let xO, xN = localDeclTerm xtO, localDeclTerm xtN
                 let tO, tN = localDeclType xtO, localDeclType xtN
+
+                let _, _, names = name p.name
 
                 let body =
                     if tvsD.elements.IsEmpty
@@ -336,12 +358,22 @@ module Translation =
                         // for joint datatypes with no type parameters, generate identity function
                         xO
                     else
-                        EMatch(xO, tO, List.collect mkCase ctrsD.elements, None)
+                        EMatch(xO, tO, List.collect (mkCase true) ctrsD.elements, None)
 
-                let translation =
-                    Method(
+                let body_back =
+                    if tvsD.elements.IsEmpty
+                       && ctrsD.isSame
+                       && msD.isSame
+                       && isJoint p then
+                        // for joint datatypes with no type parameters, generate identity function
+                        xN
+                    else
+                        EMatch(xN, tN, List.collect (mkCase false) ctrsD.elements, None)
+
+                let translations =
+                    [ Method(
                         IsFunction,
-                        pT.name,
+                        fst names,
                         typeParams,
                         inSpec,
                         outSpec,
@@ -352,7 +384,21 @@ module Translation =
                         false,
                         true,
                         emptyMeta
-                    )
+                      )
+                      Method(
+                          IsFunction,
+                          snd names,
+                          typeParams,
+                          inSpecBack,
+                          outSpecBack,
+                          [],
+                          [],
+                          [],
+                          Some body_back,
+                          false,
+                          true,
+                          emptyMeta
+                      ) ]
 
                 let memberLemmas = decls ctxI msD
                 // All paths to a lemma generated by a datatype function must insert "_Lemma".
@@ -396,7 +442,7 @@ module Translation =
                             | _ -> d)
                         memberLemmas
 
-                translation :: memberLemmasWithLemmaSuffix
+                translations @ memberLemmasWithLemmaSuffix
             // immutable fields with initializer yield a lemma, mutable fields yield nothing
             | Diff.Field (_, tpD, dfD) ->
                 match declO with
