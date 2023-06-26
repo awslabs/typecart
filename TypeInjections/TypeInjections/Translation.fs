@@ -284,9 +284,6 @@ module Translation =
                         List.unzip3 (List.map localDecl ctrN.ins)
 
                     let _, _, insT =
-                        if not (ctrD.ins().isSameOrUpdated) then
-                            failwith (unsupported "addition or deletion to datatype constructor argument")
-
                         List.unzip3 (List.map localDecl2 (ctrD.ins().getSameOrUpdate ()))
 
                     let insT1, insT2 = List.unzip insT
@@ -341,7 +338,7 @@ module Translation =
                         buildCase (
                             (if isForward then insO else insN),
                             (if isForward then patO else patN),
-                            "added/deleted constructor arguments",
+                            "added/deleted/updated constructor arguments",
                             EConstructorApply(
                                 (if isForward then
                                      pN.child ctrN.name
