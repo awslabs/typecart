@@ -1412,7 +1412,8 @@ module YIL =
             | EVar n ->
                 let n1 = n.Replace("_mcc#", "mcc_") // Dafny-generated names that are not valid Dafny concrete syntax
                 let n2 = if n1.StartsWith("_") then "_" else n1 // Dafny-generated anonymous variables
-                n2
+                let n3 = n2.Replace("#", "x") // Variables with no names
+                n3
             | EThis -> "this"
             | ENew (ct, _) -> "new " + this.classType (ct) + "()"
             | ENull _ -> "null"
@@ -1651,7 +1652,11 @@ module YIL =
             let op = if u.monadic.IsSome then ":-" else ":="
             " " + op + " " + (this.expr u.df pctx)
 
-        member this.localDecl(ld: LocalDecl) = ld.name + ": " + (this.tp ld.tp)
+        member this.localDecl(ld: LocalDecl) =
+            if ld.name.StartsWith('#') then
+                (this.tp ld.tp)  // no name, only type
+            else
+                ld.name + ": " + (this.tp ld.tp)
 
         member this.classType(ct: ClassType) =
             ct.path.ToString() + (this.tps ct.tpargs)
