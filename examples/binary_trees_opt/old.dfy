@@ -1,4 +1,4 @@
-module Old.BinaryTree {
+module BinaryTree {
 
   // Keyed binary trees and search
   datatype tree = Leaf | Node (tree, int, tree)
