@@ -119,7 +119,7 @@ module Translation =
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
         and backward_compatible (insT: (Expr * Expr) list) (insN: LocalDecl list) : Expr list =
-            List.map (fun ((f1, f2), inN: LocalDecl) -> EEqual(f1, EVar(inN.name))) (List.zip insT insN)
+            List.map (fun ((f1, f2), inN: LocalDecl) -> EEqual(EVar(inN.name), f1)) (List.zip insT insN)
         and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Expr =
             // forall x1_O: U_O :: U_back(U(x1_O)) == x1_O
             let nO, _, _ = name "x"
@@ -521,10 +521,10 @@ module Translation =
                     // For a static method without specification:
                     // method p<u,v>(x:a,y:u,z:u->v):B = {_} --->
                     // lemma p<uO,uN,vO,vN>(uT:uO->uN, uT_back:uN->uO, vT:vO->vN, xO:aO, xN:aN, yO:uO, yN:uN, zO:uO->vO, zN:uN->vN))
-                    //     requires aT(xO)==xN
-                    //     requires uT(yO)==yN
+                    //     requires xN==aT(xO)
+                    //     requires yN==uT(yO)
                     //     requires ((x1_N:uN) => vT(zO(uT_back(x1_N)))) == zN
-                    //     ensures BT(pO(xO,uO))==pN(xN,uN)
+                    //     ensures pN(xN,uN)==BT(pO(xO,uO))
                     // and accordingly for the general case. If not static, the lemma additionally quantifies over the receivers.
                     let parentDecl = context.lookupCurrent ()
                     // the following are only needed if the method is not static, but it's easier to compute them in any case
@@ -608,7 +608,7 @@ module Translation =
                         |> List.unzip3
 
                     // insT is (f1(old), f2(new))
-                    // backward compatibility: f1(old) == new
+                    // backward compatibility: new == f1(old)
                     let inputsTranslations =
                         if isStatic then
                             backward_compatible insT insN_translated

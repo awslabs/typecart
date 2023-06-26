@@ -17,15 +17,29 @@ See [examples and features](docs/ExamplesFeatures.md).
 
 ## Build
 
-typeCart builds on [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/5.0). To build typeCart, simply invoke `dotnet build` in the following three project folders:
+typeCart builds on [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/6.0). To build typeCart, simply invoke `dotnet build` in the following three project folders:
 
  - `TypeInjections/TypeInjections`: Main typeCart program. To use typeCart, run the compiled program on two dafny files, two directories containing a dafny project each, with an optional argument being a list of regex dictating what files typeCart should ignore in the directory.  The regexes would match on the ignored filenames, and `.` and `/` needn't be escaped.
  - `TypeInjections/TypeInjections.Test`: Tests for typeCart
  - `TypeInjections/Tool`: dotnet CLI tool for typeCart.
 
+## Run
 
+typeCart takes as input two Dafny files, and generates the analysis results into a folder.
+Following is the command to run the `complex` example and output the result into the `tmp` folder:
 
+```shell
+TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections \
+  examples/complex/old.dfy \
+  examples/complex/new.dfy \
+  tmp
+```
 
+## Troubleshooting
+
+typeCart may generate code that is not automatically verifiable by Dafny. See [Troubleshooting](docs/Troubleshooting.md).
+
+## Contributing
 
 **Contributions are welcomed!** See [CONTRIBUTING](CONTRIBUTING.md) guidelines for more information.
 
