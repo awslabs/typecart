@@ -284,10 +284,10 @@ module Translation =
                         List.unzip3 (List.map localDecl ctrN.ins)
 
                     let _, _, insT =
-                        if not (ctrD.ins().getUpdate().IsEmpty) then
-                            failwith (unsupported "update to datatype constructor argument")
+                        if not (ctrD.ins().isSameOrUpdated) then
+                            failwith (unsupported "addition or deletion to datatype constructor argument")
 
-                        List.unzip3 (List.map localDecl (ctrD.ins().getSame ()))
+                        List.unzip3 (List.map localDecl2 (ctrD.ins().getSameOrUpdate ()))
 
                     let insT1, insT2 = List.unzip insT
                     let argsO = List.map localDeclTerm insO
@@ -342,7 +342,14 @@ module Translation =
                             (if isForward then insO else insN),
                             (if isForward then patO else patN),
                             "added/deleted constructor arguments",
-                            EConstructorApply(pN.child ctrN.name, [], insT1)
+                            EConstructorApply(
+                                (if isForward then
+                                     pN.child ctrN.name
+                                 else
+                                     pO.child ctrO.name),
+                                [],
+                                (if isForward then insT1 else insT2)
+                            )
                         )
 
                 let xO, xN = localDeclTerm xtO, localDeclTerm xtN
