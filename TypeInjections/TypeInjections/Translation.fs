@@ -495,7 +495,6 @@ module Translation =
                 | Method(methodType = IsMethod), _ -> []
                 | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _),
                   Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, _) ->
-                    // we ignore bodyO, i.e., ignore changes in the body
                     if not tvsD.isSameOrUpdated then
                         failwith (
                             unsupported "addition or deletion in type parameters: "
@@ -674,15 +673,17 @@ module Translation =
                                 bdO
                                 |> Option.bind (fun b -> proof oldCtx b resultN (fst ot))
                             | None -> Some(EBlock [])
-                        | Diff.UpdateExpr bd ->
+                        | _ ->
                             // updated body: try to generate proof sketch
                             // use oldCtx to replace "this" with old variables
-                            match outputTypeT with
-                            | Some ot -> proof oldCtx bd resultN (fst ot)
-                            | None -> Some(EBlock [])
-                        | _ ->
-                            // other cases: generate empty proof
-                            Some(EBlock [])
+                            match bodyO with
+                            | Some bd ->
+                                match outputTypeT with
+                                | Some ot -> proof oldCtx bd resultN (fst ot)
+                                | None -> Some(EBlock [])
+                            | None ->
+                                // other cases: generate empty proof
+                                Some(EBlock [])
 
                     [ Method(IsLemma, pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
