@@ -960,16 +960,16 @@ module YIL =
 
         /// convenience method for creating a new context when traversing into a child declaration
         member this.enter(n: string) : Context =
-            Context(prog, currentDecl.child (n), tpvars, vars, pos, importPaths, None)
+            Context(prog, currentDecl.child (n), tpvars, vars, pos, importPaths, thisDecl)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(ns: string list) : Context =
-            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, importPaths, None)
+            Context(prog, currentDecl, List.append tpvars (List.map plainTypeArg ns), vars, pos, importPaths, thisDecl)
         /// convenience method for adding type variable declarations to the context
         member this.addTpvars(tvs: TypeArg list) : Context =
-            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, importPaths, None)
+            Context(prog, currentDecl, List.append tpvars tvs, vars, pos, importPaths, thisDecl)
 
         member this.add(ds: LocalDecl list) : Context =
-            Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths, None)
+            Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths, thisDecl)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
         
@@ -984,13 +984,13 @@ module YIL =
 
         /// remembers where we are
         member this.setPos(p: ContextPosition) =
-            Context(prog, currentDecl, tpvars, vars, p, importPaths, None)
+            Context(prog, currentDecl, tpvars, vars, p, importPaths, thisDecl)
 
         member this.enterBody() = this.setPos (BodyPosition)
 
         // add and remove imports
         member this.addImport(importType: ImportType) =
-            Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths, None)
+            Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths, thisDecl)
 
     (* ***** printer for the language above
 
@@ -1595,7 +1595,7 @@ module YIL =
                 listToString (lhsExprs, ",")
                 + (this.update u pctx)
             | EDeclChoice (ld, e) -> "var " + (this.localDecl ld) + " :| " + (expr e)
-            | ETypeConversion (e, t) -> (expr e) + " as " + (tp t)
+            | ETypeConversion (e, t) -> "(" + (expr e) + ") as " + (tp t)  // TODO: fewer parentheses
             | ETypeTest (e, t) -> (expr e) + " is " + (tp t)
             | EPrint es -> "print" + (String.concat ", " (List.map expr es))
             | EAssert e -> "assert " + (expr e)

@@ -590,10 +590,10 @@ module Translation =
                         else
                             ctx.setThisDecl (oldInstDecl)
 
-                    let inputRequiresO, _, _ =
+                    let inputRequiresO, _ =
                         ins_o.conditions
                         |> List.map (fun c -> expr oldCtx c)
-                        |> List.unzip3
+                        |> List.unzip
 
                     // new requires clauses applied to new arguments
                     let newCtx =
@@ -602,10 +602,10 @@ module Translation =
                         else
                             ctx.setThisDecl (newInstDecl)
 
-                    let _, inputRequiresN, _ =
+                    let _, inputRequiresN =
                         ins_n.conditions
                         |> List.map (fun c -> expr newCtx c)
-                        |> List.unzip3
+                        |> List.unzip
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
@@ -654,7 +654,7 @@ module Translation =
 
                     let outputsTranslation =
                         match outputTypeT with
-                        | Some ot -> EEqual((fst ot) resultO, resultN)
+                        | Some ot -> EEqual(resultN, (fst ot) resultO)
                         | None -> EBool true
                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                     // but that is redundant due to our highly restricted treatment of classes
@@ -665,10 +665,18 @@ module Translation =
                         match bdD with
                         | Diff.SameExprO bdO ->
                             // unchanged body: try to generate proof sketch
-                            bdO
-                            |> Option.bind (fun b -> let _, _, pf = expr ctx b in pf)
+                            // use oldCtx to replace "this" with old variables
+                            match outputTypeT with
+                            | Some ot -> bdO |> Option.bind (fun b -> proof oldCtx b resultN (fst ot))
+                            | None -> Some(EBlock [])
+                        | Diff.UpdateExpr bd ->
+                            // updated body: try to generate proof sketch
+                            // use oldCtx to replace "this" with old variables
+                            match outputTypeT with
+                            | Some ot -> proof oldCtx bd resultN (fst ot)
+                            | None -> Some(EBlock [])
                         | _ ->
-                            // changed body: generate empty proof
+                            // other cases: generate empty proof
                             Some(EBlock [])
 
                     [ Method(IsLemma, pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
@@ -989,11 +997,14 @@ module Translation =
         and tpAbstracted (x: string, t_o: Type, t_n: Type) =
             let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
-        and expr (exprCtx: Context) (e: Expr) : Expr * Expr * (Expr option) =
+        and expr (exprCtx: Context) (e: Expr) : Expr * Expr =
             let eO = NameTranslator(true).expr (exprCtx, e)
             let eN = NameTranslator(false).expr (exprCtx, e)
-            // TODO: generate proof at the 3rd argument here
-            eO, eN, None
+            eO, eN
+        and proof (oldCtx: Context) (e: Expr) (resultN: Expr) (resultOTranslation: Expr -> Expr) : Expr option =
+            // generate proof for backward compatibility theorem
+            let eO = NameTranslator(true).expr (oldCtx, e)
+            Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO)) ])
 
         /// entry point for running the translation
         member this.doTranslate() = decls ctx declsD
