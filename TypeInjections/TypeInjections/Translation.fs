@@ -666,8 +666,13 @@ module Translation =
                         | Diff.SameExprO bdO ->
                             // unchanged body: try to generate proof sketch
                             // use oldCtx to replace "this" with old variables
+                            //
+                            // When bdO is None, both old and new functions are axioms.
+                            // So we also generate axioms (body=None) in this case.
                             match outputTypeT with
-                            | Some ot -> bdO |> Option.bind (fun b -> proof oldCtx b resultN (fst ot))
+                            | Some ot ->
+                                bdO
+                                |> Option.bind (fun b -> proof oldCtx b resultN (fst ot))
                             | None -> Some(EBlock [])
                         | Diff.UpdateExpr bd ->
                             // updated body: try to generate proof sketch
