@@ -6,7 +6,7 @@ module FormEval {
     match e {
       case Const(n) => n
       case Add(e1, e2) =>
-         evalExpr(e1)+evalExpr(e2)
+        evalExpr(e1) + evalExpr(e2)
     }
   }
 

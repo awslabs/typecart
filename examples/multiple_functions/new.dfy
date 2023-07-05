@@ -9,10 +9,10 @@ module FormEval {
 
   function evalExprAcc(e: expr, acc: int): int {
     match e {
-      case Const(n) => acc+n
+      case Const(n) => acc + n
       case Add(e1, e2) =>
-         var e1V := evalExprAcc(e1, acc);
-         evalExprAcc(e2, e1V)
+        var e1V := evalExprAcc(e1, acc);
+        evalExprAcc(e2, e1V)
     }
   }
 
