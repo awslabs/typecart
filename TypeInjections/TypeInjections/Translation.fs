@@ -813,14 +813,14 @@ module Translation =
                             + tN.ToString()
                         )
 
-                // we do not support different function names for different types of TApply for now
-                let par = p_o.parent
+                let parO = p_o.parent
+                let parN = p_n.parent
                 let pO, _, _ = path p_o
                 let _, pN, _ = path p_n
                 let _, _, names = name2 (p_o.name, p_n.name)
 
-                let r =
-                    StaticReceiver({ path = par; tpargs = [] })
+                let rO = StaticReceiver({ path = parO; tpargs = [] })
+                let rN = StaticReceiver({ path = parN; tpargs = [] })
 
                 let tsONT = List.map tp (List.zip ts_o ts_n)
 
@@ -829,12 +829,11 @@ module Translation =
 
                 let tsT1, tsT2 = List.unzip tsT
                 let tsO, tsN, _ = List.unzip3 tsONT
-                let tsON = Utils.listInterleave (tsO, tsN)
 
                 TApply(pO, tsO),
                 TApply(pN, tsN),
-                ((fun x -> EMethodApply(r, par.child (fst names), tsO, tsT1 @ [ x ], false)),
-                 (fun x -> EMethodApply(r, par.child (snd names), tsN, tsT2 @ [ x ], false)))
+                ((fun x -> EMethodApply(rO, parO.child (fst names), tsO, tsT1 @ [ x ], false)),
+                 (fun x -> EMethodApply(rN, parN.child (snd names), tsN, tsT2 @ [ x ], false)))
             | TTuple ts_o ->
                 match tN with
                 | TTuple ts_n ->
