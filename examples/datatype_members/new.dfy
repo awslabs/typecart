@@ -1,5 +1,5 @@
 module Lists {
-  // nothing is changed
+  // implementation of filter() is changed
   datatype Nat = Zero | Succ(n: Nat) {
     function plus(m: Nat): Nat {
       match m {
@@ -18,7 +18,9 @@ module Lists {
     function filter(f: a -> bool): List<a> {
       match this {
         case Nil => Nil
-        case Cons(h,t) => if f(h) then Cons(h, t.filter(f)) else t.filter(f)
+        case Cons(h,t) =>
+          var r := t.filter(f);
+          if f(h) then Cons(h, r) else r
       }
     }
   }
