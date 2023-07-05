@@ -273,7 +273,11 @@ module YIL =
         | IsFunctionMethod
         | IsFunction
         | IsLemma
+        | IsLeastLemma
+        | IsGreatestLemma
         | IsPredicate
+        | IsLeastPredicate
+        | IsGreatestPredicate
         | IsPredicateMethod
         member this.isGhost() =
             match this with
@@ -282,7 +286,11 @@ module YIL =
             | IsPredicateMethod -> false
             | IsFunction
             | IsLemma
-            | IsPredicate -> true
+            | IsPredicate
+            | IsLeastLemma
+            | IsGreatestLemma
+            | IsLeastPredicate
+            | IsGreatestPredicate -> true
 
         override this.ToString() =
             match this with
@@ -292,6 +300,10 @@ module YIL =
             | IsFunction -> "function"
             | IsLemma -> "lemma"
             | IsPredicate -> "predicate"
+            | IsLeastLemma -> "least lemma"
+            | IsGreatestLemma -> "greatest lemma"
+            | IsLeastPredicate -> "least predicate"
+            | IsGreatestPredicate -> "greatest predicate"
 
     and ExportType(provides: Path list, reveals: Path list) =
         new() = ExportType([], [])
@@ -1149,10 +1161,13 @@ module YIL =
                 let methodCtx = pctx.enter (n)
 
                 this.stat (s, pctx)
-                + (if methodType = IsLemma then
-                       ""
-                   else
-                       this.ghost (g))
+                + (match methodType with
+                   | IsLemma
+                   | IsLeastLemma
+                   | IsGreatestLemma
+                   | IsLeastPredicate
+                   | IsGreatestPredicate -> ""  // already ghost
+                   | _ -> this.ghost (g))
                 + methodType.ToString()
                 + (if b.IsNone then
                        " {:axiom}"
@@ -1165,6 +1180,8 @@ module YIL =
                 + (match methodType with
                    | IsLemma
                    | IsPredicate
+                   | IsLeastPredicate
+                   | IsGreatestPredicate
                    | IsPredicateMethod -> ""
                    | IsMethod -> " returns " + outputsS
                    | _ -> ": " + outputsS)
@@ -1466,7 +1483,7 @@ module YIL =
                     + ".."
                     + exprO t ""
                     + "]"
-            | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + "] := " + (expr e)
+            | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + " := " + (expr e) + "]"
             | EArray (t, d) -> "new " + t.ToString() + dims (d)
             | EMultiSelect (a, i) -> (expr a) + dims (i)
             | EArrayUpdate (a, i, e) -> (expr a) + dims (i) + " := " + (expr e)

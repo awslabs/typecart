@@ -257,7 +257,11 @@ module DafnyToYIL =
         | true, "predicate" -> Y.IsPredicateMethod
         | false, "predicate" -> Y.IsPredicate
         | _, "predicate method" -> Y.IsPredicateMethod
+        | _, "least predicate" -> Y.IsLeastPredicate
+        | _, "greatest predicate" -> Y.IsGreatestPredicate
         | _, "lemma" -> Y.IsLemma
+        | _, "least lemma" -> Y.IsLeastLemma
+        | _, "greatest lemma" -> Y.IsGreatestLemma
         | _, "method" -> Y.IsMethod
         | _ -> unsupported $"unsupported method type payload: %s{s}"
 
@@ -824,6 +828,8 @@ module DafnyToYIL =
         //    // cases that are eliminated during resolution
         //    statement s.ResolvedStatement
         | :? BlockStmt as b -> Y.EBlock(statement @ b.Body)
+        | :? NestedMatchStmt as e -> 
+            Y.EMatch(expr e.Source, tp e.Source.Type, nestedCase (e.Source.Type) @ e.Cases, None)
         | :? VarDeclStmt as s ->
             let vs = boundVar @ s.Locals
 
