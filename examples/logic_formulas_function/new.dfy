@@ -1,5 +1,7 @@
 module LogicFormulas {
-
+  // "Implies" is added.
+  // There is a stub for "Implies" in the translation function.
+  // We can prove the backward compatibility by writing "Old.LogicFormulas.formula.Or(Old.LogicFormulas.formula.Not(formula_backward(x5_N)), formula_backward(x6_N))" in the stub.
   datatype formula = True | False | Not(formula) | And(formula, formula) | Or(formula, formula) | Implies(formula, formula)
 
   function eval(f: formula): bool
@@ -16,5 +18,10 @@ module LogicFormulas {
         else
           true
     }
+  }
+
+  function simplify(f: formula, eval: formula -> bool): formula
+  {
+    if eval(f) then True else False
   }
 }

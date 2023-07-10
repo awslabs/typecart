@@ -1,6 +1,5 @@
 module LogicFormulas {
-
-  datatype formula = True | False | Not(formula) | And(formula, formula) | Or(formula, formula) | Implies(formula, formula)
+  datatype formula = True | False | Not(formula) | And(formula, formula) | Or(formula, formula)
 
   function eval(f: formula): bool
   {
@@ -10,11 +9,11 @@ module LogicFormulas {
       case Not(g) => !(eval(g))
       case And(g, h) => eval(g) && eval(h)
       case Or(g, h) => eval(g) || eval(h)
-      case Implies(g, h) =>
-        if eval(g) then
-          eval(h)
-        else
-          true
     }
+  }
+
+  function simplify(f: formula, eval: formula -> bool): formula
+  {
+    if eval(f) then True else False
   }
 }
