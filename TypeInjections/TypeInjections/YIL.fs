@@ -1707,9 +1707,9 @@ module YIL =
         member this.binaryOperatorPrecedenceLeft (op: string) =
             match this.binaryOperatorPrecedence op with
             | 1 -> 1
-            | 2 -> 2
+            | 2 -> 3  // avoid "a ==> b <== c"
             | 3 -> 4  // force parentheses around && and ||
-            | 4 -> 4
+            | 4 -> 5  // comparison chains are already desugared
             | 5 -> 5
             | 6 -> 6
             | 7 -> 7
