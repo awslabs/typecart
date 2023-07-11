@@ -1408,7 +1408,16 @@ module YIL =
 
 
         member this.expr (e: Expr) (pctx: Context) : string =
-            let expr e = this.expr e pctx
+            this.exprWithPrecedence e 0 pctx
+        
+        member this.exprWithPrecedence (e: Expr) (precedence: int) (pctx: Context) : string =
+            // We need to add parentheses to the result if the operator precedence is strictly lower than |precedence|.
+            // For example, if |precedence| == 6 ("+"), we do not need to add parentheses if we encounter "*" or "+",
+            // but we need to add parentheses if we encounter "<" (with precedence 4).
+            //
+            // expr 0 e: no need to add parentheses
+            // expr 11 e: add parentheses unless it's a primary expression, e.g., EVar
+            let expr p e = this.exprWithPrecedence e p pctx
             let exprs es = this.exprs es pctx
             let exprO e sep = this.exprO (e, sep, pctx)
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
@@ -1446,20 +1455,26 @@ module YIL =
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToDecimalString()
             | EQuant (q, lds, r, b) ->
-                "("
+                (if 0 < precedence then "(" else "")
                 + q.ToString()
                 + " "
                 + this.localDeclsBr (lds, false)
                 + " :: "
                 + (match r with
-                   | Some e -> expr e + (if q = Forall then " ==> " else " && ")
-                   | None -> "")
-                + (expr b)
-                + ")"
-            | EOld e -> "old(" + (expr e) + ")"
+                   // ==> is 2
+                   // && is 3
+                   | Some e -> (if q = Forall then expr 3 e + " ==> " + expr 3 b else expr 4 e + " && " + expr 4 b)
+                   | None -> expr 0 b)
+                + (if 0 < precedence then ")" else "")
+            | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
-            | EProj (e, i) -> expr (e) + "." + i.ToString()
-            | EFun (vs, _, e) -> "(" + (this.localDecls vs) + " => " + (expr e) + ")"
+            | EProj (e, i) -> expr 11 e + "." + i.ToString()
+            | EFun (vs, _, e) ->
+                (if 0 < precedence then "(" else "")
+                + (this.localDecls vs)
+                + " => "
+                + (expr 0 e)
+                + (if 0 < precedence then ")" else "")
             | ESet (_, es) -> "{" + (exprsNoBr es ", ") + "}"
             | ESetComp (lds, predicate, body) ->
                 let ldsStr =
@@ -1468,29 +1483,29 @@ module YIL =
                 "set "
                 + ldsStr
                 + " | "
-                + (expr predicate)
+                + (expr 0 predicate)
                 + " :: "
-                + (expr body)
+                + (expr 0 body)
             | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
-            | ESeqConstr (_, l, i) -> "seq(" + (expr l) + ", " + (expr i) + ")"
+            | ESeqConstr (_, l, i) -> "seq(" + (expr 0 l) + ", " + (expr 0 i) + ")"
             | ESeqSelect (s, _, elem, f, t) ->
                 if elem then
-                    (expr s) + "[" + (expr (Option.get f)) + "]"
+                    (expr 11 s) + "[" + (expr 0 (Option.get f)) + "]"
                 else
-                    (expr s)
+                    (expr 11 s)
                     + "["
                     + exprO f ""
                     + ".."
                     + exprO t ""
                     + "]"
-            | ESeqUpdate (s, i, e) -> (expr s) + "[" + (expr i) + " := " + (expr e) + "]"
+            | ESeqUpdate (s, i, e) -> (expr 11 s) + "[" + (expr 11 i) + " := " + (expr 0 e) + "]"
             | EArray (t, d) -> "new " + t.ToString() + dims (d)
-            | EMultiSelect (a, i) -> (expr a) + dims (i)
-            | EArrayUpdate (a, i, e) -> (expr a) + dims (i) + " := " + (expr e)
-            | EMapKeys (e) -> (expr e) + ".Keys"
+            | EMultiSelect (a, i) -> (expr 11 a) + dims (i)
+            | EArrayUpdate (a, i, e) -> (expr 11 a) + dims (i) + " := " + (expr 0 e)
+            | EMapKeys (e) -> (expr 11 e) + ".Keys"
             | EMapDisplay (elts) ->
                 let str =
-                    List.fold (fun l (k, v) -> (String.concat " := " [ expr k; expr v ]) :: l) [] elts
+                    List.fold (fun l (k, v) -> (String.concat " := " [ expr 0 k; expr 0 v ]) :: l) [] elts
 
                 let str = String.concat " , " str
                 "map [" + str + "]"
@@ -1501,14 +1516,17 @@ module YIL =
                 "map "
                 + ldsStr
                 + " | "
-                + (expr p)
+                + (expr 0 p)
                 + " :: "
                 + match tL with
-                  | None -> expr tR
-                  | Some tL -> (expr tL) + " := " + (expr tR)
-            | EUnOpApply (op, e) -> this.unaryOperator op (expr e)
-            | EBinOpApply (op, e1, e2) -> this.binaryOperator op (expr e1) (expr e2)
-            | EAnonApply (f, es) -> (expr f) + (exprs es)
+                  | None -> expr 0 tR
+                  | Some tL -> (expr 11 tL) + " := " + (expr 0 tR)
+            | EUnOpApply (op, e) -> this.unaryOperator op precedence (expr (this.unaryOperatorPrecedence op) e)
+            | EBinOpApply (op, e1, e2) ->
+                let resolvedOp = this.binaryOperatorResolve op
+                this.binaryOperator resolvedOp precedence (expr (this.binaryOperatorPrecedenceLeft resolvedOp) e1)
+                    (expr (this.binaryOperatorPrecedenceRight resolvedOp) e2)
+            | EAnonApply (f, es) -> (expr 11 f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) -> (receiver r) + m.name + (exprs es)
             | EConstructorApply (c, ts, es) ->
                 let cS =
@@ -1537,19 +1555,21 @@ module YIL =
                 + ":"
                 + (tp t)
                 + (if x then ":=" else ":|")
-                + (expr d)
+                + (expr 0 d)
                 + "; "
-                + (expr e)
+                + (expr 0 e)
             | EIf (c, t, e) ->
                 let elsePart =
                     match e with
                     | None -> "" // avoid using exprO which prints out ";".
-                    | Some e -> " else " + expr e
+                    | Some e -> " else " + expr 0 e
 
                 let s =
-                    "if " + (expr c) + " then " + (expr t) + elsePart
+                    "if " + (expr 0 c) + " then " + (expr 0 t) + elsePart
 
-                s
+                (if 0 < precedence then "(" else "")
+                + s
+                + (if 0 < precedence then ")" else "")
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
@@ -1560,7 +1580,7 @@ module YIL =
                 "for "
                 + this.expr d forInitCtx
                 + (if up then " to " else " downto ")
-                + (expr last)
+                + (expr 0 last)
                 + " "
                 + this.expr body forBodyCtx
             | EWhile (c, e, l) ->
@@ -1569,7 +1589,7 @@ module YIL =
                     | Some l -> sprintf "%s: " l
                     | None -> ""
 
-                sprintf "%swhile (%s)%s" label (expr c) (expr e)
+                sprintf "%swhile (%s)%s" label (expr 0 c) (expr 0 e)
             | EReturn (es) -> (exprsNoBr es ", ")
             | EBreak l ->
                 let label =
@@ -1591,7 +1611,7 @@ module YIL =
                     List.map (fun (c: Case) -> case c) (cases @ defCase)
 
                 "match "
-                + (expr e)
+                + (expr 0 e)
                 + indentedBraced (listToString (csS, "\n"))
             | EDecls (ds) ->
                 let doOne (ld: LocalDecl, uO: UpdateRHS option) =
@@ -1607,56 +1627,120 @@ module YIL =
 
                 listToString (List.map doOne ds, ", ")
             | EUpdate (ns, u) ->
-                let lhsExprs = List.map expr ns
+                let lhsExprs = List.map (expr 0) ns
 
                 listToString (lhsExprs, ",")
                 + (this.update u pctx)
-            | EDeclChoice (ld, e) -> "var " + (this.localDecl ld) + " :| " + (expr e)
-            | ETypeConversion (e, t) -> "(" + (expr e) + ") as " + (tp t)  // TODO: fewer parentheses
-            | ETypeTest (e, t) -> (expr e) + " is " + (tp t)
-            | EPrint es -> "print" + (String.concat ", " (List.map expr es))
-            | EAssert e -> "assert " + (expr e)
-            | EAssume e -> "assume " + (expr e)
-            | EExpect e -> "expect " + (expr e)
+            | EDeclChoice (ld, e) -> "var " + (this.localDecl ld) + " :| " + (expr 0 e)
+            | ETypeConversion (e, t) ->
+                (if 9 < precedence then "(" else "")
+                + (expr 9 e)
+                + " as "
+                + (tp t)
+                + (if 9 < precedence then ")" else "")
+            | ETypeTest (e, t) ->
+                (if 9 < precedence then "(" else "")
+                + (expr 9 e)
+                + " is "
+                + (tp t)
+                + (if 9 < precedence then ")" else "")
+            | EPrint es -> "print" + (String.concat ", " (List.map (expr 0) es))
+            | EAssert e -> "assert " + (expr 0 e)
+            | EAssume e -> "assume " + (expr 0 e)
+            | EExpect e -> "expect " + (expr 0 e)
             | EReveal es ->
                 if es.IsEmpty then
                     "reveal true" // empty reveal not allowed in Dafny
                 else
                     "reveal "
-                    + (String.concat ", " (List.map expr es))
-            | ECommented (s, e) -> "/* " + s + " */ " + expr e
+                    + (String.concat ", " (List.map (expr 0) es))
+            | ECommented (s, e) -> "/* " + s + " */ " + expr 0 e
             | EUnimplemented -> UNIMPLEMENTED
 
-        member this.binaryOperator (op: string) (eSL: string) (eSR: string) : string =
-            // TODO: handle operator precedence? See dafny Printer.cs for precedence.
+        member this.binaryOperatorResolve (op: string): string =
             // reconstruct dafny Opcode by converting string back to enum.
-            let mutable eOp =
-                BinaryExpr.ResolvedOpcode.YetUndetermined
-
+            let mutable eOp = BinaryExpr.ResolvedOpcode.YetUndetermined
             if Enum.TryParse<BinaryExpr.ResolvedOpcode>(op, &eOp) then
-                "("
-                + eSL
-                + " "
-                + (eOp
+                (eOp
                    |> BinaryExpr.ResolvedOp2SyntacticOp
                    |> BinaryExpr.OpcodeString)
-                + " "
-                + eSR
-                + ")"
             else
                 failwith $"unsupported binary operator %s{op}"
 
+        member this.binaryOperator (op: string) (precedence: int) (eSL: string) (eSR: string) : string =
+            (if this.binaryOperatorPrecedence op < precedence then "(" else "")
+            + eSL
+            + " "
+            + op
+            + " "
+            + eSR
+            + (if this.binaryOperatorPrecedence op < precedence then ")" else "")
+
+        member this.binaryOperatorPrecedence (op: string) =
+            match op with
+            | "<==>" -> 1
+            | "==>"
+            | "<==" -> 2
+            | "&&"
+            | "||" -> 3
+            | "=="
+            | "!="
+            | "<"
+            | "<="
+            | ">="
+            | ">"
+            | "!!"
+            | "in"
+            | "!in" -> 4
+            | "<<"
+            | ">>" -> 5
+            | "+"
+            | "-" -> 6
+            | "*"
+            | "/"
+            | "%" -> 7
+            | "&"
+            | "|"
+            | "^" -> 8
+            | _ -> failwith $"unsupported binary operator %s{op}"
+
+        member this.binaryOperatorPrecedenceLeft (op: string) =
+            match this.binaryOperatorPrecedence op with
+            | 1 -> 1
+            | 2 -> 2
+            | 3 -> 4  // force parentheses around && and ||
+            | 4 -> 4
+            | 5 -> 5
+            | 6 -> 6
+            | 7 -> 7
+            | 8 -> 9  // force parentheses around &, | and ^
+            | _ -> 0
+
+        member this.binaryOperatorPrecedenceRight (op: string) =
+            match op with
+            // associative operator
+            | "<==>" -> this.binaryOperatorPrecedence op
+            | _ -> this.binaryOperatorPrecedence op + 1
 
         // For reference, see unary expression handling in dafny Printer.cs file.
-        member this.unaryOperator (op: string) (eS: string) =
+        // Unary minus is handled as a binary minus so it does not appear here.
+        member this.unaryOperator (op: string) (precedence: int) (eS: string) =
             match op with
-            | "Not" -> "!" + eS
+            | "Not" ->
+                (if 10 < precedence then "(" else "")
+                + "!"
+                + eS
+                + (if 10 < precedence then ")" else "")
             | "Cardinality" -> "|" + eS + "|"
             | "Fresh" -> "fresh(" + eS + ")"
             | "Allocated" -> "allocated(" + eS + ")"
             | "Lit" -> "Lit(" + eS + ")"
             | _ -> failwith $"unsupported unary operator %s{op}"
 
+        member this.unaryOperatorPrecedence (op: string) =
+            match op with
+            | "Not" -> 10
+            | _ -> 0
 
         member this.localDeclsBr(lds: LocalDecl list, brackets: bool) =
             (if brackets then "(" else "")
