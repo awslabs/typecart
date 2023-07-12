@@ -257,9 +257,9 @@ module Traverser =
             | EAnonApply (f, es) -> EAnonApply(rcE f, rcEs es)
             | EUnOpApply (op, e) -> EUnOpApply(op, rcE e)
             | EBinOpApply (op, e1, e2) -> EBinOpApply(op, rcE e1, rcE e2)
-            | ELet (n, tp, x, df, bd) ->
-                // if x is false, then df is a predicate about n
-                let ctxI = ctx.add (n, tp)
+            | ELet (v, x, df, bd) ->
+                // if x is false, then df is a predicate about v
+                let ctxI = ctx.add (v)
 
                 let dfT =
                     if x then
@@ -267,7 +267,7 @@ module Traverser =
                     else
                         this.expr (ctxI, df)
 
-                ELet(n, rcT tp, x, dfT, this.expr (ctxI, bd))
+                ELet(this.localDeclList (ctx, v), x, dfT, this.expr (ctxI, bd))
             | ETypeConversion (e, t) -> ETypeConversion(rcE e, rcT t)
             | ETypeTest (e, t) -> ETypeTest(rcE e, rcT t)
             | EBlock es ->

@@ -442,7 +442,7 @@ module YIL =
             | Bound (Some i) -> i.ToString()
             | Bound None -> ""
 
-    (* typed variable declaration used in method input/output, binders, and local variables declararations
+    (* typed variable declaration used in method input/output, binders, and local variables declarations
        All of those can be ghosts, i.e., only needed for specifications and proofs.
        Those can be removed when compiling for computation.
     *)
@@ -587,7 +587,7 @@ module YIL =
         | ETypeTest of Expr * Type
         // *** control flow etc.
         | EBlock of exprs: Expr list
-        | ELet of var: string * tp: Type * exact: bool * df: Expr * body: Expr // not exact = non-deterministic
+        | ELet of var: LocalDecl list * exact: bool * df: Expr * body: Expr // not exact = non-deterministic
         | EIf of cond: Expr * thn: Expr * els: Expr option // cond must not have side-effects; els non-optional if this is an expression; see also flattenIf
         | EWhile of cond: Expr * body: Expr * label: (string option)
         | EFor of index: LocalDecl * init: Expr * last: Expr * up: bool * body: Expr
@@ -1156,7 +1156,7 @@ module YIL =
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
-                    | None -> this.localDecls outs.decls
+                    | None -> this.localDeclsBr (outs.decls, true)
 
                 let methodCtx = pctx.enter (n)
 
@@ -1176,7 +1176,7 @@ module YIL =
                 + " "
                 + n
                 + (this.tpvars false tpvs)
-                + (this.localDecls ins.decls)
+                + (this.localDeclsBr (ins.decls, true))
                 + (match methodType with
                    | IsLemma
                    | IsPredicate
@@ -1229,14 +1229,14 @@ module YIL =
         member this.inputSpec(ins: InputSpec, pctx: Context) =
             match ins with
             | InputSpec (lds, rs) ->
-                this.localDecls lds
+                this.localDeclsBr (lds, true)
                 + this.conditions (true, rs, pctx)
 
         member this.outputSpec(outs: OutputSpec, pctx: Context) =
             let r =
                 match outs.outputType with
                 | Some t -> this.tp t
-                | None -> this.localDecls outs.decls
+                | None -> this.localDeclsBr (outs.decls, true)
 
             r + this.conditions (false, outs.conditions, pctx)
 
@@ -1255,7 +1255,8 @@ module YIL =
 
             kw + " " + (this.expr c pctx)
 
-        member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) = c.name + (this.localDecls c.ins)
+        member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) =
+            c.name + (this.localDeclsBr (c.ins, true))
 
         member this.tps(ts: Type list) =
             if ts.IsEmpty then
@@ -1384,11 +1385,9 @@ module YIL =
                 + (expr last)
                 + " "
                 + this.statement body forBodyCtx
-            | ELet (n, t, ex, d, e) ->
+            | ELet (v, ex, d, e) ->
                 "var "
-                + n
-                + ":"
-                + (this.tp t)
+                + (this.localDecls v)
                 + (if ex then ":=" else ":|")
                 + (expr d)
                 + "; "
@@ -1471,7 +1470,7 @@ module YIL =
             | EProj (e, i) -> expr 11 e + "." + i.ToString()
             | EFun (vs, _, e) ->
                 (if 0 < precedence then "(" else "")
-                + (this.localDecls vs)
+                + (this.localDeclsBr (vs, true))
                 + " => "
                 + (expr 0 e)
                 + (if 0 < precedence then ")" else "")
@@ -1549,11 +1548,9 @@ module YIL =
 
                 let s = indented (esS, false) // no braces - Dafny parses them as sets
                 s
-            | ELet (n, t, x, d, e) ->
+            | ELet (v, x, d, e) ->
                 "var "
-                + n
-                + ":"
-                + (tp t)
+                + (this.localDecls v)
                 + (if x then ":=" else ":|")
                 + (expr 0 d)
                 + "; "
@@ -1747,7 +1744,7 @@ module YIL =
             + listToString (List.map this.localDecl lds, ", ")
             + (if brackets then ")" else "")
 
-        member this.localDecls(lds: LocalDecl list) = this.localDeclsBr (lds, true)
+        member this.localDecls(lds: LocalDecl list) = this.localDeclsBr (lds, lds.Length <> 1)
 
         member this.update (u: UpdateRHS) (pctx: Context) =
             let op = if u.monadic.IsSome then ":-" else ":="

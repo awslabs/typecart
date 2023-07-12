@@ -598,20 +598,38 @@ module DafnyToYIL =
                 if e.RHSs.Count <> 1 then
                     unsupported "let with more than 1 RHS"
 
-                let v = e.LHSs.Item(0)
+                let rhs = expr (e.RHSs.Item(0))
 
-                if v.Var = null then
-                    unsupported "let with constructor pattern"
-                else
-                    let rhs = expr (e.RHSs.Item(0))
+                match e.Body with
+                | :? ITEExpr as iteE ->
+                    let elseExpr = (iteE.Els :?> LetExpr)
 
-                    match e.Body with
-                    | :? ITEExpr as iteE ->
-                        let elseExpr = (iteE.Els :?> LetExpr)
-                        let var = elseExpr.LHSs.Item(0).Var
-                        let body = expr (elseExpr.Body)
-                        Y.ELet(var.Name, tp var.Type, e.Exact, rhs, body)
-                    | _ -> error "LetOrFailExpr must have an ITEExpr"
+                    let v = e.LHSs.Item(0)
+
+                    let vars =
+                        if v.Var = null then
+                            match elseExpr.LHSs.Item(0).Expr with
+                            | :? DatatypeValue as d ->
+                                let tpargs = tp @ d.InferredTypeArgs
+
+                                let args =
+                                    (expr @ d.Arguments)
+                                    |> List.map
+                                        (fun arg ->
+                                            match arg with
+                                            | Y.EVar name -> name
+                                            | _ -> unsupported "let with unknown pattern")
+
+                                List.zip args tpargs
+                                |> List.map (fun (arg, tparg) -> Y.LocalDecl(arg, tparg, false))
+                            | _ -> unsupported "let with unknown pattern"
+                        else
+                            let var = elseExpr.LHSs.Item(0).Var
+                            [ Y.LocalDecl(var.Name, tp var.Type, false) ]
+
+                    let body = expr (elseExpr.Body)
+                    Y.ELet(vars, e.Exact, rhs, body)
+                | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
@@ -732,10 +750,27 @@ module DafnyToYIL =
 
             let v = e.LHSs.Item(0)
 
-            if v.Var = null then
-                unsupported "let with constructor pattern"
-            else
-                Y.ELet(v.Var.Name, tp v.Var.Type, e.Exact, expr (e.RHSs.Item(0)), expr e.Body)
+            let vars =
+                if v.Var = null then
+                    match v.Expr with
+                    | :? DatatypeValue as d ->
+                        let tpargs = tp @ d.InferredTypeArgs
+
+                        let args =
+                            (expr @ d.Arguments)
+                            |> List.map
+                                (fun arg ->
+                                    match arg with
+                                    | Y.EVar name -> name
+                                    | _ -> unsupported "let with unknown pattern")
+
+                        List.zip args tpargs
+                        |> List.map (fun (arg, tparg) -> Y.LocalDecl(arg, tparg, false))
+                    | _ -> unsupported "let with unknown pattern"
+                else
+                    [ Y.LocalDecl(v.Var.Name, tp v.Var.Type, false) ]
+
+            Y.ELet(vars, e.Exact, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
         | :? NestedMatchExpr as e ->
@@ -828,7 +863,7 @@ module DafnyToYIL =
         //    // cases that are eliminated during resolution
         //    statement s.ResolvedStatement
         | :? BlockStmt as b -> Y.EBlock(statement @ b.Body)
-        | :? NestedMatchStmt as e -> 
+        | :? NestedMatchStmt as e ->
             Y.EMatch(expr e.Source, tp e.Source.Type, nestedCase (e.Source.Type) @ e.Cases, None)
         | :? VarDeclStmt as s ->
             let vs = boundVar @ s.Locals
