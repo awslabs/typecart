@@ -45,6 +45,7 @@ module DafnyToYIL =
     let DafnyMap = "map"
     let DafnyKeys = "Keys"
     let DafnyReads = "reads" // the special 'reads' member of a function
+    let DafnyArrayPrefix = "array"
 
     // ***** the mutually recursive functions
 
@@ -429,7 +430,7 @@ module DafnyToYIL =
             match t.ResolvedClass with
             | :? TypeParameter -> Y.TVar(t.Name)
             | _ ->
-                // NewTypeDecl, IndDatatypeDecl,
+                // NewTypeDecl, IndDatatypeDecl, TupleTypeDecl
                 // ArrowTypeDecl, TraitDecl, SubsetTypeDecl, TypeSynonymDecl
                 let p = pathOfUserDefinedType (t)
                 let args = tp @ t.TypeArgs
@@ -460,7 +461,7 @@ module DafnyToYIL =
                         Y.TString Y.NoBound
                     elif n = "nat" then
                         Y.TNat Y.NoBound
-                    elif n = "array" then
+                    elif n.StartsWith(DafnyArrayPrefix) then
                         if args.Length = 1 then
                             Y.TArray(Y.NoBound, args.Head)
                         else
@@ -607,7 +608,7 @@ module DafnyToYIL =
                     let v = e.LHSs.Item(0)
 
                     let vars =
-                        if v.Var = null then
+                        if elseExpr.LHSs.Item(0).Var = null then
                             match elseExpr.LHSs.Item(0).Expr with
                             | :? DatatypeValue as d ->
                                 let tpargs = tp @ d.InferredTypeArgs
@@ -625,7 +626,8 @@ module DafnyToYIL =
                             | _ -> unsupported "let with unknown pattern"
                         else
                             let var = elseExpr.LHSs.Item(0).Var
-                            [ Y.LocalDecl(var.Name, tp var.Type, false) ]
+                            // use DisplayName to preserve "_"; use iteE.Els.Type to preserve parametric type
+                            [ Y.LocalDecl(var.DisplayName, tp iteE.Els.Type, false) ]
 
                     let body = expr (elseExpr.Body)
                     Y.ELet(vars, e.Exact, rhs, body)
@@ -657,6 +659,11 @@ module DafnyToYIL =
                     Y.EMapKeys(e)
                 elif p.names.Item(1).StartsWith(DafnyFun)
                      && p.names.Item(2) = DafnyReads then
+                    Y.EMemberRef(r, p, [])
+                elif
+                    p.names.Item(1).StartsWith(DafnyArrayPrefix)
+                    && p.names.Item(2).StartsWith("Length")
+                then
                     Y.EMemberRef(r, p, [])
                 else
                     unsupported $"Unknown member {p}"
@@ -768,7 +775,8 @@ module DafnyToYIL =
                         |> List.map (fun (arg, tparg) -> Y.LocalDecl(arg, tparg, false))
                     | _ -> unsupported "let with unknown pattern"
                 else
-                    [ Y.LocalDecl(v.Var.Name, tp v.Var.Type, false) ]
+                    // use DisplayName to preserve "_"; TODO: check which type we should use
+                    [ Y.LocalDecl(v.Var.DisplayName, tp v.Var.Type, false) ]
 
             Y.ELet(vars, e.Exact, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
@@ -982,6 +990,9 @@ module DafnyToYIL =
                 | :? IdentifierExpr as s -> Y.EArrayUpdate(Y.EVar(s.Name), [ expr e.E0 ], rhs)
                 | _ -> unsupported "Complex sequence update"
             | :? MemberSelectExpr as e -> Y.EUpdate([ expr e ], { df = rhs; monadic = None })
+            | :? MultiSelectExpr as e ->
+                (* TODO use EArrayUpdate *)
+                Y.EUpdate([ Y.EMultiSelect(expr e.Array, expr @ e.Indices) ], { df = rhs; monadic = None })
             | _ -> unsupported "Non-atomic LHS of assignment"
         | :? VarDeclPattern as s ->
             (* Because we do not cover constructor patterns anyway, we can simply use a Decl to represent a let statement.
@@ -1044,6 +1055,14 @@ module DafnyToYIL =
                     Some(statement s.Els)
 
             Y.EIf(expr s.Guard, statement s.Thn, els)
+        | :? AlternativeStmt as s ->
+            let alternativeCase (case: GuardedAlternative) =
+                if case.IsBindingGuard then
+                    unsupported "alternative statement used as binding guard"
+
+                (expr case.Guard, Y.EBlock(statement @ case.Body))
+
+            Y.EAlternative(List.unzip (alternativeCase @ s.Alternatives))
         | :? WhileStmt as s -> Y.EWhile(expr s.Guard, statement s.Body, None)
         | :? ForLoopStmt as s -> Y.EFor(boundVar s.LoopIndex, expr s.Start, expr s.End, s.GoingUp, statement s.Body)
         | :? BreakStmt as s ->

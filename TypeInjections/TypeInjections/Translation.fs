@@ -622,7 +622,10 @@ module Translation =
                                     tp (TVar(fst tparg_o), TVar(fst tparg_n))
 
                                 lossless (TVar(fst tpargO)) tT)
-                            (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_o @ tvs_n)) // TODO: parentTvs_n @ tvs_n
+                            (List.zip3
+                                (parentTvsO @ tvsO)
+                                ((if isStatic then [] else parentTvs_o) @ tvs_o)
+                                ((if isStatic then [] else parentTvs_o) @ tvs_n)) // TODO: parentTvs_n @ tvs_n
 
                     let inSpec =
                         InputSpec(
@@ -819,8 +822,11 @@ module Translation =
                 let _, pN, _ = path p_n
                 let _, _, names = name2 (p_o.name, p_n.name)
 
-                let rO = StaticReceiver({ path = parO; tpargs = [] })
-                let rN = StaticReceiver({ path = parN; tpargs = [] })
+                let rO =
+                    StaticReceiver({ path = parO; tpargs = [] })
+
+                let rN =
+                    StaticReceiver({ path = parN; tpargs = [] })
 
                 let tsONT = List.map tp (List.zip ts_o ts_n)
 

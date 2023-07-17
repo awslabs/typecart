@@ -295,8 +295,8 @@ module YIL =
         override this.ToString() =
             match this with
             | IsMethod -> "method"
-            | IsFunctionMethod -> "function method"
-            | IsPredicateMethod -> "predicate method"
+            | IsFunctionMethod -> "function"
+            | IsPredicateMethod -> "predicate"
             | IsFunction -> "function"
             | IsLemma -> "lemma"
             | IsPredicate -> "predicate"
@@ -589,6 +589,7 @@ module YIL =
         | EBlock of exprs: Expr list
         | ELet of var: LocalDecl list * exact: bool * df: Expr * body: Expr // not exact = non-deterministic
         | EIf of cond: Expr * thn: Expr * els: Expr option // cond must not have side-effects; els non-optional if this is an expression; see also flattenIf
+        | EAlternative of conds: Expr list * bodies: Expr list // if case cond1 => body1 case cond2 => body2
         | EWhile of cond: Expr * body: Expr * label: (string option)
         | EFor of index: LocalDecl * init: Expr * last: Expr * up: bool * body: Expr
         | EReturn of Expr list // if empty, there is no return value or they have been set by assignments to the output variables
@@ -1329,6 +1330,13 @@ module YIL =
                 + ") "
                 + (this.statement t pctx)
                 + elsePart
+            | EAlternative(conds, bodies) ->
+                let alternativeCase (cond, body) =
+                    "case "
+                    + (expr cond)
+                    + " =>"
+                    + (expr body)
+                "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EMatch (e, t, cases, dfltO) ->
                 let defCase =
                     match dfltO with
