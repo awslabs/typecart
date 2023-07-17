@@ -1289,9 +1289,9 @@ module YIL =
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
 
             match e with
-            | EAssert e -> "assert(" + (expr e) + ");"
-            | EAssume e -> "assume(" + (expr e) + ");"
-            | EExpect e -> "expect(" + (expr e) + ");"
+            | EAssert e -> "assert " + (expr e) + ";"
+            | EAssume e -> "assume " + (expr e) + ";"
+            | EExpect e -> "expect " + (expr e) + ";"
             | EBlock es ->
                 let sts =
                     List.map (fun x -> this.statement x pctx) es
