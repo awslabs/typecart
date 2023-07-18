@@ -587,7 +587,7 @@ module YIL =
         | ETypeTest of Expr * Type
         // *** control flow etc.
         | EBlock of exprs: Expr list
-        | ELet of var: LocalDecl list * exact: bool * df: Expr * body: Expr // not exact = non-deterministic
+        | ELet of var: LocalDecl list * exact: bool * orfail: bool * df: Expr * body: Expr // not exact = non-deterministic
         | EIf of cond: Expr * thn: Expr * els: Expr option // cond must not have side-effects; els non-optional if this is an expression; see also flattenIf
         | EAlternative of conds: Expr list * bodies: Expr list // if case cond1 => body1 case cond2 => body2
         | EWhile of cond: Expr * body: Expr * label: (string option)
@@ -1393,10 +1393,14 @@ module YIL =
                 + (expr last)
                 + " "
                 + this.statement body forBodyCtx
-            | ELet (v, ex, d, e) ->
+            | ELet (v, ex, orfail, d, e) ->
                 "var "
                 + (this.localDecls v)
-                + (if ex then ":=" else ":|")
+                + (match (ex, orfail) with
+                   | true, false -> ":="
+                   | true, true -> ":-"
+                   | false, false -> ":|"
+                   | _ -> failwith "unsupported let expression")
                 + (expr d)
                 + "; "
                 + (this.statement e pctx)
@@ -1556,10 +1560,14 @@ module YIL =
 
                 let s = indented (esS, false) // no braces - Dafny parses them as sets
                 s
-            | ELet (v, x, d, e) ->
+            | ELet (v, x, orfail, d, e) ->
                 "var "
                 + (this.localDecls v)
-                + (if x then ":=" else ":|")
+                + (match (x, orfail) with
+                   | true, false -> ":="
+                   | true, true -> ":-"
+                   | false, false -> ":|"
+                   | _ -> failwith "unsupported let expression")
                 + (expr 0 d)
                 + "; "
                 + (expr 0 e)

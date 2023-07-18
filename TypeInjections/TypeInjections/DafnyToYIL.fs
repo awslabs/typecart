@@ -626,11 +626,11 @@ module DafnyToYIL =
                             | _ -> unsupported "let with unknown pattern"
                         else
                             let var = elseExpr.LHSs.Item(0).Var
-                            // use DisplayName to preserve "_"; use iteE.Els.Type to preserve parametric type
-                            [ Y.LocalDecl(var.DisplayName, tp iteE.Els.Type, false) ]
+                            // use DisplayName to preserve "_"
+                            [ Y.LocalDecl(var.DisplayName, tp var.Type, false) ]
 
                     let body = expr (elseExpr.Body)
-                    Y.ELet(vars, e.Exact, rhs, body)
+                    Y.ELet(vars, e.Exact, true, rhs, body)
                 | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
         | :? ConcreteSyntaxExpression as e ->
@@ -778,7 +778,7 @@ module DafnyToYIL =
                     // use DisplayName to preserve "_"; TODO: check which type we should use
                     [ Y.LocalDecl(v.Var.DisplayName, tp v.Var.Type, false) ]
 
-            Y.ELet(vars, e.Exact, expr (e.RHSs.Item(0)), expr e.Body)
+            Y.ELet(vars, e.Exact, false, expr (e.RHSs.Item(0)), expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
         | :? NestedMatchExpr as e ->
