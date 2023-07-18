@@ -66,9 +66,8 @@ module Traverser =
 
         member this.importType(ctx: Context, e: ImportType) =
             match e with
-            | ImportDefault p -> ImportDefault(this.path (ctx, p))
-            | ImportOpened p -> ImportOpened(this.path (ctx, p))
-            | ImportEquals (lhs, rhs) -> ImportEquals(this.path (ctx, lhs), this.path (ctx, rhs))
+            | ImportDefault (o, p) -> ImportDefault(o, this.path (ctx, p))
+            | ImportEquals (o, lhs, rhs) -> ImportEquals(o, this.path (ctx, lhs), this.path (ctx, rhs))
 
         member this.exportType(ctx: Context, e: ExportType) =
             let path p = this.path (ctx, p)
@@ -164,7 +163,7 @@ module Traverser =
                 let bodyCtx = (headerCtx.add ins.decls).enterBody ()
                 let bT = this.exprO (bodyCtx, b)
                 [ ClassConstructor(n, tpvs, insT, outsT, bT, m) ]
-            | Import importT -> [ Import importT ]
+            | Import importT -> [ Import(this.importType (ctx, importT)) ]
             | Export exportT -> [ Export(this.exportType (ctx, exportT)) ]
             | DUnimplemented -> [ d ]
 
@@ -278,6 +277,7 @@ module Traverser =
                 // this statement is last: if this statement is last then the last statement of the then and else
                 // branch is also last
                 EIf(rcE c, rcE t, rcEo e)
+            | EAlternative (conds, bodies) -> EAlternative(rcEs conds, rcEs bodies)
             | EFor (index, init, ls, up, body) ->
                 let innerCtx = ctx.add [ index ]
                 let bodyT = this.expr (innerCtx, body)

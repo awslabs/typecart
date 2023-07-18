@@ -106,7 +106,7 @@ module Analysis =
             | Module (name, decls, meta) ->
                 let is =
                     imps
-                    |> List.map (fun i -> Import(ImportDefault(Path [ i ])))
+                    |> List.map (fun i -> Import(ImportDefault(false, Path [ i ])))
                 // We may also need to add imports to submodules.
                 this.declDefault (ctx, Module(name, is @ decls, meta))
             | _ -> this.declDefault (ctx, decl)
@@ -163,7 +163,7 @@ module Analysis =
                 List.fold
                     (fun (ctx: Context) decl ->
                         match decl with
-                        | Module (name, _, _) -> ctx.addImport (ImportDefault(Path [ name ]))
+                        | Module (name, _, _) -> ctx.addImport (ImportDefault(false, Path [ name ]))
                         | _ -> ctx)
                     (Context(prog))
                     decls
@@ -218,7 +218,7 @@ module Analysis =
         member this.consumeImportPath (p: Path) (imports: ImportType list) =
             // Return the minimal unambiguous path.
             // Note that directly returning "p" here is also OK, just resulting in longer Dafny code.
-            let openedImports = List.map (fun import -> match import with | ImportOpened q -> q | _ -> Path[]) imports |> List.filter (fun (q: Path) -> q.names.Length > 0)
+            let openedImports = List.map (fun (import: ImportType) -> (if import.isOpened() then import.getPath() else Path [])) imports |> List.filter (fun (q: Path) -> q.names.Length > 0)
             let visiblePaths = Set.filter (fun (q: Path) -> q.name = p.name && List.exists (fun (importPath: Path) -> importPath.isAncestorOf(q)) openedImports) allPaths
             let minimalPath = List.fold (fun (p1: Path) (q: Path) -> q.relativize p1) p openedImports
             let minimalUnambiguousPathLength = Seq.tryFindIndexBack (fun i -> 
@@ -231,7 +231,7 @@ module Analysis =
 
         override this.path(ctx: Context, p: Path) =
             let currentMethodPath =
-                if ctx.currentDecl.names.Length = 1 then
+                if ctx.currentDecl = ctx.modulePath() then
                     ctx.currentDecl
                 else
                     ctx.currentDecl.parent

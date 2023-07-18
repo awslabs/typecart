@@ -106,10 +106,10 @@ module DafnyToYIL =
             if not (fromIList(d.Exports).IsEmpty) then
                 unsupported "import with exports"
 
-            if d.Opened then
-                [ Y.Import(Y.ImportOpened(pathOfModule (d.Signature.ModuleDef))) ]
-            else (* TODO: handle ImportEquals. *)
-                [ Y.Import(Y.ImportDefault(pathOfModule (d.Signature.ModuleDef))) ]
+            if d.CompileName = d.Signature.ModuleDef.DafnyName then
+                [ Y.Import(Y.ImportDefault(d.Opened, pathOfModule (d.Signature.ModuleDef))) ]
+            else
+                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.CompileName ], pathOfModule (d.Signature.ModuleDef))) ]
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs

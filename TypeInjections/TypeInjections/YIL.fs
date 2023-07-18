@@ -337,36 +337,36 @@ module YIL =
         override this.GetHashCode() = this.ToString().GetHashCode()
 
     and ImportType =
-        | ImportDefault of Path
-        | ImportOpened of Path
-        | ImportEquals of lhsDir: Path * rhsDir: Path
+        | ImportDefault of opened: bool * dir: Path
+        | ImportEquals of opened: bool * lhsDir: Path * rhsDir: Path
         override this.ToString() =
             match this with
-            | ImportDefault p -> "import " + p.ToString()
-            | ImportOpened p -> "import opened " + p.ToString()
-            | ImportEquals (lhs, rhs) ->
+            | ImportDefault (o, p) -> "import " + (if o then "opened " else "") + p.ToString()
+            | ImportEquals (o, lhs, rhs) ->
                 "import "
+                + (if o then "opened " else "")
                 + lhs.ToString()
                 + " = "
                 + rhs.ToString()
+        member this.isOpened() =
+            match this with
+            | ImportDefault (o, _)
+            | ImportEquals (o, _, _) -> o
         // for ImportEquals, compare rhsDir since it is the given name to the import.
         member this.pathEquals(p': Path) =
             match this with
-            | ImportDefault p
-            | ImportOpened p
-            | ImportEquals (_, p) -> p.Equals(p')
+            | ImportDefault (_, p)
+            | ImportEquals (_, _, p) -> p.Equals(p')
         // return path of import. For ImportEquals, return path of rhs
         member this.getPath() =
             match this with
-            | ImportDefault p
-            | ImportOpened p
-            | ImportEquals (_, p) -> p
+            | ImportDefault (_, p)
+            | ImportEquals (_, _, p) -> p
 
         member this.prefix(pre: string) =
             match this with
-            | ImportDefault p -> ImportDefault(p.prefix (pre))
-            | ImportOpened p -> ImportOpened(p.prefix (pre))
-            | ImportEquals (lhs, p) -> ImportEquals(lhs, p.prefix (pre))
+            | ImportDefault (o, p) -> ImportDefault(o, p.prefix (pre))
+            | ImportEquals (o, lhs, p) -> ImportEquals(o, lhs, p.prefix (pre))
     (* types
        We do not allow module inheritance or Dafny classes.
        Therefore, there is no subtyping except for numbers.
