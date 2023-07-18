@@ -407,10 +407,12 @@ module DafnyToYIL =
 
     and typeParameter (t: TypeParameter) : Y.TypeArg =
         let v =
-            match t.Variance with
-            | TypeParameter.TPVariance.Non -> None
-            | TypeParameter.TPVariance.Co -> Some true
-            | TypeParameter.TPVariance.Contra -> Some false
+            match t.VarianceSyntax with
+            | TypeParameter.TPVarianceSyntax.NonVariant_Strict -> ""
+            | TypeParameter.TPVarianceSyntax.Covariant_Strict -> "+"
+            | TypeParameter.TPVarianceSyntax.Contravariance -> "-"
+            | TypeParameter.TPVarianceSyntax.Covariant_Permissive -> "*"
+            | TypeParameter.TPVarianceSyntax.NonVariant_Permissive -> "!"
             | _ -> unsupported ("variance: " + t.ToString())
 
         let e =
@@ -418,7 +420,9 @@ module DafnyToYIL =
             | TypeParameter.EqualitySupportValue.Required -> true
             | _ -> false // InferedRequired?
 
-        (t.Name, (v, e))
+        let h = t.Characteristics.ContainsNoReferenceTypes
+
+        (t.Name, (v, e, h))
 
     and condition (a: AttributedExpression) : Y.Condition = expr a.E
 

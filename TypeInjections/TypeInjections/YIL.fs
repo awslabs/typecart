@@ -265,7 +265,8 @@ module YIL =
             | Module _ -> true
             | _ -> false
 
-    and TypeArg = string * (bool option * bool) // true/false for co/contravariant; true for equality required
+    // ""/+/-/*/! for non/co/contra/co/non-variant ("" and + are strict); true for equality required; true for non-heap based
+    and TypeArg = string * (string * bool * bool)
     /// Three Dafny method types. This is going to matter when pretty-printing, since
     /// Dafny distinguishes the set of syntaxes allowed when printing different methods.
     and MethodType =
@@ -714,7 +715,7 @@ module YIL =
         | _ -> EBlock [ b ]
 
     /// invariant type argument given by name
-    let plainTypeArg n = (n, (None, false))
+    let plainTypeArg n = (n, ("", false, false))
 
     /// the corresponding list of TVars
     let typeargsToTVars (tvs: TypeArg list) = List.map (fun (n, _) -> TVar n) tvs
@@ -1054,21 +1055,17 @@ module YIL =
 
         member this.tpvar (inDecl: bool) (a: TypeArg) =
             // Only print out variance type info for declaration-level printing.
-            // variance: prefix "+" for Some true and "-" for Some false)
+            // variance: prefixes ""/"+"/"-"/"*"/"!"
             // equality: suffix "(==)" for equality types
-            let (n, (v, e)) = a
+            // non-heap based: suffix "(!new)"
+            let (n, (v, e, h)) = a
+            let eS = if e then "(==)" else ""
+            let hS = if h then "(!new)" else ""
 
             if inDecl then
-                let vS =
-                    match v with
-                    | Some true -> "+"
-                    | Some false -> "-"
-                    | _ -> ""
-
-                let eS = if e then "(==)" else ""
-                vS + n + eS
+                v + n + eS + hS
             else
-                n
+                n + eS + hS
         // inDecl should only be set to true when printing out class or datatype declarations.
         // These are the only places when variance type signature should be print out.
         member this.tpvars (inDecl: bool) (ns: TypeArg list) =
