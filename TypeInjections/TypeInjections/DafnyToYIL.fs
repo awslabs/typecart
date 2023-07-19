@@ -420,7 +420,8 @@ module DafnyToYIL =
             | TypeParameter.EqualitySupportValue.Required -> true
             | _ -> false // InferedRequired?
 
-        let h = t.Characteristics.ContainsNoReferenceTypes
+        let h =
+            t.Characteristics.ContainsNoReferenceTypes
 
         (t.Name, (v, e, h))
 
@@ -467,7 +468,7 @@ module DafnyToYIL =
                         Y.TNat Y.NoBound
                     elif n.StartsWith(DafnyArrayPrefix) then
                         if args.Length = 1 then
-                            Y.TArray(Y.NoBound, args.Head)
+                            Y.TArray(Y.NoBound, n, args.Head)
                         else
                             error $"array {p.name} must have exactly one type argument"
                     elif

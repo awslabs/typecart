@@ -992,11 +992,11 @@ module Translation =
                         + " to another type: "
                         + tN.ToString()
                     )
-            | TArray (b_o, t_o) ->
+            | TArray (b_o, n_o, t_o) ->
                 match tN with
-                | TArray (b_n, t_n) ->
+                | TArray (b_n, n_n, t_n) ->
                     let tO, tN, tT = tpAbstracted ("ar", t_o, t_n)
-                    TArray(b_o, tO), TArray(b_n, tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
+                    TArray(b_o, n_o, tO), TArray(b_n, n_n, tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
                 | _ ->
                     failwith (
                         unsupported "trying to translate "

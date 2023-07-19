@@ -388,7 +388,7 @@ module YIL =
         | TSeq of Bound * Type
         | TSet of Bound * Type
         | TMap of Bound * Type * Type
-        | TArray of Bound * Type // array of any dimensions
+        | TArray of Bound * string * Type // array of any dimensions (string "array2" means 2 dimensions)
         | TObject // supertype of all classes
         | TNullable of Type
         // identifiers
@@ -428,7 +428,7 @@ module YIL =
             | TFun (ins, out) -> (product ins) + "->" + (out.ToString())
             | TSeq (b, t) -> "seq" + b.ToString() + (tps [ t ])
             | TSet (b, t) -> "set" + b.ToString() + (tps [ t ])
-            | TArray (b, t) -> "arr" + b.ToString() + (tps [ t ])
+            | TArray (b, n, t) -> n + b.ToString() + (tps [ t ])
             | TMap (b, d, r) -> "map" + b.ToString() + (tps [ d; r ])
             | TObject -> "object"
             | TNullable t -> t.ToString() + "?"

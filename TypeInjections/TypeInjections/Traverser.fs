@@ -188,7 +188,7 @@ module Traverser =
             | TSeq (b, t) -> TSeq(b, rc t)
             | TSet (b, t) -> TSet(b, rc t)
             | TMap (b, d, r) -> TMap(b, rc d, rc r)
-            | TArray (b, t) -> TArray(b, rc t)
+            | TArray (b, n, t) -> TArray(b, n, rc t)
             | TFun (ins, out) -> TFun(rcL ins, rc out)
             | TNullable t -> TNullable(rc t)
             | TUnimplemented -> TUnimplemented
