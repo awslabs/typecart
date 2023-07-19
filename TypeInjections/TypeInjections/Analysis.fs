@@ -255,6 +255,14 @@ module Analysis =
             let imports = ctx.importPaths
             this.consumeImportPath p p2 [ currentMethodPath; ctx.modulePath() ] imports
         
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Import importT -> 
+                match importT with
+                | ImportDefault (o, p) -> [ Import(ImportDefault(o, ctx.modulePath().relativize p)) ]
+                | ImportEquals (o, lhs, rhs) -> [ Import(ImportEquals(o, lhs, ctx.modulePath().relativize rhs)) ]
+            | _ -> this.declDefault(ctx, d)
+
         override this.expr(ctx: Context, expr: Expr) =
             let rcE (e: Expr) = this.expr (ctx, e)
             let rcEs (es: Expr list) = List.map rcE es
