@@ -700,12 +700,16 @@ module Translation =
             let xtO = LocalDecl(xO, oldType, false)
             let xtN = LocalDecl(xN, newType, false)
 
-            let inputs = (Utils.listInterleave (List.unzip tvsT)) @ [ xtO ]
+            let inputs =
+                (Utils.listInterleave (List.unzip tvsT)) @ [ xtO ]
+
             let inSpec = InputSpec(inputs, [])
             let outType = newType
             let outSpec = outputType (outType, [])
 
-            let inputs_back = (Utils.listInterleave (List.unzip tvsT)) @ [ xtN ]
+            let inputs_back =
+                (Utils.listInterleave (List.unzip tvsT)) @ [ xtN ]
+
             let inSpec_back = InputSpec(inputs_back, [])
             let outType_back = oldType
             let outSpec_back = outputType (outType_back, [])
@@ -740,7 +744,7 @@ module Translation =
             (fun x -> List.map (fun (a, b) -> a b) (List.zip l x))
         and diag (x: Expr, y: Expr) = EEqual(x, y)
         and reduce (e: Expr) = Traverser.reduce (ctx, e)
-        and abstractRel (x: string, tO: Type, tN: Type, body: Expr -> Expr): Expr =
+        and abstractRel (x: string, tO: Type, tN: Type, body: Expr -> Expr) : Expr =
             let xOE = EVar x
             let bodyXOE = body xOE
 
@@ -827,7 +831,7 @@ module Translation =
                     List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", n, o, t2))) tsONT
 
                 let tsT1, tsT2 = List.unzip tsT
-                let tsTs = Utils.listInterleave(tsT1, tsT2)
+                let tsTs = Utils.listInterleave (tsT1, tsT2)
                 let tsO, tsN, _ = List.unzip3 tsONT
 
                 TApply(pO, tsO),
