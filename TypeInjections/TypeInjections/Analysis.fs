@@ -201,6 +201,19 @@ module Analysis =
             result <- result.Add(p)
             p
         
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Module (n, _, _)
+            | Datatype (n, _, _, _, _)
+            | Class (n, _, _, _, _, _)
+            | TypeDef (n, _, _, _, _, _)
+            | Field (n, _, _, _, _, _, _)
+            | Method (_, n, _, _, _, _, _, _, _, _, _, _)
+            | ClassConstructor (n, _, _, _, _, _) ->
+                result <- result.Add(ctx.currentDecl.child(n))
+            | _ -> ()
+            this.declDefault(ctx, d)
+        
         member this.gather (prog: Program) =
             this.progDefault(prog) |> ignore
             result
@@ -215,19 +228,21 @@ module Analysis =
         override this.ToString() =
             "shortening paths by removing redundant qualification"
         /// remove opened imported path from a path
-        member this.consumeImportPath (p: Path) (imports: ImportType list) =
+        member this.consumeImportPath (p: Path) (pInCurrentMethod: Path) (currentModulePaths: Path list) (imports: ImportType list) =
             // Return the minimal unambiguous path.
-            // Note that directly returning "p" here is also OK, just resulting in longer Dafny code.
+            // Note that directly returning "pInCurrentMethod" here is also OK, just resulting in longer Dafny code.
             let openedImports = List.map (fun (import: ImportType) -> (if import.isOpened() then import.getPath() else Path [])) imports |> List.filter (fun (q: Path) -> q.names.Length > 0)
-            let visiblePaths = Set.filter (fun (q: Path) -> q.name = p.name && List.exists (fun (importPath: Path) -> importPath.isAncestorOf(q)) openedImports) allPaths
-            let minimalPath = List.fold (fun (p1: Path) (q: Path) -> q.relativize p1) p openedImports
+            let visibleModules = currentModulePaths @ openedImports
+            let visiblePaths = Set.filter (fun (q: Path) -> q.name = p.name && List.exists (fun (importPath: Path) -> importPath.isAncestorOf(q)) visibleModules) allPaths
+            let consumedPaths = List.map (fun (q: Path) -> q.relativize p) visibleModules
+            let minimalPath = List.fold (fun (p1: Path) (p2: Path) -> if p1.names.Length <= p2.names.Length then p1 else p2) pInCurrentMethod consumedPaths
             let minimalUnambiguousPathLength = Seq.tryFindIndexBack (fun i -> 
-                let currentPath = Path p.names[i..]
+                let currentPath = Path pInCurrentMethod.names[i..]
                 let visiblePathsWithSameSuffix = Set.filter (fun (q: Path) -> currentPath.isSuffixOf(q)) visiblePaths
-                visiblePathsWithSameSuffix.Count = 1) (seq {0 .. p.names.Length - minimalPath.names.Length})
+                visiblePathsWithSameSuffix.Count = 1) (seq {0 .. pInCurrentMethod.names.Length - minimalPath.names.Length})
             match minimalUnambiguousPathLength with
-            | Some len -> Path p.names[len..]
-            | None -> p
+            | Some len -> Path pInCurrentMethod.names[len..]
+            | None -> pInCurrentMethod
 
         override this.path(ctx: Context, p: Path) =
             let currentMethodPath =
@@ -238,7 +253,25 @@ module Analysis =
 
             let p2 = currentMethodPath.relativize p
             let imports = ctx.importPaths
-            this.consumeImportPath p2 imports
+            this.consumeImportPath p p2 [ currentMethodPath; ctx.modulePath() ] imports
+        
+        override this.expr(ctx: Context, expr: Expr) =
+            let rcE (e: Expr) = this.expr (ctx, e)
+            let rcEs (es: Expr list) = List.map rcE es
+            let tryRemovingReceiver (r: Receiver) (m: Path) (result: Expr) =
+                match r with
+                | StaticReceiver ct ->
+                    if this.path(ctx, m).names.Length = 1 then
+                        result  // remove the receiver completely
+                    else
+                        this.exprDefault(ctx, expr)
+                | ObjectReceiver _ -> this.exprDefault(ctx, expr)
+            match expr with
+            | EMemberRef (r, m, ts) ->
+                tryRemovingReceiver r m (EVar(m.name))
+            | EMethodApply (r, m, ts, es, isG) ->
+                tryRemovingReceiver r m (EAnonApply(EVar(m.name), rcEs es))
+            | _ -> this.exprDefault(ctx, expr)
         
         override this.prog(prog: Program) =
             allPaths <- GatherAllPaths().gather(prog)
