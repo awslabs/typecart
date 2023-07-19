@@ -531,10 +531,7 @@ module Translation =
                     let parentO, parentN, parentT = path (context.currentDecl)
 
                     let parentTvsO, parentTvsN, parentTvsT =
-                        if isStatic then
-                            [], [], []
-                        else
-                            List.unzip3 (List.map typearg parentTvs_o) // TODO: typearg2 parentTvs_o parentTvs_n
+                        List.unzip3 (List.map typearg parentTvs_o) // TODO: typearg2 parentTvs_o parentTvs_n
 
                     let oldInstDecl, newInstDecl, instancesTranslation =
                         let t =
@@ -622,10 +619,7 @@ module Translation =
                                     tp (TVar(fst tparg_o), TVar(fst tparg_n))
 
                                 lossless (TVar(fst tpargO)) tT)
-                            (List.zip3
-                                (parentTvsO @ tvsO)
-                                ((if isStatic then [] else parentTvs_o) @ tvs_o)
-                                ((if isStatic then [] else parentTvs_o) @ tvs_n)) // TODO: parentTvs_n @ tvs_n
+                            (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_o @ tvs_n)) // TODO: parentTvs_n @ tvs_n
 
                     let inSpec =
                         InputSpec(
@@ -706,12 +700,12 @@ module Translation =
             let xtO = LocalDecl(xO, oldType, false)
             let xtN = LocalDecl(xN, newType, false)
 
-            let inputs = (fst (List.unzip tvsT)) @ [ xtO ]
+            let inputs = (Utils.listInterleave (List.unzip tvsT)) @ [ xtO ]
             let inSpec = InputSpec(inputs, [])
             let outType = newType
             let outSpec = outputType (outType, [])
 
-            let inputs_back = (snd (List.unzip tvsT)) @ [ xtN ]
+            let inputs_back = (Utils.listInterleave (List.unzip tvsT)) @ [ xtN ]
             let inSpec_back = InputSpec(inputs_back, [])
             let outType_back = oldType
             let outSpec_back = outputType (outType_back, [])
@@ -746,13 +740,12 @@ module Translation =
             (fun x -> List.map (fun (a, b) -> a b) (List.zip l x))
         and diag (x: Expr, y: Expr) = EEqual(x, y)
         and reduce (e: Expr) = Traverser.reduce (ctx, e)
-        and abstractRel (x: string, tO: Type, tN: Type, body: Expr -> Expr) =
-            let xO, _, _ = name (x)
-            let xOE = EVar xO
+        and abstractRel (x: string, tO: Type, tN: Type, body: Expr -> Expr): Expr =
+            let xOE = EVar x
             let bodyXOE = body xOE
 
             let abs =
-                EFun([ LocalDecl(xO, tO, false) ], tN, bodyXOE)
+                EFun([ LocalDecl(x, tO, false) ], tN, bodyXOE)
 
             reduce abs // reduce eta-contracts
         and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
@@ -831,15 +824,16 @@ module Translation =
                 let tsONT = List.map tp (List.zip ts_o ts_n)
 
                 let tsT =
-                    List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", o, n, t2))) tsONT
+                    List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", n, o, t2))) tsONT
 
                 let tsT1, tsT2 = List.unzip tsT
+                let tsTs = Utils.listInterleave(tsT1, tsT2)
                 let tsO, tsN, _ = List.unzip3 tsONT
 
                 TApply(pO, tsO),
                 TApply(pN, tsN),
-                ((fun x -> EMethodApply(rO, parO.child (fst names), tsO, tsT1 @ [ x ], false)),
-                 (fun x -> EMethodApply(rN, parN.child (snd names), tsN, tsT2 @ [ x ], false)))
+                ((fun x -> EMethodApply(rO, parO.child (fst names), tsO, tsTs @ [ x ], false)),
+                 (fun x -> EMethodApply(rN, parN.child (snd names), tsN, tsTs @ [ x ], false)))
             | TTuple ts_o ->
                 match tN with
                 | TTuple ts_n ->
