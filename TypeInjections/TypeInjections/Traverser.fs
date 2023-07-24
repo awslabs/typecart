@@ -383,11 +383,11 @@ module Traverser =
         default this.case(ctx, case) =
             let varsT = this.localDeclList (ctx, case.vars)
             let ctxE = ctx.add case.vars
-            let patternT = this.expr (ctxE, case.pattern)
+            let patternsT = this.exprList (ctxE, case.patterns)
             let bodyT = this.expr (ctxE, case.body)
 
             { vars = varsT
-              pattern = patternT
+              patterns = patternsT
               body = bodyT }
     // ***** some concrete implementations for examples and testing
 

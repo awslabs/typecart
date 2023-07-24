@@ -299,7 +299,7 @@ module Translation =
                     // "case (p1,p2) -> body // comment" where vs_i are the variables in p_i
                     let buildCase (vars, pattern, comment, body) =
                         [ { vars = vars
-                            pattern = pattern
+                            patterns = [ pattern ]
                             body = ECommented(comment, body) } ]
 
                     match elem with

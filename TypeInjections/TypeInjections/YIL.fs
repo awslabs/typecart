@@ -478,10 +478,11 @@ module YIL =
        But these are resolved away, and abstract syntax only shows pattern = c(x1,...,xn) where c is a
        constructor of the datatype being matched on and the x1 are the local decls.
        But we might generate more general constructors.
+       When patterns contains more than one pattern, it is a disjunctive pattern (pattern1 | ... | patternn).
      *)
     and Case =
         { vars: LocalDecl list
-          pattern: Expr
+          patterns: Expr list
           body: Expr }
 
     /// input specification: typed variables and preconditions
@@ -776,7 +777,7 @@ module YIL =
         let lts = List.map localDeclTerm lds
         // type arguments to EConstructorApply(...) are empty because there is no matching on types
         let pat = EConstructorApply(c, [], lts)
-        { vars = lds; pattern = pat; body = bd }
+        { vars = lds; patterns = [ pat ]; body = bd }
 
     // local variables introduced by an expression (relevant when extending the context during traversal)
     // also defines which variables are visible to later statements in the same block
@@ -1342,7 +1343,7 @@ module YIL =
                     | None -> []
                     | Some e ->
                         [ { vars = []
-                            pattern = EWildcard
+                            patterns = [ EWildcard ]
                             body = e } ] // case _ => e
 
                 let csS =
@@ -1616,7 +1617,7 @@ module YIL =
                     | None -> []
                     | Some e ->
                         [ { vars = []
-                            pattern = EWildcard
+                            patterns = [ EWildcard ]
                             body = e } ] // case _ => e
 
                 let csS =
@@ -1787,7 +1788,7 @@ module YIL =
 
         member this.case (case: Case) (pctx: Context) =
             "case "
-            + this.expr case.pattern (pctx.setPos PatternPosition)
+            + this.exprsNoBr case.patterns " | " (pctx.setPos PatternPosition)
             + " => "
             + indented (this.expr case.body pctx, false)
 

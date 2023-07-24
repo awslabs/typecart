@@ -212,17 +212,17 @@ module DafnyToYIL =
             | _ -> error "Unexpected match case"
 
         { vars = vardecls
-          pattern = patt
+          patterns = patt
           body = bd }
 
-    and pattern (srcTp: Type) (p: ExtendedPattern) : Y.LocalDecl list * Y.Expr =
+    and pattern (srcTp: Type) (p: ExtendedPattern) : Y.LocalDecl list * Y.Expr list =
         match p with
-        | :? LitPattern as p -> [], expr p.OrigLit
+        | :? LitPattern as p -> [], [ expr p.OrigLit ]
         | :? IdPattern as p ->
             if p.ResolvedLit <> null then
-                [], expr p.ResolvedLit
+                [], [ expr p.ResolvedLit ]
             else if p.Arguments = null then
-                [ Y.LocalDecl(p.Id, tp p.Type, false) ], Y.EVar(p.Id)
+                [ Y.LocalDecl(p.Id, tp p.Type, false) ], [ Y.EVar(p.Id) ]
             else
                 let dss, ps =
                     (pattern (srcTp) @ p.Arguments) |> List.unzip
@@ -231,16 +231,21 @@ module DafnyToYIL =
 
                 let patternT =
                     if n.StartsWith(DafnyTupleMake) then
-                        Y.ETuple(ps)
+                        Y.ETuple(List.concat ps)
                     else
                         let constr =
                             pathOfTopLevelDecl(p.Ctor.EnclosingDatatype)
                                 .child (p.Ctor.Name)
 
                         let tpArgs = tp @ srcTp.NormalizeExpand().TypeArgs
-                        Y.EConstructorApply(constr, tpArgs, ps)
+                        Y.EConstructorApply(constr, tpArgs, List.concat ps)
 
-                List.concat dss, patternT
+                List.concat dss, [ patternT ]
+        | :? DisjunctivePattern as p ->
+            let dss, ps =
+                (pattern (srcTp) @ p.Alternatives) |> List.unzip
+
+            List.concat dss, List.concat ps
         | _ -> unsupported "unknown pattern"
 
     and isTrait (d: TopLevelDecl) =
