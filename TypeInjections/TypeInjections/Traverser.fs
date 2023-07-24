@@ -239,6 +239,7 @@ module Traverser =
             | EMultiSelect (a, i) -> EMultiSelect(rcE a, i)
             | EArrayUpdate (a, i, e) -> EArrayUpdate(rcE a, i, rcE e)
             | EMapKeys m -> EMapKeys(rcE m)
+            | EMapValues m -> EMapValues(rcE m)
             | EMapDisplay kvs ->
                 (List.fold (fun l (eKey, eVal) -> (rcE eKey, rcE eVal) :: l) [] kvs)
                 |> List.rev

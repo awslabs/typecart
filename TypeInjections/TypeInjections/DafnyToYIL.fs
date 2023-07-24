@@ -44,6 +44,7 @@ module DafnyToYIL =
     let DafnyPartialFun = "_#PartialFunc"
     let DafnyMap = "map"
     let DafnyKeys = "Keys"
+    let DafnyValues = "Values"
     let DafnyReads = "reads" // the special 'reads' member of a function
     let DafnyArrayPrefix = "array"
 
@@ -667,6 +668,9 @@ module DafnyToYIL =
                 elif p.names.Item(1) = DafnyMap
                      && p.names.Item(2) = DafnyKeys then
                     Y.EMapKeys(e)
+                elif p.names.Item(1) = DafnyMap
+                     && p.names.Item(2) = DafnyValues then
+                    Y.EMapValues(e)
                 elif p.names.Item(1).StartsWith(DafnyFun)
                      && p.names.Item(2) = DafnyReads then
                     Y.EMemberRef(r, p, [])

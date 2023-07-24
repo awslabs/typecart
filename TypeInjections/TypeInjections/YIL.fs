@@ -557,6 +557,7 @@ module YIL =
         | ESeq of tp: Type * elems: Expr list
         | ESeqConstr of tp: Type * length: Expr * init: Expr // builds sequence init(0), ..., init(length-1)
         | EMapKeys of map: Expr
+        | EMapValues of map: Expr
         | EMapDisplay of map: (Expr * Expr) list // explicit map represented as a list
         // map comprehension where tL is an expression over the preimage and tR is an expression mapping preimage to
         // image. If tL = Some tLF, generates the map tLF(p(lds)) -> tR(p(lds)). Otherwise, generates the map
@@ -1514,6 +1515,7 @@ module YIL =
             | EMultiSelect (a, i) -> (expr 11 a) + dims (i)
             | EArrayUpdate (a, i, e) -> (expr 11 a) + dims (i) + " := " + (expr 0 e)
             | EMapKeys (e) -> (expr 11 e) + ".Keys"
+            | EMapValues (e) -> (expr 11 e) + ".Values"
             | EMapDisplay (elts) ->
                 let str =
                     List.fold (fun l (k, v) -> (String.concat " := " [ expr 0 k; expr 0 v ]) :: l) [] elts
