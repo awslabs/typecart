@@ -1215,7 +1215,8 @@ module DafnyToYIL =
         let res = fromIList ar.ResolvedStatements
 
         match res with
-        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? IfStmt; :? UpdateStmt ] ->
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? IfStmt; :? UpdateStmt ]
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssertStmt; :? UpdateStmt ] ->
             let ds = rhsOfUpdate (u)
 
             if ds.Length <> 1 then
