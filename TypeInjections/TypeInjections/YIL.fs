@@ -1587,6 +1587,13 @@ module YIL =
                 (if 0 < precedence then "(" else "")
                 + s
                 + (if 0 < precedence then ")" else "")
+            | EAlternative (conds, bodies) ->
+                let alternativeCase (cond, body) =
+                    "case "
+                    + (expr 0 cond)
+                    + " =>"
+                    + (expr 0 body)
+                "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EFor (index, init, last, up, body) ->
                 let d =
                     EDecls [ (index, Some(plainUpdate init)) ]
