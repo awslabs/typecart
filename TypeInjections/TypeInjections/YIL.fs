@@ -201,6 +201,7 @@ module YIL =
             body: Expr option *
             ghost: bool *
             isStatic: bool *
+            isOpaque: bool *
             meta: Meta
         | Import of ImportType
         | Export of ExportType
@@ -211,7 +212,7 @@ module YIL =
             | Module (_, _, meta) -> meta
             | Datatype (_, _, _, _, meta) -> meta
             | Class (_, _, _, _, _, meta) -> meta
-            | Method (_, _, _, _, _, _, _, _, _, _, _, meta) -> meta
+            | Method (_, _, _, _, _, _, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
             | TypeDef (_, _, _, _, _, meta) -> meta
             | _ -> emptyMeta
@@ -222,7 +223,7 @@ module YIL =
             | Datatype (n, _, _, _, _) -> n
             | Class (n, _, _, _, _, _) -> n
             | ClassConstructor (n, _, _, _, _, _) -> n
-            | Method (_, n, _, _, _, _, _, _, _, _, _, _) -> n
+            | Method (_, n, _, _, _, _, _, _, _, _, _, _, _) -> n
             | Field (n, _, _, _, _, _, _) -> n
             | TypeDef (n, _, _, _, _, _) -> n
             | Import _
@@ -237,7 +238,7 @@ module YIL =
             | Class (_, _, tpvs, _, _, _) -> tpvs
             | TypeDef (_, tpvs, _, _, _, _) -> tpvs
             | Field _ -> []
-            | Method (_, _, tpvs, _, _, _, _, _, _, _, _, _) -> tpvs
+            | Method (_, _, tpvs, _, _, _, _, _, _, _, _, _, _) -> tpvs
             | ClassConstructor (_, tpvs, _, _, _, _) -> tpvs
             | Import _ -> []
             | Export _ -> []
@@ -1154,7 +1155,7 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + this.exprO (eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, o, _) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
@@ -1163,6 +1164,7 @@ module YIL =
                 let methodCtx = pctx.enter (n)
 
                 this.stat (s, pctx)
+                + (if o then "opaque " else "")
                 + (match methodType with
                    | IsLemma
                    | IsLeastLemma

@@ -120,8 +120,13 @@ module Differ =
         | ClassConstructor (nO, tsO, insO, outsO, bO, _), ClassConstructor (nN, tsN, insN, outsN, bN, _) -> nO = nN
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) ->
             nO = nN && gO = gN && sO = sN && mO = mN
-        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, _),
-          Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) -> nO = nN && lO = lN && gO = gN && sO = sN
+        | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, qO, _),
+          Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, qN, _) ->
+            nO = nN
+            && lO = lN
+            && gO = gN
+            && sO = sN
+            && qO = qN
         | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) ->
             isNO = isNN
             && (prO.IsNone && prN.IsNone
@@ -154,8 +159,9 @@ module Differ =
             )
         | Field (nO, tO, iO, gO, sO, mO, _), Field (nN, tN, iN, gN, sN, mN, _) when gO = gN && sO = sN && mO = mN ->
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
-        | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, _),
-          Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, _) when lO = lN && gO = gN && sO = sN ->
+        | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, qO, _),
+          Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, qN, _) when
+            lO = lN && gO = gN && sO = sN && qO = qN ->
             Some(
                 Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec (iO, iN), outputSpec (oO, oN), exprO (bO, bN))
             )

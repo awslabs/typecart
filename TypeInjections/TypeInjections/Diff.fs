@@ -223,7 +223,7 @@ module Diff =
             ClassConstructor(nD, tvsD, idInputSpec ins, idList outs, SameExprO bd)
         | YIL.TypeDef (_, _, sp, pr, _, _) -> TypeDef(nD, tvsD, SameType sp, SameExprO(Option.map snd pr))
         | YIL.Field (_, t, d, _, _, _, _) -> Field(nD, SameType t, SameExprO d)
-        | YIL.Method (_, _, _, ins, outs, _, _, _, bd, _, _, _) ->
+        | YIL.Method (_, _, _, ins, outs, _, _, _, bd, _, _, _, _) ->
             Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
 
     and idList<'y, 'd> (ys: 'y list) : List<'y, 'd> = UpdateList(List.map Same ys)

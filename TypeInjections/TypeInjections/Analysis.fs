@@ -208,7 +208,7 @@ module Analysis =
             | Class (n, _, _, _, _, _)
             | TypeDef (n, _, _, _, _, _)
             | Field (n, _, _, _, _, _, _)
-            | Method (_, n, _, _, _, _, _, _, _, _, _, _)
+            | Method (_, n, _, _, _, _, _, _, _, _, _, _, _)
             | ClassConstructor (n, _, _, _, _, _) ->
                 result <- result.Add(ctx.currentDecl.child(n))
             | _ -> ()
@@ -377,8 +377,8 @@ module Analysis =
 
         override this.decl(ctx: Context, d: Decl) =
             match d with
-            | Method (IsLemma, a, b, c, d, e, f, g, _, h, i, j) ->
-                [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j) ]
+            | Method (IsLemma, a, b, c, d, e, f, g, _, h, i, j, k) ->
+                [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k) ]
             | d -> this.declDefault (ctx, d)
 
     type Pipeline(passes: Traverser.Transform list) =

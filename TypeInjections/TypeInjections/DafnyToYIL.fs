@@ -89,7 +89,7 @@ module DafnyToYIL =
             let tpvars = typeParameter @ d.TypeArgs
             let dName = d.Name
             let meta = namedMeta d
-            [ Y.Datatype(dName, tpvars, constructorDecl @ d.Ctors, memberDecl @ d.Members, meta) ]
+            [ Y.Datatype(dName, tpvars, constructorDecl @ d.Ctors, List.concat (memberDecl @ d.Members), meta) ]
         | :? LiteralModuleDecl as d ->
             // TODO check inheritance etc.
             if d.TypeArgs.Count <> 0 then
@@ -139,18 +139,18 @@ module DafnyToYIL =
                 "Dafny iterators are too idiosyncratic to be compiled easily to other languages and are therefore not supported"
         | :? DefaultClassDecl as d ->
             // we skip the default class declaration and instead shift its members to the containing module
-            memberDecl @ d.Members
+            List.concat (memberDecl @ d.Members)
         | :? ClassDecl as d ->
             let dName = d.Name
             let meta = namedMeta d
             let typeVars = typeParameter @ d.TypeArgs
-            [ Y.Class(dName, isTrait d, typeVars, classType @ d.ParentTraits, memberDecl @ d.Members, meta) ]
+            [ Y.Class(dName, isTrait d, typeVars, classType @ d.ParentTraits, List.concat (memberDecl @ d.Members), meta) ]
         | :? OpaqueTypeDecl as d ->
             let dName = d.Name
             let meta = namedMeta d
             // Misuse Datatype for now when translating opaque types
             let typeVars = typeParameter @ d.TypeArgs
-            [ Y.Datatype(dName, typeVars, [], memberDecl @ d.Members, meta) ]
+            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ]
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
@@ -273,7 +273,7 @@ module DafnyToYIL =
         | _, "method" -> Y.IsMethod
         | _ -> unsupported $"unsupported method type payload: %s{s}"
 
-    and memberDecl (m: MemberDecl) : Y.Decl =
+    and memberDecl (m: MemberDecl) : Y.Decl list =
         match m with
         | :? Constructor as m ->
             let tpvars = typeParameter @ m.TypeArgs
@@ -290,7 +290,7 @@ module DafnyToYIL =
                 Y.InputSpec(formal @ m.Ins, condition @ m.Req)
 
             let output = condition @ m.Ens
-            Y.ClassConstructor(mName, tpvars, input, output, body, namedMeta m)
+            [Y.ClassConstructor(mName, tpvars, input, output, body, namedMeta m)]
         | :? Function as m ->
             // keywords function (ghost), function method, predicate (ghost)
             let tpvars = typeParameter @ m.TypeArgs
@@ -329,7 +329,7 @@ module DafnyToYIL =
             let yilMethodType =
                 methodType (m.ByMethodDecl <> null, m.FunctionDeclarationKeywords)
 
-            Y.Method(
+            [Y.Method(
                 yilMethodType,
                 mName,
                 tpvars,
@@ -341,8 +341,9 @@ module DafnyToYIL =
                 body,
                 m.IsGhost,
                 m.IsStatic,
+                m.IsOpaque,
                 meta
-            )
+            )]
         | :? Method as m ->
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
@@ -376,20 +377,24 @@ module DafnyToYIL =
                 | :? Lemma -> Y.IsLemma
                 | _ -> Y.IsMethod
 
-            Y.Method(
-                yilMethodType,
-                mName,
-                tpvars,
-                input,
-                output,
-                modifies,
-                [],
-                decreases,
-                body,
-                m.IsGhost,
-                m.IsStatic,
-                namedMeta m
-            )
+            if mName.StartsWith(DafnyReveal) then
+                []  // not written explicitly
+            else
+                [Y.Method(
+                    yilMethodType,
+                    mName,
+                    tpvars,
+                    input,
+                    output,
+                    modifies,
+                    [],
+                    decreases,
+                    body,
+                    m.IsGhost,
+                    m.IsStatic,
+                    m.IsOpaque,
+                    namedMeta m
+                )]
         | :? ConstantField as m ->
             let mName = m.Name
             let meta = namedMeta m
@@ -400,13 +405,13 @@ module DafnyToYIL =
                 else
                     Some(expr m.Rhs)
 
-            Y.Field(mName, tp m.Type, dfO, m.IsGhost, m.IsStatic, isMutable = false, meta = meta)
+            [Y.Field(mName, tp m.Type, dfO, m.IsGhost, m.IsStatic, isMutable = false, meta = meta)]
         | :? Field as m ->
             let mName = m.Name
             let meta = namedMeta m
             // Non-constant fields do not have a RHS in Dafny
             // They are always initialized in the `constructor`
-            Y.Field(mName, tp m.Type, None, m.IsGhost, m.IsStatic, isMutable = true, meta = meta)
+            [Y.Field(mName, tp m.Type, None, m.IsGhost, m.IsStatic, isMutable = true, meta = meta)]
         | _ -> unsupported (m.ToString())
 
     and formal (f: Formal) : Y.LocalDecl =

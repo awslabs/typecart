@@ -219,6 +219,7 @@ module Translation =
                         Some body,
                         false,
                         true,
+                        false,
                         context.currentMeta ()
                       )
                       Method(
@@ -233,6 +234,7 @@ module Translation =
                           Some body_back,
                           false,
                           true,
+                          false,
                           context.currentMeta ()
                       ) ]
                 | _ -> failwith ("impossible") // Diff.TypeDef must go with YIL.TypeDef
@@ -387,6 +389,7 @@ module Translation =
                         Some body,
                         false,
                         true,
+                        false,
                         emptyMeta
                       )
                       Method(
@@ -401,6 +404,7 @@ module Translation =
                           Some body_back,
                           false,
                           true,
+                          false,
                           emptyMeta
                       ) ]
 
@@ -428,6 +432,7 @@ module Translation =
                                       body,
                                       ghost,
                                       isStatic,
+                                      isOpaque,
                                       meta) ->
                                 Method(
                                     methodType,
@@ -441,6 +446,7 @@ module Translation =
                                     body,
                                     ghost,
                                     isStatic,
+                                    isOpaque,
                                     meta
                                 )
                             | _ -> d)
@@ -485,6 +491,7 @@ module Translation =
                           Some(EBlock []),
                           true,
                           true,
+                          false,
                           emptyMeta
                       ) ]
                 | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
@@ -493,8 +500,8 @@ module Translation =
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
-                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _),
-                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, _) ->
+                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _, _),
+                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, _, _) ->
                     if not tvsD.isSameOrUpdated then
                         failwith (
                             unsupported "addition or deletion in type parameters: "
@@ -682,7 +689,21 @@ module Translation =
                                 // other cases: generate empty proof
                                 Some(EBlock [])
 
-                    [ Method(IsLemma, pT.name, typeParams, inSpec, outSpec, [], [], [], proof, true, true, emptyMeta) ]
+                    [ Method(
+                          IsLemma,
+                          pT.name,
+                          typeParams,
+                          inSpec,
+                          outSpec,
+                          [],
+                          [],
+                          [],
+                          proof,
+                          true,
+                          true,
+                          false,
+                          emptyMeta
+                      ) ]
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
         and typeDeclHeader (p: Path, dO: Decl, dN: Decl) =
             assert (dO.name = dN.name)

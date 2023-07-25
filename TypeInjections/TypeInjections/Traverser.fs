@@ -130,7 +130,7 @@ module Traverser =
 
                 [ TypeDef(n, tpvs, spT, predT, isN, m) ]
             | Field (n, t, e, isG, isS, isM, m) -> [ Field(n, this.tp (ctx, t), this.exprO (ctx, e), isG, isS, isM, m) ]
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, isG, isS, m) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, isG, isS, isO, m) ->
                 let ctxTps = (ctx.enter n).addTpvars tpvs
                 let insT = this.inputSpec (ctxTps, ins)
                 let ctxIns = ctxTps.add (ins.decls)
@@ -155,7 +155,7 @@ module Traverser =
                 let bT =
                     Option.map (fun b -> this.expr (bodyCtx, b)) b
 
-                [ Method(methodType, n, tpvs, insT, outsT, modifiesT, readsT, decreasesT, bT, isG, isS, m) ]
+                [ Method(methodType, n, tpvs, insT, outsT, modifiesT, readsT, decreasesT, bT, isG, isS, isO, m) ]
             | ClassConstructor (n, tpvs, ins, outs, b, m) ->
                 let headerCtx = (ctx.enter n).addTpvars tpvs
                 let insT = this.inputSpec (headerCtx, ins)
