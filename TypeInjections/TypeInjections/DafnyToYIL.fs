@@ -47,6 +47,7 @@ module DafnyToYIL =
     let DafnyValues = "Values"
     let DafnyReads = "reads" // the special 'reads' member of a function
     let DafnyArrayPrefix = "array"
+    let DafnyReveal = "reveal_"
 
     // ***** the mutually recursive functions
 
@@ -647,7 +648,13 @@ module DafnyToYIL =
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
             if e.ResolvedExpression = null then
-                YIL.EUnimplemented // a few expressions are not resolved by Dafny
+                match Seq.head e.Children with
+                | :? ConcreteSyntaxExpression as e_child ->
+                    if e_child.ResolvedExpression = null then
+                        Y.EUnimplemented
+                    else
+                        expr e_child.ResolvedExpression
+                | _ -> Y.EUnimplemented // a few expressions are not resolved by Dafny
             else
                 expr e.ResolvedExpression
         // identifiers/names
@@ -685,7 +692,10 @@ module DafnyToYIL =
                 let tpargs = tp @ e.TypeApplication_AtEnclosingClass
                 // const field vs field
                 let isPrivate = e.Member.WhatKind.Equals("field")
-                Y.EMemberRef(r, p, tpargs)
+                if p.name.StartsWith(DafnyReveal) then  // remove "reveal_" prefix and append "()"
+                    Y.EAnonApply(Y.EMemberRef(r, p.parent.child(p.name[DafnyReveal.Length..]), tpargs), [])
+                else
+                    Y.EMemberRef(r, p, tpargs)
         | :? ThisExpr -> Y.EThis
         // literals
         | :? CharLiteralExpr as e -> Y.EChar(string e.Value) // always a string according to Dafny spec
