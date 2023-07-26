@@ -252,20 +252,8 @@ module DafnyToYIL =
     
     and casePattern (e: CasePattern<BoundVar>) : Y.LocalDecl list * Y.Expr =
         if e.Var = null then
-            match e.Expr with
-            | :? DatatypeValue as d ->
-                let tpargs = tp @ d.InferredTypeArgs
-                let exprs = expr @ d.Arguments
-                let args = exprs |> List.map
-                                    (fun arg ->
-                                        match arg with
-                                        | Y.EVar name -> name
-                                        | _ -> unsupported "let with unknown pattern")
-
-                let decls = List.zip args tpargs
-                                |> List.map (fun (arg, tparg) -> Y.LocalDecl(arg, tparg, false))
-                decls, Y.ETuple exprs
-            | _ -> unsupported "let with unknown pattern"
+            let vars, lhs = List.unzip (casePattern @ e.Arguments)
+            List.concat vars, Y.ETuple lhs
         else
             let var = e.Var
             // use DisplayName to preserve "_"
