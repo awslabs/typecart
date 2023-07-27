@@ -591,7 +591,7 @@ module YIL =
         | ETypeTest of Expr * Type
         // *** control flow etc.
         | EBlock of exprs: Expr list
-        | ELet of vars: LocalDecl list * exact: bool * orfail: bool * lhs: Expr * df: Expr * body: Expr // not exact = non-deterministic
+        | ELet of vars: LocalDecl list * exact: bool * orfail: bool * lhs: Expr list * df: Expr list * body: Expr // not exact = non-deterministic
         | EIf of cond: Expr * thn: Expr * els: Expr option // cond must not have side-effects; els non-optional if this is an expression; see also flattenIf
         | EAlternative of conds: Expr list * bodies: Expr list // if case cond1 => body1 case cond2 => body2
         | EWhile of cond: Expr * body: Expr * label: (string option)
@@ -604,9 +604,8 @@ module YIL =
             var x1,...,xn := V1,...,Vn  and  var x1,...,xn = V (if V is call to a method with n outputs).
            In the former case, x1 may not occur in V2.
            The latter is at most needed before ghosts are eliminated because we allow only one non-ghost output.
-           Dafny also allows patterns on the lhs, but we do not allow that.
         *)
-        | EDecls of (LocalDecl * UpdateRHS option) list
+        | EDecls of vars: LocalDecl list * lhs: Expr list * rhs: UpdateRHS list
         (* assignment to mutable variables
            x1,...,xn := V
            Like for declarations, there may be multiple variables on the lhs.
@@ -785,7 +784,7 @@ module YIL =
     // also defines which variables are visible to later statements in the same block
     let exprDecl (e: Expr) : LocalDecl list =
         match e with
-        | EDecls ds -> List.map (fun (x, _) -> x) ds
+        | EDecls (d, _, _) -> d
         | EDeclChoice (d, _) -> [ d ]
         | _ -> []
 
@@ -1357,7 +1356,7 @@ module YIL =
                 + indentedBraced (listToString (csS, "\n"))
             (* ModifyStmt *)
             | EPrint es ->
-                "print"
+                "print "
                 + (String.concat ", " (List.map expr es))
                 + ";"
             | EReturn es -> "return " + (exprsNoBr es ", ") + ";"
@@ -1384,8 +1383,7 @@ module YIL =
 
                 sprintf "%s while (%s) %s" label (expr c) (this.statement e pctx)
             | EFor (index, init, last, up, body) ->
-                let d =
-                    EDecls [ (index, Some(plainUpdate init)) ]
+                let d = EDecls([index], [ EVar index.name ], [ plainUpdate init ])
 
                 let forInitCtx = pctx.setPos (InForLoopInitializer)
                 let forBodyCtx = pctx.setPos (InForLoopBody)
@@ -1398,22 +1396,19 @@ module YIL =
                 + this.statement body forBodyCtx
             | ELet (v, ex, orfail, lhs, d, e) ->
                 "var "
-                + (expr lhs)
+                + (exprsNoBr lhs ", ")
                 + (match (ex, orfail) with
                    | true, false -> " := "
                    | true, true -> " :- "
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
-                + (expr d)
+                + (exprsNoBr d ", ")
                 + "; "
                 + (this.statement e pctx)
             | EDecls _
-            | EMethodApply _ as e -> expr e
-            | EDeclChoice (ld, e) ->
-                "var "
-                + (this.localDecl ld)
-                + " where "
-                + (expr e)
+            | EAnonApply _
+            | EMethodApply _
+            | EDeclChoice _ as e -> (expr e) + ";"
             | ECommented (c, e) -> "/* " + c + " */" + this.statement e pctx
             | EUnimplemented -> "/* UNIMPLEMENTED */"
             | b ->
@@ -1566,13 +1561,13 @@ module YIL =
                 s
             | ELet (v, x, orfail, lhs, d, e) ->
                 "var "
-                + (expr 0 lhs)
+                + (exprsNoBr lhs ", ")
                 + (match (x, orfail) with
                    | true, false -> " := "
                    | true, true -> " :- "
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
-                + (expr 0 d)
+                + (exprsNoBr d ", ")
                 + "; "
                 + (expr 0 e)
             | EIf (c, t, e) ->
@@ -1595,8 +1590,7 @@ module YIL =
                     + (expr 0 body)
                 "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EFor (index, init, last, up, body) ->
-                let d =
-                    EDecls [ (index, Some(plainUpdate init)) ]
+                let d = EDecls([ index ], [ EVar index.name ], [ plainUpdate init ])
 
                 let forInitCtx = pctx.setPos (InForLoopInitializer)
                 let forBodyCtx = pctx.setPos (InForLoopBody)
@@ -1637,19 +1631,16 @@ module YIL =
                 "match "
                 + (expr 0 e)
                 + indentedBraced (listToString (csS, "\n"))
-            | EDecls (ds) ->
-                let doOne (ld: LocalDecl, uO: UpdateRHS option) =
-                    let varQual =
-                        if pctx.pos = InForLoopInitializer then
-                            ""
-                        else
-                            "var "
-
-                    varQual
-                    + (this.localDecl ld)
-                    + (Option.defaultValue "" (Option.map (fun x -> this.update x pctx) uO))
-
-                listToString (List.map doOne ds, ", ")
+            | EDecls (vars, lhs, rhs) ->
+                let varQual =
+                    if pctx.pos = InForLoopInitializer then
+                        ""
+                    else
+                        "var "
+                
+                varQual
+                + (exprsNoBr lhs ", ")
+                + (this.updates rhs pctx)
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map (expr 0) ns
 
@@ -1668,7 +1659,7 @@ module YIL =
                 + " is "
                 + (tp t)
                 + (if 9 < precedence then ")" else "")
-            | EPrint es -> "print" + (String.concat ", " (List.map (expr 0) es))
+            | EPrint es -> "print " + (String.concat ", " (List.map (expr 0) es))
             | EAssert e -> "assert " + (expr 0 e)
             | EAssume e -> "assume " + (expr 0 e)
             | EExpect e -> "expect " + (expr 0 e)
@@ -1776,6 +1767,22 @@ module YIL =
         member this.update (u: UpdateRHS) (pctx: Context) =
             let op = if u.monadic.IsSome then ":-" else ":="
             " " + op + " " + (this.expr u.df pctx)
+
+        member this.updates (u: UpdateRHS list) (pctx: Context) =
+            if u.Length = 0 then
+                ""
+            else
+                let monadicList = List.map (fun (x: UpdateRHS) -> x.monadic) u
+                let monadic = if List.forall (fun (x: Type option) -> x.IsNone) monadicList then
+                                  None
+                              elif List.forall (fun (x: Type option) -> x.IsSome) monadicList then
+                                  Some(TTuple (List.map (fun (x: Type option) -> x.Value) monadicList))
+                              else
+                                  error "RHS must be either all monadic or all non-monadic"
+                let op = if monadic.IsSome then ":-" else ":="
+                
+                let rhsExprs = List.map (fun (x: UpdateRHS) -> x.df) u
+                " " + op + " " + (this.exprsNoBr rhsExprs ", " pctx)
 
         member this.localDecl(ld: LocalDecl) =
             if ld.name.StartsWith('#') then

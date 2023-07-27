@@ -259,6 +259,15 @@ module DafnyToYIL =
             // use DisplayName to preserve "_"
             [ Y.LocalDecl(var.DisplayName, tp var.Type, false) ], Y.EVar var.DisplayName
 
+    and casePatternLocalVariable (e: CasePattern<LocalVariable>) : Y.LocalDecl list * Y.Expr =
+        if e.Var = null then
+            let vars, lhs = List.unzip (casePatternLocalVariable @ e.Arguments)
+            List.concat vars, Y.ETuple lhs
+        else
+            let var = e.Var
+            // use DisplayName to preserve "_"
+            [ Y.LocalDecl(var.DisplayName, tp var.Type, false) ], Y.EVar var.DisplayName
+
     and isTrait (d: TopLevelDecl) =
         match d with
         | :? TraitDecl -> true
@@ -619,20 +628,14 @@ module DafnyToYIL =
         | :? LetOrFailExpr as e ->
             match e.ResolvedExpression with
             | :? LetExpr as e ->
-                if e.LHSs.Count <> 1 then
-                    unsupported "let with more than 1 LHS"
-
-                if e.RHSs.Count <> 1 then
-                    unsupported "let with more than 1 RHS"
-
-                let rhs = expr (e.RHSs.Item(0))
+                let rhs = expr @ e.RHSs
 
                 match e.Body with
                 | :? ITEExpr as iteE ->
                     let elseExpr = (iteE.Els :?> LetExpr)
-                    let vars, lhs = casePattern (elseExpr.LHSs.Item(0))
+                    let vars, lhs = List.unzip (casePattern @ elseExpr.LHSs)
                     let body = expr (elseExpr.Body)
-                    Y.ELet(vars, e.Exact, true, lhs, rhs, body)
+                    Y.ELet(List.concat vars, e.Exact, true, lhs, rhs, body)
                 | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
         | :? ConcreteSyntaxExpression as e ->
@@ -763,15 +766,9 @@ module DafnyToYIL =
             // S;E
             Y.EBlock([ statement e.S; expr e.E ])
         | :? LetExpr as e ->
-            if e.LHSs.Count <> 1 then
-                unsupported "let with more than 1 LHS"
-
-            if e.RHSs.Count <> 1 then
-                unsupported "let with more than 1 RHS"
-
-            let v = e.LHSs.Item(0)
-            let vars, lhs = casePattern v
-            Y.ELet(vars, e.Exact, false, lhs, expr (e.RHSs.Item(0)), expr e.Body)
+            let vars, lhs = List.unzip (casePattern @ e.LHSs)
+            let rhs = expr @ e.RHSs
+            Y.ELet(List.concat vars, e.Exact, false, lhs, rhs, expr e.Body)
         | :? ITEExpr as e -> Y.EIf(expr e.Test, expr e.Thn, Some(expr e.Els))
         | :? MatchExpr as e -> Y.EMatch(expr e.Source, tp e.Source.Type, case @ e.Cases, None)
         | :? NestedMatchExpr as e ->
@@ -868,12 +865,10 @@ module DafnyToYIL =
             Y.EMatch(expr e.Source, tp e.Source.Type, nestedCase (e.Source.Type) @ e.Cases, None)
         | :? VarDeclStmt as s ->
             let vs = boundVar @ s.Locals
-
-            let uninitialized =
-                Y.EDecls(List.map (fun (v: Y.LocalDecl) -> (v, None)) vs)
+            let lhs = (fun (v: LocalVariable) -> Y.EVar v.DisplayName) @ s.Locals
 
             match s.Update with
-            | null -> uninitialized
+            | null -> Y.EDecls(vs, lhs, [])
             | :? UpdateStmt as u ->
                 // Rewrite var _, _ := rhs1, rhs2 to rhs1; rhs2
                 if List.forall (fun (x: LocalVariable) -> x.DisplayName = "_") (fromIList s.Locals) then
@@ -892,9 +887,7 @@ module DafnyToYIL =
                     if vs.Length <> ds.Length then
                         error "Number of LHSs in variable declaration does not match number of RHSs"
 
-                    let vds = List.zip vs (List.map Some ds)
-
-                    Y.EDecls(vds)
+                    Y.EDecls(vs, lhs, ds)
             | :? AssignSuchThatStmt as u ->
                 if vs.Length <> 1 then
                     unsupported "Variable declaration with more than 1 LHS"
@@ -908,8 +901,8 @@ module DafnyToYIL =
                 if vs.Length <> 1 then
                     unsupported "Variable declaration with more than 1 LHS"
 
-                let d = Some(rhsOfMonadicUpdate u)
-                Y.EDecls([ (vs.Head, d) ])
+                let d = rhsOfMonadicUpdate u
+                Y.EDecls(vs, lhs, [ d ])
             | _ -> unsupported "Non-trivial RHS in variable declaration"
         | :? UpdateStmt as s ->
             (* general form is pattern, ..., pattern := value, ..., value
@@ -994,11 +987,8 @@ module DafnyToYIL =
                (which are themselves generated variables).
             *)
             let v = s.LHS
-
-            if v.Var = null then
-                unsupported "Variable declaration pattern with constructor pattern"
-            else
-                Y.EDecls([ (boundVar v.Var, Some({ df = expr (s.RHS); monadic = None })) ])
+            let vars, lhs = casePatternLocalVariable v
+            Y.EDecls(vars, [ lhs ], [ { df=expr s.RHS; monadic=None } ])
         | :? ReturnStmt as s ->
             (* There may be more than one return value - see the comment on the translation of the method header.
                There may be no or multiple return values - see the comment on EReturn. *)

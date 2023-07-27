@@ -128,7 +128,8 @@ module Differ =
             && sO = sN
             && qO = qN
         | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) ->
-            isNO = isNN
+            nO = nN
+            && isNO = isNN
             && (prO.IsNone && prN.IsNone
                 || (prO.IsSome
                     && prN.IsSome

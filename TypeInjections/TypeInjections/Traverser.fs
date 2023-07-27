@@ -263,11 +263,11 @@ module Traverser =
 
                 let dfT =
                     if x then
-                        rcE df
+                        List.map rcE df
                     else
-                        this.expr (ctxI, df)
+                        List.map (fun r -> this.expr (ctxI, r)) df
 
-                ELet(this.localDeclList (ctx, v), x, o, this.expr (ctxI, lhs), dfT, this.expr (ctxI, bd))
+                ELet(this.localDeclList (ctx, v), x, o, lhs, dfT, this.expr (ctxI, bd))
             | ETypeConversion (e, t) -> ETypeConversion(rcE e, rcT t)
             | ETypeTest (e, t) -> ETypeTest(rcE e, rcT t)
             | EBlock es ->
@@ -292,13 +292,8 @@ module Traverser =
 
                 let dfltT = this.exprO (ctx, d)
                 EMatch(rcE e, rcT t, csT, dfltT)
-            | EDecls (ds) ->
-                let dsT =
-                    List.map
-                        (fun (ld, upO) -> (this.localDecl (ctx, ld), Option.map (fun u -> this.updateRHS (ctx, u)) upO))
-                        ds
-
-                EDecls(dsT)
+            | EDecls (vars, lhs, rhs) ->
+                EDecls(this.localDeclList (ctx, vars), lhs, List.map (fun u -> this.updateRHS (ctx, u)) rhs)
             | EUpdate (es, rhs) -> EUpdate(rcEs es, this.updateRHS (ctx, rhs))
             | EDeclChoice (ld, e) ->
                 let eT = this.expr (ctx.add [ ld ], e) // e is a predicate about n and thus can see it
