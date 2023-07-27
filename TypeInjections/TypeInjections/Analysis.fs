@@ -146,14 +146,15 @@ module Analysis =
                                     decl
                                 else
                                     let existingPrefix = importDifferByPrefix it
-                                    if existingPrefix <> "" then
+                                    if existingPrefix <> "" && existingPrefix <> prefix then
                                         decl  // do not prefix it
                                     else
                                         Import(it.prefix prefix)
                             | _ -> decl)
                         decls
 
-                [ Module(name, filtDecls, meta) ]
+                // Prefix unfound imports in nested modules
+                this.declDefault (ctx, Module(name, filtDecls, meta))
             | _ -> this.declDefault (ctx, decl)
 
         override this.prog(prog: Program) =
