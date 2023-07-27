@@ -1024,7 +1024,7 @@ module YIL =
             let s =
                 ("\n" + s).Replace("\n", "\n" + indentString)
 
-            if braced then " {" + s + "\n}\n" else s
+            if braced then "{" + s + "\n}" else s
 
         let indentedBraced (s: string) = indented (s, true)
 
@@ -1081,7 +1081,8 @@ module YIL =
                 + ">"
 
         member this.declsGeneral(ds: Decl list, pctx: Context, braced: Boolean) =
-            indented (listToString (List.map (fun d -> this.decl (d, pctx) + "\n\n") ds, ""), braced)
+            (if braced then " " else "")
+            + indented (listToString (List.map (fun d -> this.decl (d, pctx)) ds, "\n\n"), braced)
 
         member this.decls(ds: Decl list, pctx: Context) = this.declsGeneral (ds, pctx, true)
         // array dimensions/indices
@@ -1212,7 +1213,7 @@ module YIL =
                                 | IsLemma
                                 | IsMethod -> this.statement e methodCtx
                                 | _ -> indentedBraced (this.expr e methodCtx)
-                                )[1..]  // remove the initial space
+                                )
                    )
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
@@ -1296,10 +1297,13 @@ module YIL =
             | EAssume e -> "assume " + (expr e) + ";"
             | EExpect e -> "expect " + (expr e) + ";"
             | EBlock es ->
-                let sts =
-                    List.map (fun x -> this.statement x pctx) es
+                if es.Length = 0 then
+                    "{}"  // empty block
+                else
+                    let sts =
+                        List.map (fun x -> this.statement x pctx) es
 
-                indentedBraced (String.concat "\n" sts)
+                    indentedBraced (String.concat "\n" sts)
             | EBreak l ->
                 let label =
                     match l with
@@ -1349,10 +1353,11 @@ module YIL =
                             body = e } ] // case _ => e
 
                 let csS =
-                    List.map (fun (c: Case) -> this.case c pctx) (cases @ defCase)
+                    List.map (fun (c: Case) -> this.caseStatement c pctx) (cases @ defCase)
 
                 "match "
                 + (expr e)
+                + " "
                 + indentedBraced (listToString (csS, "\n"))
             (* ModifyStmt *)
             | EPrint es ->
@@ -1630,6 +1635,7 @@ module YIL =
 
                 "match "
                 + (expr 0 e)
+                + " "
                 + indentedBraced (listToString (csS, "\n"))
             | EDecls (vars, lhs, rhs) ->
                 let varQual =
@@ -1803,6 +1809,17 @@ module YIL =
             match rcv with
             | StaticReceiver (ct) -> this.classType (ct) |> dot // ClassType --> path, tpargs
             | ObjectReceiver (e) -> this.expr e pctx |> dot
+
+        member this.caseStatement (case: Case) (pctx: Context) =
+            // Remove the extra braces
+            let bodyStr = match case.body with
+                          | EBlock es -> String.concat "\n" (List.map (fun x -> this.statement x pctx) es)
+                          | _ -> this.statement case.body pctx
+
+            "case "
+            + this.exprsNoBr case.patterns " | " (pctx.setPos PatternPosition)
+            + " => "
+            + indented (bodyStr, false)
 
         member this.case (case: Case) (pctx: Context) =
             "case "
