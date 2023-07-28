@@ -48,16 +48,19 @@ module DafnyToYIL =
     let DafnyReads = "reads" // the special 'reads' member of a function
     let DafnyArrayPrefix = "array"
     let DafnyReveal = "reveal_"
+    
+    let mutable dafnyOptions = DafnyOptions()
 
     // ***** the mutually recursive functions
 
     (* a program concatenates the input file with all its dependencies, in reverse dependency order
        declarations in a file or module are wrapped in default classes (and a default module if needed)
        and implicitly static *)
-    let rec program (p: Program) : Y.Program =
+    let rec program (p: Program, options: DafnyOptions) : Y.Program =
         let decls = p.DefaultModuleDef.TopLevelDecls
         let declsRev = List.rev (fromIList decls)
         let ddecls = List.collect decl declsRev
+        dafnyOptions <- options
 
         { name = p.Name
           decls = ddecls
@@ -108,10 +111,10 @@ module DafnyToYIL =
             if not (fromIList(d.Exports).IsEmpty) then
                 unsupported "import with exports"
 
-            if d.CompileName = d.Signature.ModuleDef.DafnyName then
+            if d.GetCompileName(dafnyOptions) = d.Signature.ModuleDef.DafnyName then
                 [ Y.Import(Y.ImportDefault(d.Opened, pathOfModule (d.Signature.ModuleDef))) ]
             else
-                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.CompileName ], pathOfModule (d.Signature.ModuleDef))) ]
+                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.GetCompileName(dafnyOptions) ], pathOfModule (d.Signature.ModuleDef))) ]
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs
@@ -345,7 +348,7 @@ module DafnyToYIL =
             let meta = namedMeta m
 
             let yilMethodType =
-                methodType (m.ByMethodDecl <> null, m.FunctionDeclarationKeywords)
+                methodType (m.ByMethodDecl <> null, m.GetFunctionDeclarationKeywords(dafnyOptions))
 
             [Y.Method(
                 yilMethodType,

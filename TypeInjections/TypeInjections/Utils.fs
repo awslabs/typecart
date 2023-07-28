@@ -125,12 +125,11 @@ module Utils =
     /// Dafny utils
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
-        let reporter = ConsoleErrorReporter()
         let options = DafnyOptions()
         options.ApplyDefaultOptions() // needed to enable \U unicode
         // Disable module reveals / provides scopes, otherwise we get e.g. lemmas with empty bodies.
         options.DisableScopes <- true
-        DafnyOptions.Install(options)
+        let reporter = ConsoleErrorReporter(options)
         log "***** Dafny initialised"
         reporter
 
@@ -140,7 +139,7 @@ module Utils =
             failwith "error: list of files supplied to parser is empty"
 
         let dafnyFiles =
-            List.map (fun (x: FileInfo) -> DafnyFile x.FullName) files
+            List.map (fun (x: FileInfo) -> DafnyFile(reporter.Options, x.FullName)) files
 
         let mutable dafnyProgram = Unchecked.defaultof<Program>
         log "***** calling dafny parser for multiple files"
