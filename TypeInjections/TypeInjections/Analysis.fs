@@ -205,48 +205,80 @@ module Analysis =
     type GatherAllPaths() =
         inherit Traverser.Identity()
         
-        let mutable result: Map<Path, Set<string>> = Map.empty
+        // Datatype constructors have lower priorities than local names.
+        //
+        // Phase 0: Add datatype constructor names to the modules. We can use C directly in A if A.B.C is a datatype
+        // constructor (B is a datatype and A is a module) iff C is unambiguous and A.C does not exist.
+        //
+        // Phase 1: Add everything else.
+        let mutable phase: int = 0
+        // <(name: string), (p: Path)>: we get the path p if we refer to the name.
+        // If the name is ambiguous, p is replaced with an empty path.
+        let mutable result: Map<Path, Map<string, Path>> = Map.empty
         
-        member this.addPath(m: Path, p: string) =
-            let pathSetOpt = result.TryFind(m)
-            let pathSet = defaultArg pathSetOpt Set.empty
-            let newPathSet = pathSet.Add(p)
-            result <- result.Add(m, newPathSet)
+        member this.addPathLowPriority(m: Path, pname: string, p: Path) =
+            let pathMapOpt = result.TryFind(m)
+            let pathMap = defaultArg pathMapOpt Map.empty
+            if pathMap.ContainsKey(pname) then
+                // ambiguous name
+                let newPathMap = pathMap.Add(pname, Path [])
+                result <- result.Add(m, newPathMap)
+            else
+                let newPathMap = pathMap.Add(pname, p)
+                result <- result.Add(m, newPathMap)
+
+        member this.addPath(m: Path, pname: string, p: Path) =
+            let pathMapOpt = result.TryFind(m)
+            let pathMap = defaultArg pathMapOpt Map.empty
+            let newPathMap = pathMap.Add(pname, p)
+            result <- result.Add(m, newPathMap)
 
         override this.path(ctx: Context, p: Path) =
-            // We cannot add p.name to ctx.currentDecl. We might be calling D.E.F from A.B.C.
-            this.addPath(p.parent, p.name)
+            if phase = 0 then
+                ()
+            else
+                // We cannot add p.name to ctx.currentDecl. We might be calling D.E.F from A.B.C.
+                this.addPath(p.parent, p.name, p)
             p
         
         override this.constructor(ctx: Context, cons: DatatypeConstructor) =
-            // Datatype constructors are not calling this.path
-            this.addPath(ctx.currentDecl, cons.name)
+            // Note: datatype constructors are not calling this.path
+            if phase = 0 then
+                this.addPathLowPriority(ctx.modulePath(), cons.name, ctx.currentDecl.child(cons.name))
+            else
+                this.addPath(ctx.currentDecl, cons.name, ctx.currentDecl.child(cons.name))
             cons
         
         override this.decl(ctx: Context, d: Decl) : Decl list =
-            match d with
-            | Module (n, _, _)
-            | Datatype (n, _, _, _, _)
-            | Class (n, _, _, _, _, _)
-            | TypeDef (n, _, _, _, _, _)
-            | Field (n, _, _, _, _, _, _)
-            | Method (_, n, _, _, _, _, _, _, _, _, _, _, _)
-            | ClassConstructor (n, _, _, _, _, _) ->
-                this.addPath(ctx.currentDecl, n)
-            | _ -> ()
+            if phase = 0 then
+                this.declDefault(ctx, d)
+            else
+                match d with
+                | Module (n, _, _)
+                | Datatype (n, _, _, _, _)
+                | Class (n, _, _, _, _, _)
+                | TypeDef (n, _, _, _, _, _)
+                | Field (n, _, _, _, _, _, _)
+                | Method (_, n, _, _, _, _, _, _, _, _, _, _, _)
+                | ClassConstructor (n, _, _, _, _, _) ->
+                    this.addPath(ctx.currentDecl, n, ctx.currentDecl.child(n))
+                | _ -> ()
             
-            match d with
-            | Import it ->
-                match it with
-                | ImportDefault(_, l)
-                | ImportEquals(_, l, _) ->
-                    // Do not add rhs to the paths set
-                    // Do not add the full path to the paths set
-                    this.addPath(ctx.currentDecl, l.name)
-                    [ d ]
-            | _ -> this.declDefault(ctx, d)
+                match d with
+                | Import it ->
+                    match it with
+                    | ImportDefault(_, l)
+                    | ImportEquals(_, l, _) ->
+                        // Special case: we want the LHS name to map to the actual path.
+                        // We do not want to call this.declDefault() which calls this.path().
+                        this.addPath(ctx.currentDecl, l.name, it.getPath())
+                        [ d ]
+                | _ -> this.declDefault(ctx, d)
 
         member this.gather(prog: Program) =
+            phase <- 0
+            this.progDefault(prog) |> ignore
+            phase <- 1
             this.progDefault(prog) |> ignore
             result
 
@@ -254,13 +286,15 @@ module Analysis =
     type GatherExportPaths() =
         inherit Traverser.Identity()
         
-        let mutable result: Map<Path, Set<string>> = Map.empty
+        // <(name: string), (p: Path)>: we get the path p if we refer to the name.
+        // If the name is ambiguous, p is replaced with an empty path.
+        let mutable result: Map<Path, Map<string, Path>> = Map.empty
         
         member this.addPaths(m: Path, p: Path list) =
-            let pathSetOpt = result.TryFind(m)
-            let pathSet = defaultArg pathSetOpt Set.empty
-            let newPathSet = List.foldBack Set.add (List.map (fun (x: Path) -> x.name) p) pathSet
-            result <- result.Add(m, newPathSet)
+            let pathMapOpt = result.TryFind(m)
+            let pathMap = defaultArg pathMapOpt Map.empty
+            let newPathMap = List.foldBack ((fun x (y, z) -> x y z) Map.add) (List.map (fun (x: Path) -> (x.name, x)) p) pathMap
+            result <- result.Add(m, newPathMap)
 
         override this.decl(ctx: Context, d: Decl) : Decl list =
             match d with
@@ -269,7 +303,7 @@ module Analysis =
             | _ -> ()
             this.declDefault(ctx, d)
         
-        member this.gather(prog: Program, allPaths: Map<Path, Set<string>>) =
+        member this.gather(prog: Program, allPaths: Map<Path, Map<string, Path>>) =
             this.progDefault(prog) |> ignore
             // By default, export all paths
             Map.iter (fun m p -> if not (result.ContainsKey(m)) then result <- result.Add(m, p)) allPaths
@@ -279,38 +313,42 @@ module Analysis =
     type GatherVisiblePaths() =
         inherit Traverser.Identity()
         
-        let mutable exportPaths: Map<Path, Set<string>> = Map.empty
-        // <(name: string) * (shadowed: bool)>: if shadowed is true, directly using the name is using the path
-        // inside the module, and the path imported must be qualified with the imported module name.
-        let mutable result: Map<Path, Set<string * bool>> = Map.empty
+        // Imported names have lower priorities than native names.
+        let mutable exportPaths: Map<Path, Map<string, Path>> = Map.empty
+        // <(name: string), (p: Path)>: we get the path p if we refer to the name.
+        // If the name is ambiguous, p is replaced with an empty path.
+        let mutable result: Map<Path, Map<string, Path>> = Map.empty
         
-        member this.addPaths(m: Path, ps: Set<string>) =
-            // If both sets contain a name, make it (name, true).
-            // if exactly one of the set contains a name, make it (name, false).
-            let pathSetOpt = result.TryFind(m)
-            let pathSet = defaultArg pathSetOpt Set.empty
-            let currentAmbiguousSet = Set.filter (fun (p, s) -> ps.Contains(p) && not s) pathSet
-            let pathSet1 = Set.difference pathSet currentAmbiguousSet
-            let pathSet2 = Set.union pathSet1 (Set.map (fun (p, _) -> (p, true)) currentAmbiguousSet)
-            let pathSet3 = Set.foldBack Set.add (Set.map (fun (x: string) -> (x, false)) (Set.filter (fun p -> not (pathSet2.Contains((p, false))) && not (pathSet2.Contains((p, true)))) ps)) pathSet2
-            result <- result.Add(m, pathSet3)
+        member this.addPathsLowPriority(m: Path, ps: Map<string, Path>) =
+            // If both sets contain a name, make it (name, Path []).
+            // if exactly one of the set contains a name, make it (name, p).
+            let pathMapOpt = result.TryFind(m)
+            let pathMap = defaultArg pathMapOpt Map.empty
+            let ambiguousMap, pathMap1 = Map.partition (fun name p -> ps.ContainsKey(name)) pathMap
+            let pathMap2 = Map.foldBack Map.add (Map.map (fun name p -> Path []) ambiguousMap) pathMap1
+            let pathMap3 = Map.foldBack Map.add (Map.filter (fun name p -> not (pathMap2.ContainsKey(name))) ps) pathMap2
+            result <- result.Add(m, pathMap3)
+
+        member this.addPaths(m: Path, ps: Map<string, Path>) =
+            let pathMapOpt = result.TryFind(m)
+            let pathMap = defaultArg pathMapOpt Map.empty
+            let newPathMap = Map.foldBack Map.add ps pathMap
+            result <- result.Add(m, newPathMap)
 
         override this.decl(ctx: Context, d: Decl) : Decl list =
             match d with
             | Import it ->
                 if it.isOpened() then
-                    this.addPaths(ctx.currentDecl, exportPaths[it.getPath()])
+                    this.addPathsLowPriority(ctx.currentDecl, exportPaths[it.getPath()])
             | _ -> ()
             this.declDefault(ctx, d)
         
-        member this.gather(prog: Program, allPaths: Map<Path, Set<string>>) =
+        member this.gather(prog: Program, allPaths: Map<Path, Map<string, Path>>) =
             exportPaths <- GatherExportPaths().gather(prog, allPaths)
             // Deal with imported paths first.
             this.progDefault(prog) |> ignore
             // Add all native paths.
             allPaths |> Map.iter (fun m ps -> this.addPaths(m, ps))
-            // Add all native paths again in non-shadow mode.
-            allPaths |> Map.iter (fun m ps -> result <- result.Add(m, Set.union result[m] (Set.map (fun p -> (p, false)) ps)))
             result
 
     /// makes path unqualified if they are relative to the current method or an opened module
@@ -318,7 +356,7 @@ module Analysis =
     type UnqualifyPaths() =
         inherit Traverser.Identity()
         
-        let mutable visiblePaths: Map<Path, Set<string * bool>> = Map.empty
+        let mutable visiblePaths: Map<Path, Map<string, Path>> = Map.empty
 
         override this.ToString() =
             "shortening paths by removing redundant qualification"
@@ -340,13 +378,13 @@ module Analysis =
             // If we refer to C.D.foo in module A with import opened B and import opened C,
             // and there are B.D, B.foo, C.D.foo but not B.D.foo,
             // we cannot return D.foo because D is ambiguous even if D.foo is not ambiguous.
-            let currentVisiblePaths = visiblePaths[currentModulePath]
+            let currentMethodVisiblePaths = visiblePaths[currentMethodPath]
+            let currentModuleVisiblePaths = visiblePaths[currentModulePath]
             let firstAmbiguousIndex = Seq.tryFindIndexBack (fun i ->
                                           let currentName = pInCurrentMethod.names[i]
-                                          if Path(p.names[..i + (p.names.Length - pInCurrentMethod.names.Length)]).parent = currentModulePath then
-                                              currentVisiblePaths.Contains((currentName, false))  // directly inside the module, no need to consider ambiguity
-                                          else
-                                              currentVisiblePaths.Contains((currentName, false)) && not (currentVisiblePaths.Contains((currentName, true)))
+                                          let currentMethodPathOpt = currentMethodVisiblePaths.TryFind(currentName)
+                                          let currentPathOpt = Option.orElse (currentModuleVisiblePaths.TryFind(currentName)) currentMethodPathOpt
+                                          currentPathOpt |> Option.exists (fun (currentPath: Path) -> currentPath = (Path p.names[..i + p.names.Length - pInCurrentMethod.names.Length]))
                                           ) (seq {0 .. pInCurrentMethod.names.Length - 1})
             let result = match firstAmbiguousIndex with
                          | Some len -> Path pInCurrentMethod.names[len..]
@@ -389,7 +427,7 @@ module Analysis =
                 tryRemovingReceiver r m (EAnonApply(EVar(m.name), rcEs es))
             | _ -> this.exprDefault(ctx, expr)
         
-        member this.run(prog: Program, gatheredVisiblePaths: Map<Path, Set<string * bool>>) =
+        member this.run(prog: Program, gatheredVisiblePaths: Map<Path, Map<string, Path>>) =
             visiblePaths <- gatheredVisiblePaths
             this.progDefault(prog)
 
