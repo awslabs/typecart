@@ -111,6 +111,22 @@ module Analysis =
                 this.declDefault (ctx, Module(name, is @ decls, meta))
             | _ -> this.declDefault (ctx, decl)
 
+    type GatherAllModules() =
+        inherit Traverser.Identity()
+        
+        let mutable result: Set<ImportType> = Set.empty
+        
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Module (name, _, _) ->
+                result <- result.Add(ImportDefault(false, Path [ name ]))
+            | _ -> ()
+            this.declDefault(ctx, d)
+        
+        member this.gather (prog: Program) =
+            this.progDefault(prog) |> ignore
+            result
+
     /// adds a given prefix to every import not found in the current AST;
     /// note that a module with an extra prefix in the current AST is considered as found
     type PrefixUnfoundImports(prefix: string) =
@@ -158,16 +174,8 @@ module Analysis =
             | _ -> this.declDefault (ctx, decl)
 
         override this.prog(prog: Program) =
-            let decls = prog.decls in
-
-            let ctx =
-                List.fold
-                    (fun (ctx: Context) decl ->
-                        match decl with
-                        | Module (name, _, _) -> ctx.addImport (ImportDefault(false, Path [ name ]))
-                        | _ -> ctx)
-                    (Context(prog))
-                    decls
+            let modules = GatherAllModules().gather(prog)
+            let ctx = Set.fold (fun (ctx: Context) import -> ctx.addImport(import)) (Context(prog)) modules
 
             let dsT =
                 List.collect (fun (d: Decl) -> this.decl (ctx, d)) prog.decls
@@ -193,14 +201,27 @@ module Analysis =
               decls = List.map prD prog.decls
               meta = prog.meta }
     
+    /// Returns a map from each path to all children in it (but not in nested modules or in datatypes)
     type GatherAllPaths() =
         inherit Traverser.Identity()
         
-        let mutable result: Set<Path> = Set.empty
+        let mutable result: Map<Path, Set<string>> = Map.empty
         
+        member this.addPath(m: Path, p: string) =
+            let pathSetOpt = result.TryFind(m)
+            let pathSet = defaultArg pathSetOpt Set.empty
+            let newPathSet = pathSet.Add(p)
+            result <- result.Add(m, newPathSet)
+
         override this.path(ctx: Context, p: Path) =
-            result <- result.Add(p)
+            // We cannot add p.name to ctx.currentDecl. We might be calling D.E.F from A.B.C.
+            this.addPath(p.parent, p.name)
             p
+        
+        override this.constructor(ctx: Context, cons: DatatypeConstructor) =
+            // Datatype constructors are not calling this.path
+            this.addPath(ctx.currentDecl, cons.name)
+            cons
         
         override this.decl(ctx: Context, d: Decl) : Decl list =
             match d with
@@ -211,12 +232,85 @@ module Analysis =
             | Field (n, _, _, _, _, _, _)
             | Method (_, n, _, _, _, _, _, _, _, _, _, _, _)
             | ClassConstructor (n, _, _, _, _, _) ->
-                result <- result.Add(ctx.currentDecl.child(n))
+                this.addPath(ctx.currentDecl, n)
+            | _ -> ()
+            
+            match d with
+            | Import it ->
+                match it with
+                | ImportDefault(_, l)
+                | ImportEquals(_, l, _) ->
+                    // Do not add rhs to the paths set
+                    // Do not add the full path to the paths set
+                    this.addPath(ctx.currentDecl, l.name)
+                    [ d ]
+            | _ -> this.declDefault(ctx, d)
+
+        member this.gather(prog: Program) =
+            this.progDefault(prog) |> ignore
+            result
+
+    /// Returns a map from each module to all paths it exports
+    type GatherExportPaths() =
+        inherit Traverser.Identity()
+        
+        let mutable result: Map<Path, Set<string>> = Map.empty
+        
+        member this.addPaths(m: Path, p: Path list) =
+            let pathSetOpt = result.TryFind(m)
+            let pathSet = defaultArg pathSetOpt Set.empty
+            let newPathSet = List.foldBack Set.add (List.map (fun (x: Path) -> x.name) p) pathSet
+            result <- result.Add(m, newPathSet)
+
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Export e ->
+                this.addPaths(ctx.currentDecl, e.provides @ e.reveals)
             | _ -> ()
             this.declDefault(ctx, d)
         
-        member this.gather (prog: Program) =
+        member this.gather(prog: Program, allPaths: Map<Path, Set<string>>) =
             this.progDefault(prog) |> ignore
+            // By default, export all paths
+            Map.iter (fun m p -> if not (result.ContainsKey(m)) then result <- result.Add(m, p)) allPaths
+            result
+
+    /// Returns a map from each module to its visible paths
+    type GatherVisiblePaths() =
+        inherit Traverser.Identity()
+        
+        let mutable exportPaths: Map<Path, Set<string>> = Map.empty
+        // <(name: string) * (shadowed: bool)>: if shadowed is true, directly using the name is using the path
+        // inside the module, and the path imported must be qualified with the imported module name.
+        let mutable result: Map<Path, Set<string * bool>> = Map.empty
+        
+        member this.addPaths(m: Path, ps: Set<string>) =
+            // If both sets contain a name, make it (name, true).
+            // if exactly one of the set contains a name, make it (name, false).
+            let pathSetOpt = result.TryFind(m)
+            let pathSet = defaultArg pathSetOpt Set.empty
+            let currentAmbiguousSet = Set.filter (fun (p, s) -> ps.Contains(p) && not s) pathSet
+            let pathSet1 = Set.difference pathSet currentAmbiguousSet
+            let pathSet2 = Set.union pathSet1 (Set.map (fun (p, _) -> (p, true)) currentAmbiguousSet)
+            let pathSet3 = Set.foldBack Set.add (Set.map (fun (x: string) -> (x, false)) (Set.filter (fun p -> not (pathSet2.Contains((p, false))) && not (pathSet2.Contains((p, true)))) ps)) pathSet2
+            result <- result.Add(m, pathSet3)
+
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Import it ->
+                if it.isOpened() then
+                    this.addPaths(ctx.currentDecl, exportPaths[it.getPath()])
+            | _ -> ()
+            this.declDefault(ctx, d)
+        
+        member this.gather(prog: Program, allPaths: Map<Path, Set<string>>) =
+            exportPaths <- GatherExportPaths().gather(prog, allPaths)
+            // Deal with imported paths first.
+            this.progDefault(prog) |> ignore
+            // Add all native paths.
+            allPaths |> Map.iter (fun m ps -> this.addPaths(m, ps))
+            // Add all native paths again in non-shadow mode.
+            allPaths |> Map.iter (fun m ps -> result <- result.Add(m, Set.union result[m] (Set.map (fun p -> (p, false)) ps)))
             result
 
     /// makes path unqualified if they are relative to the current method or an opened module
@@ -224,26 +318,40 @@ module Analysis =
     type UnqualifyPaths() =
         inherit Traverser.Identity()
         
-        let mutable allPaths: Set<Path> = Set.empty
+        let mutable visiblePaths: Map<Path, Set<string * bool>> = Map.empty
 
         override this.ToString() =
             "shortening paths by removing redundant qualification"
+
         /// remove opened imported path from a path
-        member this.consumeImportPath (p: Path) (pInCurrentMethod: Path) (currentModulePaths: Path list) (imports: ImportType list) =
+        member this.consumeImportPath (p: Path) (currentMethodPath: Path) (currentModulePath: Path) (imports: ImportType list) =
             // Return the minimal unambiguous path.
-            // Note that directly returning "pInCurrentMethod" here is also OK, just resulting in longer Dafny code.
-            let openedImports = List.map (fun (import: ImportType) -> (if import.isOpened() then import.getPath() else Path [])) imports |> List.filter (fun (q: Path) -> q.names.Length > 0)
-            let visibleModules = currentModulePaths @ openedImports
-            let visiblePaths = Set.filter (fun (q: Path) -> q.name = p.name && List.exists (fun (importPath: Path) -> importPath.isAncestorOf(q)) visibleModules) allPaths
-            let consumedPaths = List.map (fun (q: Path) -> q.relativize p) visibleModules
-            let minimalPath = List.fold (fun (p1: Path) (p2: Path) -> if p1.names.Length <= p2.names.Length then p1 else p2) pInCurrentMethod consumedPaths
-            let minimalUnambiguousPathLength = Seq.tryFindIndexBack (fun i -> 
-                let currentPath = Path pInCurrentMethod.names[i..]
-                let visiblePathsWithSameSuffix = Set.filter (fun (q: Path) -> currentPath.isSuffixOf(q)) visiblePaths
-                visiblePathsWithSameSuffix.Count = 1) (seq {0 .. pInCurrentMethod.names.Length - minimalPath.names.Length})
-            match minimalUnambiguousPathLength with
-            | Some len -> Path pInCurrentMethod.names[len..]
-            | None -> pInCurrentMethod
+            //
+            // Use LHS in ImportEquals if the path is imported with ImportEquals.
+            let importEqual = List.tryFind (fun (im: ImportType) -> match im with
+                                                                    | ImportDefault _ -> false
+                                                                    | ImportEquals(_, _, rhsDir) -> rhsDir.isAncestorOf(p)) imports
+            let pInImportEqual = Option.fold (fun (p: Path) (im: ImportType) -> match im with
+                                                                                | ImportDefault _ -> p
+                                                                                | ImportEquals(_, lhsDir, rhsDir) -> Path(lhsDir.name::p.names[rhsDir.names.Length..])) p importEqual
+            let pInCurrentMethod = currentMethodPath.relativize pInImportEqual
+            // Note that directly returning "pInCurrentMethod" here is also OK in most cases.
+            //
+            // If we refer to C.D.foo in module A with import opened B and import opened C,
+            // and there are B.D, B.foo, C.D.foo but not B.D.foo,
+            // we cannot return D.foo because D is ambiguous even if D.foo is not ambiguous.
+            let currentVisiblePaths = visiblePaths[currentModulePath]
+            let firstAmbiguousIndex = Seq.tryFindIndexBack (fun i ->
+                                          let currentName = pInCurrentMethod.names[i]
+                                          if Path(p.names[..i + (p.names.Length - pInCurrentMethod.names.Length)]).parent = currentModulePath then
+                                              currentVisiblePaths.Contains((currentName, false))  // directly inside the module, no need to consider ambiguity
+                                          else
+                                              currentVisiblePaths.Contains((currentName, false)) && not (currentVisiblePaths.Contains((currentName, true)))
+                                          ) (seq {0 .. pInCurrentMethod.names.Length - 1})
+            let result = match firstAmbiguousIndex with
+                         | Some len -> Path pInCurrentMethod.names[len..]
+                         | None -> pInCurrentMethod
+            result
 
         override this.path(ctx: Context, p: Path) =
             let currentMethodPath =
@@ -251,10 +359,9 @@ module Analysis =
                     ctx.currentDecl
                 else
                     ctx.currentDecl.parent
-
-            let p2 = currentMethodPath.relativize p
             let imports = ctx.importPaths
-            this.consumeImportPath p p2 [ currentMethodPath; ctx.modulePath() ] imports
+
+            this.consumeImportPath p currentMethodPath (ctx.modulePath()) imports
         
         override this.decl(ctx: Context, d: Decl) : Decl list =
             match d with
@@ -282,8 +389,8 @@ module Analysis =
                 tryRemovingReceiver r m (EAnonApply(EVar(m.name), rcEs es))
             | _ -> this.exprDefault(ctx, expr)
         
-        override this.prog(prog: Program) =
-            allPaths <- GatherAllPaths().gather(prog)
+        member this.run(prog: Program, gatheredVisiblePaths: Map<Path, Set<string * bool>>) =
+            visiblePaths <- gatheredVisiblePaths
             this.progDefault(prog)
 
     /// removes duplicate includes in programs or imports in modules
@@ -385,11 +492,20 @@ module Analysis =
     type Pipeline(passes: Traverser.Transform list) =
         member this.apply(prog: Program) =
             let mutable pM = prog
+            
+            // We need to gather the paths at the beginning before filtering joint/old/new.
+            let allPaths = GatherAllPaths().gather(prog)
+            let visiblePaths = GatherVisiblePaths().gather(prog, allPaths)
 
             passes
             |> List.iter
                 (fun pass ->
-                    Console.WriteLine(pass.ToString())
-                    pM <- pass.prog pM)
+                    match pass with
+                    | :? UnqualifyPaths as p ->
+                        Console.WriteLine(p.ToString())
+                        pM <- p.run(pM, visiblePaths)
+                    | _ ->
+                        Console.WriteLine(pass.ToString())
+                        pM <- pass.prog pM)
 
             pM

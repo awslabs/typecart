@@ -924,16 +924,14 @@ module YIL =
                 ancs
                 |> List.tryFindIndex (fun (d: Decl) -> d.isModule ())
 
-            let firstMod =
-                match firstModO with
-                | Some m -> m
-                | None -> failwith "no module path"
+            if firstModO.IsNone then
+                Path []  // global
+            else
+                let modNames =
+                    ancs.GetSlice(firstModO, None)
+                    |> List.map (fun d -> d.name)
 
-            let modNames =
-                ancs.GetSlice(Some firstMod, None)
-                |> List.map (fun d -> d.name)
-
-            Path(List.rev modNames)
+                Path(List.rev modNames)
 
         member this.importPaths = importPaths
 
