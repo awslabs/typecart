@@ -291,6 +291,28 @@ module DafnyToYIL =
         | _, "method" -> Y.IsMethod
         | _ -> unsupported $"unsupported method type payload: %s{s}"
 
+    and updateMethodByAttribute (e: Y.Decl) (attr: UserSuppliedAttributes): Y.Decl =
+        match e with
+        | Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta) ->
+            match attr.Name, fromIList attr.Args with
+            | "opaque", args when args.IsEmpty ->
+                Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, true, meta)
+            | _ ->
+                warning $"dropping unsupported attribute: %s{attr.Name}"
+                e
+        | _ -> unsupported "updateMethodByAttribute called without a method"
+
+    and updateMethodByAttributes (e: Y.Decl) (attr: Attributes): Y.Decl =
+        match attr with
+        | null -> e
+        | :? UserSuppliedAttributes as u ->
+            updateMethodByAttributes (updateMethodByAttribute e u) attr.Prev
+        | _ ->
+            if attr.Name = "fuel" then
+                updateMethodByAttributes e attr.Prev  // ignore this attribute
+            else
+                unsupported $"unsupported method attributes: %s{attr.Name}"
+
     and memberDecl (m: MemberDecl) : Y.Decl list =
         match m with
         | :? Constructor as m ->
@@ -347,7 +369,7 @@ module DafnyToYIL =
             let yilMethodType =
                 methodType (m.ByMethodDecl <> null, m.FunctionDeclarationKeywords)
 
-            [Y.Method(
+            let method = Y.Method(
                 yilMethodType,
                 mName,
                 tpvars,
@@ -361,7 +383,9 @@ module DafnyToYIL =
                 m.IsStatic,
                 m.IsOpaque,
                 meta
-            )]
+            )
+            let methodWithAttr = updateMethodByAttributes method m.Attributes
+            [ methodWithAttr ]
         | :? Method as m ->
             // keywords method, lemma (ghost)
             let tpvars = typeParameter @ m.TypeArgs
