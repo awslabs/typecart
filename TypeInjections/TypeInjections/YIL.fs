@@ -1453,7 +1453,7 @@ module YIL =
                 let n3 = n2.Replace("#", "x") // Variables with no names
                 n3
             | EThis -> "this"
-            | ENew (ct, _) -> "new " + this.classType (ct) + "()"
+            | ENew (ct, args) -> "new " + this.classType (ct) + (exprs args)
             | ENull _ -> "null"
             | EMemberRef (r, m, _) -> (receiver r) + m.name
             | EBool (v) ->
