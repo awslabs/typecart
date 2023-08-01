@@ -134,6 +134,8 @@ module Differ =
                 || (prO.IsSome
                     && prN.IsSome
                     && (fst prO.Value) = (fst prN.Value)))
+        | Datatype (nO, tsO, csO, msO, _), TypeDef (nN, tsN, spN, prN, isNN, _) -> nO = nN
+        | TypeDef (nO, tsO, spO, prO, isNO, _), Datatype (nN, tsN, csN, msN, _) -> nO = nN
         | _ -> false
 
     /// diffs two similar declarations
@@ -175,6 +177,10 @@ module Differ =
                     && (fst prO.Value) = (fst prN.Value))) ->
             let s = Option.map snd
             Some(Diff.TypeDef(name (nO, nN), typeargs (tsO, tsN), tp (spO, spN), exprO (s prO, s prN)))
+        | Datatype (nO, tsO, csO, msO, _), TypeDef (nN, tsN, spN, prN, isNN, _) when nO = nN ->
+            Some(Diff.Datatype(name (nO, nN), typeargs (tsO, tsN), Diff.UpdateList [], Diff.UpdateList []))
+        | TypeDef (nO, tsO, spO, prO, isNO, _), Datatype (nN, tsN, csN, msN, _) when nO = nN ->
+            Some(Diff.Datatype(name (nO, nN), typeargs (tsO, tsN), Diff.UpdateList [], Diff.UpdateList []))
         | _ -> None
 
     /// diffs two sets of datatype constructors
