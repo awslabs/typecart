@@ -66,16 +66,23 @@ module Analysis =
         List.iter add start
         closure
 
-    /// filters declarations by applying a predicate to their path
-    type FilterDecls(keep: Path -> bool) =
+    /// filters declarations by applying a predicate to their path;
+    /// prefix imports to removed declarations
+    type FilterDeclsAndPrefixImports(keep: Path -> bool, prefix: string) =
         inherit Traverser.Identity()
-        override this.ToString() = "filtering declarations"
+        override this.ToString() = "filtering declarations and prefixing imports with " + prefix
 
         override this.decl(ctx: Context, decl: Decl) =
-            let childCtx = ctx.enter decl.name
-            let preservedChildren (d: Decl) = keep (ctx.currentDecl.child (d.name))
-            let declsF = decl.filterChildren preservedChildren
-            this.declDefault (childCtx, declsF)
+            match decl with
+            | Module(name, _, _) -> if keep (ctx.currentDecl.child (name)) then
+                                        this.declDefault(ctx, decl)
+                                    else
+                                        []
+            | Import im -> if keep (im.getPath()) then
+                               [ decl ]
+                           else
+                               [ Import(im.prefix prefix) ]
+            | _ -> this.declDefault(ctx, decl)
 
         override this.prog(p: Program) =
             let dsF =
@@ -83,7 +90,7 @@ module Analysis =
                 |> List.filter (fun (d: Decl) -> keep (Path [ d.name ]))
 
             let pF = { p with decls = dsF }
-            pF // this.progDefault(pF)
+            this.progDefault(pF)
 
     /// add certain includes to a program and certain imports to every module
     type AddImports(incls: string list, imps: string list) =
@@ -110,79 +117,6 @@ module Analysis =
                 // We may also need to add imports to submodules.
                 this.declDefault (ctx, Module(name, is @ decls, meta))
             | _ -> this.declDefault (ctx, decl)
-
-    type GatherAllModules() =
-        inherit Traverser.Identity()
-        
-        let mutable result: Set<ImportType> = Set.empty
-        
-        override this.decl(ctx: Context, d: Decl) : Decl list =
-            match d with
-            | Module (name, _, _) ->
-                result <- result.Add(ImportDefault(false, Path [ name ]))
-            | _ -> ()
-            this.declDefault(ctx, d)
-        
-        member this.gather (prog: Program) =
-            this.progDefault(prog) |> ignore
-            result
-
-    /// adds a given prefix to every import not found in the current AST;
-    /// note that a module with an extra prefix in the current AST is considered as found
-    type PrefixUnfoundImports(prefix: string) =
-        inherit Traverser.Identity()
-
-        override this.ToString() =
-            "prefixing unfound imports with " + prefix
-
-        override this.decl(ctx: Context, decl: Decl) =
-            let importIn importPath =
-                match List.tryFind (fun p -> importPath.Equals(p)) ctx.importPaths with
-                | Some _ -> true
-                | None -> false
-
-            let importDifferByPrefix (importPath: ImportType) =
-                match List.tryFind
-                          (fun (p: ImportType) ->
-                              importPath
-                                  .getPath()
-                                  .onlyDifferByPrefix (p.getPath ()))
-                          ctx.importPaths with
-                | Some p -> p.getPath().names[0].Split(".")[0]  // the prefix
-                | None -> ""
-
-            match decl with
-            | Module (name, decls, meta) ->
-                let filtDecls =
-                    List.map
-                        (fun decl ->
-                            match decl with
-                            | Import it ->
-                                if importIn it then
-                                    decl
-                                else
-                                    let existingPrefix = importDifferByPrefix it
-                                    if existingPrefix <> "" && existingPrefix <> prefix then
-                                        decl  // do not prefix it
-                                    else
-                                        Import(it.prefix prefix)
-                            | _ -> decl)
-                        decls
-
-                // Prefix unfound imports in nested modules
-                this.declDefault (ctx, Module(name, filtDecls, meta))
-            | _ -> this.declDefault (ctx, decl)
-
-        override this.prog(prog: Program) =
-            let modules = GatherAllModules().gather(prog)
-            let ctx = Set.fold (fun (ctx: Context) import -> ctx.addImport(import)) (Context(prog)) modules
-
-            let dsT =
-                List.collect (fun (d: Decl) -> this.decl (ctx, d)) prog.decls
-
-            { name = prog.name
-              decls = dsT
-              meta = prog.meta }
 
     /// prefixes the names of all toplevel modules in a program (only to be called on programs)
     type PrefixTopDecls(pref: string) =

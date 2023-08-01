@@ -135,17 +135,22 @@ module Typecart =
         let combinePrefix = "Combine"
         // pipelines for transforming old, new, joint, translations
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
-            [ Analysis.FilterDecls(fun p -> not (List.contains p joint))
+            [ Analysis.FilterDeclsAndPrefixImports(
+                (fun p -> not (List.exists (fun (q: YIL.Path) -> q.isAncestorOf (p)) joint)),
+                "Joint"
+              )
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
               Analysis.PrefixTopDecls(oldOrNewPrefix (old))
-              Analysis.PrefixUnfoundImports("Joint")
               Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(oldOrNewPrefix (old)) ]
 
         let jointPipeline (joint: YIL.Path list) : Traverser.Transform list =
-            [ Analysis.FilterDecls(fun p -> List.contains p joint)
+            [ Analysis.FilterDeclsAndPrefixImports(
+                (fun p -> (List.exists (fun (q: YIL.Path) -> q.isAncestorOf (p)) joint)),
+                "(no prefix)"
+              )
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
               Analysis.PrefixTopDecls(jointPrefix)
