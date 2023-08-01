@@ -551,7 +551,7 @@ module YIL =
         | EOld of Expr // used in ensures conditions of methods in classes to refer to previous state
         | ETuple of elems: Expr list
         | EProj of tuple: Expr * index: int
-        | EFun of vars: LocalDecl list * out: Type * body: Expr
+        | EFun of vars: LocalDecl list * cond: Condition option * out: Type * body: Expr
         // *** introduction/elimination forms for built-in type operators
         | ESet of tp: Type * elems: Expr list
         | ESetComp of lds: LocalDecl list * p: Expr * body: Expr // set comprehension {x in lds | p(lds) : f(x)}
@@ -1481,9 +1481,10 @@ module YIL =
             | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr 11 e + "." + i.ToString()
-            | EFun (vs, _, e) ->
+            | EFun (vs, cond, _, e) ->
                 (if 0 < precedence then "(" else "")
                 + (this.localDeclsBr (vs, true))
+                + (Option.defaultValue "" (Option.map (fun c -> " " + this.condition(true, c, pctx)) cond))
                 + " => "
                 + (expr 0 e)
                 + (if 0 < precedence then ")" else "")

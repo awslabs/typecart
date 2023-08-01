@@ -705,7 +705,8 @@ module DafnyToYIL =
             | _ -> unsupported $"Literal value {e.ToString()}"
         | :? LambdaExpr as e ->
             let vars = boundVar @ e.BoundVars
-            Y.EFun(vars, tp e.Body.Type, expr e.Body)
+            let cond = if e.Range = null then None else Some(expr e.Range)
+            Y.EFun(vars, cond, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e -> Y.ESeqSelect(expr e.Seq, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays
@@ -1144,7 +1145,7 @@ module DafnyToYIL =
             // TODO: Translate the lambda expression and get rid of it in the YILToJava translation to make this code agnostic of Java
             if r.ElementInit <> null then
                 match expr r.ElementInit with
-                | Y.EFun (_, Y.TBool _, Y.EBool false) -> ()
+                | Y.EFun (_, _, Y.TBool _, Y.EBool false) -> ()
                 | _ -> unsupported "Array initialization not supported or does not match Java default type"
             else
                 ()

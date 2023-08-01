@@ -253,7 +253,8 @@ module Traverser =
 
                 let pTR = this.expr (ctxE, tR)
                 EMapComp(this.localDeclList (ctx, lds), pT, pTL, pTR)
-            | EFun (ins, out, bd) -> EFun(this.localDeclList (ctx, ins), rcT out, this.expr (ctx.add ins, bd))
+            | EFun (ins, cond, out, bd) ->
+                EFun(this.localDeclList (ctx, ins), rcEo cond, rcT out, this.expr (ctx.add ins, bd))
             | EAnonApply (f, es) -> EAnonApply(rcE f, rcEs es)
             | EUnOpApply (op, e) -> EUnOpApply(op, rcE e)
             | EBinOpApply (op, e1, e2) -> EBinOpApply(op, rcE e1, rcE e2)
@@ -527,16 +528,18 @@ module Traverser =
                         EVar(vars.Head)
                     else
                         e
-                | EAnonApply (EFun (lds, _, b), es) when lds.Length = es.Length ->
+                | EAnonApply (EFun (lds, _, _, b), es) when lds.Length = es.Length ->
                     // beta-reduction: (fun x_1,...,x_n -> b) e_1 ... e_n ---> b[x_1/e_1,...,x_n/e_n]
+                    // we drop the condition of the lambda expression here
                     let subs =
                         (List.zip lds es)
                         |> List.map (fun (ld, e) -> ld.name, e)
 
                     substituteExprs (ctx.add (lds), ctx, subs, b)
-                | EFun (lds, _, EAnonApply (EVar (f), args)) when lds.Length = args.Length ->
+                | EFun (lds, _, _, EAnonApply (EVar (f), args)) when lds.Length = args.Length ->
                     // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
                     // covers only special case where f is variable
+                    // we drop the condition of the lambda expression here
                     let isEtaExp =
                         List.zip lds args
                         |> List.forall (fun (ld, a) -> a = EVar(ld.name))

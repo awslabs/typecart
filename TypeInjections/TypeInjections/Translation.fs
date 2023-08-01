@@ -772,7 +772,7 @@ module Translation =
             let bodyXOE = body xOE
 
             let abs =
-                EFun([ LocalDecl(x, tO, false) ], tN, bodyXOE)
+                EFun([ LocalDecl(x, tO, false) ], None, tN, bodyXOE)
 
             reduce abs // reduce eta-contracts
         and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
@@ -937,14 +937,14 @@ module Translation =
                         let varsO = T2 varsN
                         let bodyO = EAnonApply(fO, varsO)
                         let bodyN = outputT1 bodyO
-                        EFun(ldsN, outputTypeN, bodyN)
+                        EFun(ldsN, None, outputTypeN, bodyN)
 
                     let funsTranslation2 fN =
                         let varsO = inputsO
                         let varsN = T1 varsO
                         let bodyN = EAnonApply(fN, varsN)
                         let bodyO = outputT2 bodyN
-                        EFun(ldsO, outputTypeO, bodyO)
+                        EFun(ldsO, None, outputTypeO, bodyO)
 
                     TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), (funsTranslation1, funsTranslation2)
                 | _ ->
