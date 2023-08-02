@@ -1051,7 +1051,7 @@ module Translation =
         and proof (oldCtx: Context) (e: Expr) (resultN: Expr) (resultOTranslation: Expr -> Expr) : Expr option =
             // generate proof for backward compatibility theorem
             let eO = NameTranslator(true).expr (oldCtx, e)
-            Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO)) ])
+            Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None) ])
 
         /// entry point for running the translation
         member this.doTranslate() = decls ctxO ctxN declsD

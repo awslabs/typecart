@@ -306,7 +306,7 @@ module Traverser =
                 EDeclChoice(this.localDecl (ctx, ld), eT)
             | ENull (t) -> ENull(rcT t)
             | EPrint es -> EPrint(rcEs es)
-            | EAssert e -> EAssert(rcE e)
+            | EAssert (e, p) -> EAssert(rcE e, rcEo p)
             | EAssume e -> EAssume(rcE e)
             | EReveal es -> EReveal(rcEs es)
             | EExpect e -> EExpect(rcE e)

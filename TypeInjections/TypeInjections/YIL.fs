@@ -629,7 +629,7 @@ module YIL =
         *)
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
-        | EAssert of Expr
+        | EAssert of expr: Expr * proof: Expr option
         | EExpect of Expr // dafny expect statement (non-ghost variant of assert statement)
         | EAssume of Expr // dafny implication introduction
         | EReveal of Expr list // dafny `reveal ... ;` proof directive
@@ -1303,9 +1303,6 @@ module YIL =
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
 
             match e with
-            | EAssert e -> "assert " + (expr e) + ";"
-            | EAssume e -> "assume " + (expr e) + ";"
-            | EExpect e -> "expect " + (expr e) + ";"
             | EBlock es ->
                 if es.Length = 0 then
                     "{}"  // empty block
@@ -1420,6 +1417,14 @@ module YIL =
                 + (exprsNoBr d ", ")
                 + "; "
                 + (this.statement e pctx)
+            | EAssert (e, p) ->
+                "assert "
+                + (expr e)
+                + (match p with
+                   | None -> ";"
+                   | Some proof -> " by " + (this.statement proof pctx))
+            | EAssume _
+            | EExpect _
             | EDecls _
             | EAnonApply _
             | EMethodApply _
@@ -1569,12 +1574,15 @@ module YIL =
                     | EBlock []
                     | ECommented (_, EBlock []) -> false
                     | _ -> true
-
-                let esS =
-                    exprsNoBr (List.filter notEmptyBlock es) "; "
-
-                let s = indented (esS, false) // no braces - Dafny parses them as sets
-                s
+                let esNonEmpty = List.filter notEmptyBlock es
+                if esNonEmpty.IsEmpty then
+                    ""
+                else
+                    // statement 0, statement 1, ..., statement n-2, expr n-1
+                    let sts = List.map (fun x -> this.statement x pctx) esNonEmpty[..esNonEmpty.Length - 2]
+                    let esS = String.concat "\n" (sts @ [ expr 0 (esNonEmpty.Item(esNonEmpty.Length - 1)) ])
+                    // no braces - Dafny parses them as sets
+                    "\n" + esS
             | ELet (v, x, orfail, lhs, d, e) ->
                 "var "
                 + (exprsNoBr lhs ", ")
@@ -1677,7 +1685,12 @@ module YIL =
                 + (tp t)
                 + (if 9 < precedence then ")" else "")
             | EPrint es -> "print " + (String.concat ", " (List.map (expr 0) es))
-            | EAssert e -> "assert " + (expr 0 e)
+            | EAssert (e, p) ->
+                "assert "
+                + (expr 0 e)
+                + (match p with
+                   | None -> ""
+                   | Some proof -> " by " + (this.statement proof pctx))
             | EAssume e -> "assume " + (expr 0 e)
             | EExpect e -> "expect " + (expr 0 e)
             | EReveal es ->

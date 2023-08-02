@@ -1098,7 +1098,13 @@ module DafnyToYIL =
             Y.EBreak None
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
-        | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
+        | :? AssertStmt as s ->
+            let proof =
+                if s.Proof = null then
+                    None
+                else
+                    Some(statement s.Proof)
+            Y.EAssert(expr s.Expr, proof)
         | :? AssumeStmt as s -> Y.EAssume(expr s.Expr)
         | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
