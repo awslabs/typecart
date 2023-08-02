@@ -82,13 +82,16 @@ module YIL =
     type Meta =
         { comment: string option
           position: Position option
-          prelude: string }
+          prelude: string
+          attributes: Map<string, string> }
         override this.GetHashCode() = 0
         // we make all Meta objects equal so that they are ignored during diffing
         override this.Equals(that: Object) =
             match that with
             | :? Meta -> true
             | _ -> false
+        member this.addAttribute(k: string, v:string) =
+            { this with attributes=this.attributes.Add(k, v) }
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
     and Position =
         { filename: String
@@ -102,7 +105,8 @@ module YIL =
     let emptyMeta =
         { comment = None
           position = None
-          prelude = "" }
+          prelude = ""
+          attributes = Map.empty }
 
     /// name of nonymous variables
     let anonymous = "_"
@@ -1089,7 +1093,11 @@ module YIL =
         member this.decls(ds: Decl list, pctx: Context) = this.declsGeneral (ds, pctx, true)
         // array dimensions/indices
         member this.dims(ds: Expr list, pctx: Context) = "[" + this.exprsNoBr ds ", " pctx + "]"
-        member this.meta(_: Meta) = ""
+        // attributes
+        member this.meta(a: Meta) =
+            let attr = Map.toList a.attributes
+            let attrStr = List.map (fun (k, v) -> " {:" + k + (if v = "" then "" else " " + v) + "}") attr
+            listToString(attrStr, "")
 
         member this.ghost(g: bool) = if g then "ghost " else ""
 
@@ -1160,7 +1168,7 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + this.exprO (eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, o, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, o, a) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
@@ -1178,10 +1186,7 @@ module YIL =
                    | IsGreatestPredicate -> ""  // already ghost
                    | _ -> this.ghost (g))
                 + methodType.ToString()
-                + (if b.IsNone then
-                       " {:axiom}"
-                   else
-                       "")
+                + (this.meta a)
                 + " "
                 + n
                 + (this.tpvars false g tpvs)

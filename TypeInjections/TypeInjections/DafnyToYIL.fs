@@ -67,14 +67,16 @@ module DafnyToYIL =
     and namedMeta (dcl: Declaration) : Y.Meta =
         { comment = None
           position = Some(position dcl.tok)
-          prelude = "" }
+          prelude = ""
+          attributes = Map.empty }
 
     // Dafny does not define a common superclass of INamedRegion and IAttributeBearingDeclaration and F# does not support intersection types
     // So we need to duplicate the method here for Declaration and ModuleDefinition
     and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta =
         { comment = None
           position = Some(position dcl.tok)
-          prelude = "" }
+          prelude = ""
+          attributes = Map.empty }
 
     // trivial conversion of Dafny source position to YIL source positions
     and position (t: Microsoft.Boogie.IToken) : Y.Position =
@@ -302,12 +304,19 @@ module DafnyToYIL =
     and updateMethodByAttribute (e: Y.Decl) (attr: UserSuppliedAttributes): Y.Decl =
         match e with
         | Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta) ->
-            match attr.Name, fromIList attr.Args with
+            let args = fromIList attr.Args
+            let addAttribute =
+                let v = if args.IsEmpty then "" else String.concat " " (List.map (fun f -> f.ToString()) args)
+                Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta.addAttribute(attr.Name, v))
+            match attr.Name, args with
             | "opaque", args when args.Length <= 1 ->
                 let isOpaqueNew = args.IsEmpty || LiteralExpr.IsTrue(args.Item(0))
                 Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaqueNew, meta)
+            | "axiom", _
+            | "tailrecursion", _ ->
+                addAttribute
             | _ ->
-                warning $"dropping unsupported attribute: %s{attr.Name}"
+                warning $"dropping unsupported attribute: %s{attr.Name} (%d{(fromIList attr.Args).Length} arguments)"
                 e
         | _ -> unsupported "updateMethodByAttribute called without a method"
 
