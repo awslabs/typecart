@@ -303,8 +303,9 @@ module DafnyToYIL =
         match e with
         | Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta) ->
             match attr.Name, fromIList attr.Args with
-            | "opaque", args when args.IsEmpty ->
-                Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, true, meta)
+            | "opaque", args when args.Length <= 1 ->
+                let isOpaqueNew = args.IsEmpty || LiteralExpr.IsTrue(args.Item(0))
+                Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaqueNew, meta)
             | _ ->
                 warning $"dropping unsupported attribute: %s{attr.Name}"
                 e
