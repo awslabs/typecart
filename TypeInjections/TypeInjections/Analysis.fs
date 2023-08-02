@@ -134,6 +134,16 @@ module Analysis =
             { name = prog.name
               decls = List.map prD prog.decls
               meta = prog.meta }
+
+    /// wraps all toplevel modules into a module (only to be called on programs)
+    type WrapTopDecls(pref: string) =
+        inherit Traverser.Identity()
+        override this.ToString() = "wrapping toplevel decls with module " + pref
+
+        override this.prog(prog: Program) =
+            { name = prog.name
+              decls = [ Module(pref, prog.decls, emptyMeta) ]
+              meta = prog.meta }
     
     /// Returns a map from each path to all children in it (but not in nested modules or in datatypes)
     type GatherAllPaths() =

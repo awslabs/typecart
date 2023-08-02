@@ -141,7 +141,7 @@ module Typecart =
               )
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(oldOrNewPrefix (old))
+              Analysis.WrapTopDecls(oldOrNewPrefix (old))
               Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(oldOrNewPrefix (old)) ]
@@ -153,20 +153,20 @@ module Typecart =
               )
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(jointPrefix)
+              Analysis.WrapTopDecls(jointPrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
         let combinePipeline : Traverser.Transform list =
-            [ Analysis.AddImports(
+            [ Analysis.UnqualifyPaths()
+              Analysis.WrapTopDecls(combinePrefix)
+              Analysis.AddImports(
                 [ "joint.dfy"; "old.dfy"; "new.dfy" ],
                 [ "Joint"
                   "Old"
                   "New"
                   "Translations" ]
               )
-              Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(combinePrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
 
