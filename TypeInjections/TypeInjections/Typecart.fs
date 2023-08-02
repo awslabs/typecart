@@ -161,11 +161,11 @@ module Typecart =
             [ Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(combinePrefix)
               Analysis.AddImports(
-                [ "joint.dfy"; "old.dfy"; "new.dfy" ],
-                [ "Joint"
-                  "Old"
-                  "New"
-                  "Translations" ]
+                  [ "joint.dfy"; "old.dfy"; "new.dfy" ],
+                  [ "Joint"
+                    "Old"
+                    "New"
+                    "Translations" ]
               )
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
@@ -194,7 +194,7 @@ module Typecart =
             this.logger "***** generating translation code"
 
             let combineYIL, jointPaths =
-                Translation.prog (oldYIL, "Combine", diff)
+                Translation.prog (oldYIL, newYIL, "Combine", diff)
 
             // emitting output
             this.logger "************ emitting output"
