@@ -643,7 +643,7 @@ module Translation =
                                     tp (TVar(fst tparg_o), TVar(fst tparg_n))
 
                                 lossless (TVar(fst tpargO)) tT)
-                            (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_o @ tvs_n)) // TODO: parentTvs_n @ tvs_n
+                            (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_n @ tvs_n))
 
                     let inSpec =
                         InputSpec(
