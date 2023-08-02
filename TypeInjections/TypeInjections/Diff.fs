@@ -221,7 +221,8 @@ module Diff =
         | YIL.Class (_, _, _, ps, _, _) -> Class(nD, tvsD, idList ps, msD)
         | YIL.ClassConstructor (_, _, ins, outs, bd, _) ->
             ClassConstructor(nD, tvsD, idInputSpec ins, idList outs, SameExprO bd)
-        | YIL.TypeDef (_, _, sp, pr, _, _) -> TypeDef(nD, tvsD, SameType sp, SameExprO(Option.map snd pr))
+        | YIL.TypeDef (_, _, sp, pr, _, _) ->
+            TypeDef(nD, tvsD, SameType sp, SameExprO(Option.map (fun (_, e, _) -> e) pr))
         | YIL.Field (_, t, d, _, _, _, _) -> Field(nD, SameType t, SameExprO d)
         | YIL.Method (_, _, _, ins, outs, _, _, _, bd, _, _, _, _) ->
             Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)

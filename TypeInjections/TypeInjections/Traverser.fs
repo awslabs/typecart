@@ -126,7 +126,7 @@ module Traverser =
                 let predT =
                     match predO with
                     | None -> None
-                    | Some (x, p) -> Some(x, this.expr (ctxE, p))
+                    | Some (x, p, w) -> Some(x, this.expr (ctxE, p), w)
 
                 [ TypeDef(n, tpvs, spT, predT, isN, m) ]
             | Field (n, t, e, isG, isS, isM, m) -> [ Field(n, this.tp (ctx, t), this.exprO (ctx, e), isG, isS, isM, m) ]

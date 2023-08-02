@@ -120,7 +120,11 @@ module DafnyToYIL =
                 match d with
                 | :? SubsetTypeDecl as d ->
                     let bv = boundVar d.Var
-                    bv.tp, Some(bv.name, expr d.Constraint)
+                    let witness = match d.WitnessKind with
+                                  | SubsetTypeDecl.WKind.CompiledZero -> Y.Witness.CompiledZero
+                                  | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
+                                  | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
+                    bv.tp, Some(bv.name, expr d.Constraint, witness)
                 | _ -> tp d.Rhs, None
 
             [ Y.TypeDef(d.Name, tpvars, super, pred, false, namedMeta d) ]
@@ -131,7 +135,11 @@ module DafnyToYIL =
                     None
                 else
                     let bv = boundVar d.Var
-                    Some(bv.name, expr d.Constraint)
+                    let witness = match d.WitnessKind with
+                                  | SubsetTypeDecl.WKind.CompiledZero -> Y.Witness.CompiledZero
+                                  | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
+                                  | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
+                    Some(bv.name, expr d.Constraint, witness)
 
             [ Y.TypeDef(d.Name, [], tp d.BaseType, predO, true, namedMeta d) ]
         | :? IteratorDecl ->

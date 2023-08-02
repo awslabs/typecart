@@ -166,7 +166,7 @@ module YIL =
             body: Expr option *
             meta: Meta
         (* Type definitions
-           if predicate is given: HOL-style subtype definitions (omitting the witness here)
+           if predicate is given: HOL-style subtype definitions
              else: type synonym
            if isNew: type is not a subtype of the supertype (which must be nat or real and thus tpvars = [])
         *)
@@ -174,7 +174,7 @@ module YIL =
             name: string *
             tpvars: TypeArg list *
             super: Type *
-            predicate: (string * Expr) option *
+            predicate: (string * Expr * Witness) option *
             isNew: bool *
             meta: Meta
         (* Dafny declares mutable fields only in classes, and then without initializer deferring initialization to the class constructor.
@@ -265,6 +265,10 @@ module YIL =
             match this with
             | Module _ -> true
             | _ -> false
+    
+    and Witness =
+        | CompiledZero
+        | OptOut
 
     // ""/+/-/*/! for non/co/contra/co/non-variant ("" and + are strict); true for equality required; true for non-heap based
     and TypeArg = string * (string * bool * bool)
@@ -1139,10 +1143,13 @@ module YIL =
                 + (this.tpvars true false tpvs)
                 + " = "
                 + (match predO with
-                   | Some (x, p) ->
+                   | Some (x, p, w) ->
                        this.localDecl (LocalDecl(x, sup, false))
                        + " | "
                        + (this.expr p pctx)
+                       + (match w with
+                          | CompiledZero -> ""
+                          | OptOut -> "\n" + indentString + "witness *")
                    | None -> this.tp sup)
             | Field (n, t, eO, g, s, _, a) ->
                 this.stat (s, pctx)
