@@ -254,7 +254,12 @@ module Traverser =
                 let pTR = this.expr (ctxE, tR)
                 EMapComp(this.localDeclList (ctx, lds), pT, pTL, pTR)
             | EFun (ins, cond, out, bd) ->
-                EFun(this.localDeclList (ctx, ins), rcEo cond, rcT out, this.expr (ctx.add ins, bd))
+                EFun(
+                    this.localDeclList (ctx, ins),
+                    this.exprO (ctx.add ins, cond),
+                    rcT out,
+                    this.expr (ctx.add ins, bd)
+                )
             | EAnonApply (f, es) -> EAnonApply(rcE f, rcEs es)
             | EUnOpApply (op, e) -> EUnOpApply(op, rcE e)
             | EBinOpApply (op, e1, e2) -> EBinOpApply(op, rcE e1, rcE e2)
