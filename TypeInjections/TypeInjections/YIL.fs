@@ -83,14 +83,14 @@ module YIL =
         { comment: string option
           position: Position option
           prelude: string
-          attributes: Map<string, string> }
+          attributes: Map<string, string list> }
         override this.GetHashCode() = 0
         // we make all Meta objects equal so that they are ignored during diffing
         override this.Equals(that: Object) =
             match that with
             | :? Meta -> true
             | _ -> false
-        member this.addAttribute(k: string, v:string) =
+        member this.addAttribute(k: string, v: string list) =
             { this with attributes=this.attributes.Add(k, v) }
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
     and Position =
@@ -216,6 +216,7 @@ module YIL =
             | Module (_, _, meta) -> meta
             | Datatype (_, _, _, _, meta) -> meta
             | Class (_, _, _, _, _, meta) -> meta
+            | ClassConstructor (_, _, _, _, _, meta) -> meta
             | Method (_, _, _, _, _, _, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
             | TypeDef (_, _, _, _, _, meta) -> meta
@@ -269,6 +270,17 @@ module YIL =
             match this with
             | Module _ -> true
             | _ -> false
+        
+        member this.updateMeta(meta: Meta) =
+            match this with
+            | Module (a, b, _) -> Module(a, b, meta)
+            | Datatype (a, b, c, d, _) -> Datatype(a, b, c, d, meta)
+            | Class (a, b, c, d, e, _) -> Class(a, b, c, d, e, meta)
+            | ClassConstructor (a, b, c, d, e, _) -> ClassConstructor(a, b, c, d, e, meta)
+            | Method (a, b, c, d, e, f, g, h, i, j, k, l, _) -> Method(a, b, c, d, e, f, g, h, i, j, k, l, meta)
+            | Field (a, b, c, d, e, f, _) -> Field(a, b, c, d, e, f, meta)
+            | TypeDef (a, b, c, d, e, _) -> TypeDef(a, b, c, d, e, meta)
+            | _ -> this
     
     and Witness =
         | CompiledZero
@@ -1096,7 +1108,7 @@ module YIL =
         // attributes
         member this.meta(a: Meta) =
             let attr = Map.toList a.attributes
-            let attrStr = List.map (fun (k, v) -> " {:" + k + (if v = "" then "" else " " + v) + "}") attr
+            let attrStr = List.map (fun (k: string, v: string list) -> "{:" + k + (if v.Length = 0 then "" else " " + listToString(v, ", ")) + "} ") attr
             listToString(attrStr, "")
 
         member this.ghost(g: bool) = if g then "ghost " else ""
@@ -1118,7 +1130,8 @@ module YIL =
 
             let decls ds = this.decls (ds, pctx.enter (d.name))
             let expr (e: Expr) : string = this.expr e pctx
-            // comm +
+            
+            comm +
             match d with
             | Include _ -> ""
             | Module (n, ds, a) -> "module " + (this.meta a) + n + (decls ds)
@@ -1145,8 +1158,9 @@ module YIL =
                        + listToString (List.map this.classType p, ",")
                        + " ")
                 + (decls ds)
-            | TypeDef (n, tpvs, sup, predO, isNew, _) ->
+            | TypeDef (n, tpvs, sup, predO, isNew, a) ->
                 (if isNew then "newtype " else "type ")
+                + (this.meta a)
                 + n
                 + (this.tpvars true false tpvs)
                 + " = "
@@ -1186,8 +1200,8 @@ module YIL =
                    | IsGreatestPredicate -> ""  // already ghost
                    | _ -> this.ghost (g))
                 + methodType.ToString()
-                + (this.meta a)
                 + " "
+                + (this.meta a)
                 + n
                 + (this.tpvars false g tpvs)
                 + (this.localDeclsBr (ins.decls, true))
