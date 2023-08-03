@@ -25,8 +25,9 @@ module Utils =
 
     /// conversions between C# and F# collection types
     let toIList<'a> (s: 'a seq) = ResizeArray(s) :> IList<'a>
-    /// conversions between C# and F# collection types
+    let toIReadOnlyList<'a> (s: 'a seq) = ResizeArray(s) :> IReadOnlyList<'a>
     let fromIList<'a> (s: IList<'a>) = Seq.toList (s :> 'a seq)
+    let fromIEnumerable<'a> (s: IEnumerable<'a>) = Seq.toList s
 
     /// a list except for the last element
     let listDropLast<'a> (l: 'a list) = l.GetSlice(Some 0, Some(l.Length - 2))
@@ -125,7 +126,7 @@ module Utils =
     /// Dafny utils
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
-        let options = DafnyOptions()
+        let options = DafnyOptions.Default
         options.ApplyDefaultOptions() // needed to enable \U unicode
         // Disable module reveals / provides scopes, otherwise we get e.g. lemmas with empty bodies.
         options.DisableScopes <- true
@@ -139,13 +140,13 @@ module Utils =
             failwith "error: list of files supplied to parser is empty"
 
         let dafnyFiles =
-            List.map (fun (x: FileInfo) -> DafnyFile(reporter.Options, x.FullName)) files
+            List.map (fun (x: FileInfo) -> DafnyFile(reporter.Options, Uri(x.FullName))) files
 
         let mutable dafnyProgram = Unchecked.defaultof<Program>
         log "***** calling dafny parser for multiple files"
 
         let err =
-            Main.ParseCheck(toIList dafnyFiles, programName, reporter, &dafnyProgram)
+            DafnyMain.ParseCheck(stdin, toIReadOnlyList dafnyFiles, programName, reporter.Options, &dafnyProgram)
 
         if err <> null && err <> "" then
             failwith ("Dafny error: " + err)

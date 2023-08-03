@@ -49,7 +49,7 @@ module DafnyToYIL =
     let DafnyArrayPrefix = "array"
     let DafnyReveal = "reveal_"
     
-    let mutable dafnyOptions = DafnyOptions()
+    let mutable dafnyOptions = DafnyOptions.Default
 
     // ***** the mutually recursive functions
 
@@ -58,7 +58,7 @@ module DafnyToYIL =
        and implicitly static *)
     let rec program (p: Program, options: DafnyOptions) : Y.Program =
         let decls = p.DefaultModuleDef.TopLevelDecls
-        let declsRev = List.rev (fromIList decls)
+        let declsRev = List.rev (fromIEnumerable decls)
         let ddecls = List.collect decl declsRev
         dafnyOptions <- options
 
@@ -100,10 +100,10 @@ module DafnyToYIL =
             if d.TypeArgs.Count <> 0 then
                 unsupported "module with type parameters"
 
-            let ms = d.ModuleDef.TopLevelDecls
+            let ms = fromIEnumerable d.ModuleDef.TopLevelDecls
             let dName = d.Name
             let meta = namedMetaModDef d.ModuleDef
-            [ Y.Module(dName, decl @/ ms, meta) ]
+            [ Y.Module(dName, List.collect decl ms, meta) ]
         | :? AliasModuleDecl as d ->
             (* Dafny allows "import M", "import m = M" or "import opened M" where M is a module name.
                Either way, the names of M later appear with fully qualified paths. *)
@@ -158,12 +158,13 @@ module DafnyToYIL =
             let meta = namedMeta d
             let typeVars = typeParameter @ d.TypeArgs
             [ Y.Class(dName, isTrait d, typeVars, classType @ d.ParentTraits, List.concat (memberDecl @ d.Members), meta) ]
-        | :? OpaqueTypeDecl as d ->
+        // removed in Dafny 4.2.0
+        (* | :? OpaqueTypeDecl as d ->
             let dName = d.Name
             let meta = namedMeta d
             // Misuse Datatype for now when translating opaque types
             let typeVars = typeParameter @ d.TypeArgs
-            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ]
+            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ] *)
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
@@ -399,8 +400,8 @@ module DafnyToYIL =
                 let mName = m.Name
                 let meta = namedMeta m
 
-            let yilMethodType =
-                methodType (m.ByMethodDecl <> null, m.GetFunctionDeclarationKeywords(dafnyOptions))
+                let yilMethodType =
+                    methodType (m.ByMethodDecl <> null, m.GetFunctionDeclarationKeywords(dafnyOptions))
 
                 [ Y.Method(
                     yilMethodType,
