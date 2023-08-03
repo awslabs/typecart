@@ -615,17 +615,9 @@ module Translation =
                         |> List.map (fun c -> expr oldCtx c)
                         |> List.unzip
 
-                    // new requires clauses applied to new arguments
-                    let newCtx =
-                        if isStatic then
-                            ctxN
-                        else
-                            ctxN.setThisDecl (newInstDecl)
-
-                    let _, inputRequiresN =
-                        ins_n.conditions
-                        |> List.map (fun c -> expr newCtx c)
-                        |> List.unzip
+                    // We do not generate new requires clauses here!
+                    // This is to ensure that the user writes the forward translation function
+                    // for the old output correctly to ensure the new requires clause.
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
@@ -648,9 +640,7 @@ module Translation =
                     let inSpec =
                         InputSpec(
                             inputs,
-                            inputRequiresO
-                            @ inputRequiresN
-                              @ inputsTranslations @ losslessAssumptions
+                            inputRequiresO @ inputsTranslations @ losslessAssumptions
                         )
 
                     // we don't need the ensures-conditions of the method
