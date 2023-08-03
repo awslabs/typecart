@@ -1,6 +1,8 @@
 module Translations.Utils {
-    function ???<X(0)>(): X {
-      var tmp: X :| true;
-      tmp
-    }
+  function ???<X(0)>(): X 
+    requires false
+  {
+    var tmp: X :| true;
+    tmp
+  }
 }

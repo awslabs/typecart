@@ -70,14 +70,16 @@ module DafnyToYIL =
     and namedMeta (dcl: Declaration) : Y.Meta =
         { comment = None
           position = Some(position dcl.tok)
-          prelude = "" }
+          prelude = ""
+          attributes = Map.empty }
 
     // Dafny does not define a common superclass of INamedRegion and IAttributeBearingDeclaration and F# does not support intersection types
     // So we need to duplicate the method here for Declaration and ModuleDefinition
     and namedMetaModDef (dcl: ModuleDefinition) : Y.Meta =
         { comment = None
           position = Some(position dcl.tok)
-          prelude = "" }
+          prelude = ""
+          attributes = Map.empty }
 
     // trivial conversion of Dafny source position to YIL source positions
     and position (t: Microsoft.Boogie.IToken) : Y.Position =
@@ -123,7 +125,11 @@ module DafnyToYIL =
                 match d with
                 | :? SubsetTypeDecl as d ->
                     let bv = boundVar d.Var
-                    bv.tp, Some(bv.name, expr d.Constraint)
+                    let witness = match d.WitnessKind with
+                                  | SubsetTypeDecl.WKind.CompiledZero -> Y.Witness.CompiledZero
+                                  | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
+                                  | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
+                    bv.tp, Some(bv.name, expr d.Constraint, witness)
                 | _ -> tp d.Rhs, None
 
             [ Y.TypeDef(d.Name, tpvars, super, pred, false, namedMeta d) ]
@@ -134,7 +140,11 @@ module DafnyToYIL =
                     None
                 else
                     let bv = boundVar d.Var
-                    Some(bv.name, expr d.Constraint)
+                    let witness = match d.WitnessKind with
+                                  | SubsetTypeDecl.WKind.CompiledZero -> Y.Witness.CompiledZero
+                                  | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
+                                  | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
+                    Some(bv.name, expr d.Constraint, witness)
 
             [ Y.TypeDef(d.Name, [], tp d.BaseType, predO, true, namedMeta d) ]
         | :? IteratorDecl ->
@@ -294,146 +304,189 @@ module DafnyToYIL =
         | _, "method" -> Y.IsMethod
         | _ -> unsupported $"unsupported method type payload: %s{s}"
 
+    and updateDeclByAttribute (e: Y.Decl) (attr: UserSuppliedAttributes): Y.Decl =
+        let attributes =
+            [ "axiom"
+              "fuel"
+              "java"
+              "javainline"
+              "rust"
+              "rustinline"
+              "tailrecursion" ]
+        let args = fromIList attr.Args
+        if List.contains attr.Name attributes then
+            let v = if args.IsEmpty then [] else (List.map (fun f -> f.ToString()) args)
+            e.updateMeta(e.meta.addAttribute(attr.Name, v))
+        else
+            match e with
+            | Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta) ->
+                match attr.Name, args with
+                | "opaque", args when args.Length <= 1 ->
+                    let isOpaqueNew = args.IsEmpty || LiteralExpr.IsTrue(args.Item(0))
+                    Y.Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaqueNew, meta)
+                | _ ->
+                    warning $"dropping unsupported attribute: %s{attr.Name} (%d{(fromIList attr.Args).Length} arguments)"
+                    e
+            | _ ->
+                warning $"dropping unsupported attribute: %s{attr.Name} (%d{(fromIList attr.Args).Length} arguments)"
+                e
+
+    and updateDeclByAttributes (e: Y.Decl) (attr: Attributes): Y.Decl =
+        match attr with
+        | null -> e
+        | :? UserSuppliedAttributes as u ->
+            updateDeclByAttributes (updateDeclByAttribute e u) attr.Prev
+        | _ ->
+            let defaultAttributes =
+                [ "fuel"
+                  "_induction" ]
+            if List.contains attr.Name defaultAttributes then
+                updateDeclByAttributes e attr.Prev  // ignore this attribute
+            else
+                unsupported $"unsupported attributes: %s{attr.Name}"
+
     and memberDecl (m: MemberDecl) : Y.Decl list =
-        match m with
-        | :? Constructor as m ->
-            let tpvars = typeParameter @ m.TypeArgs
+        let result =
+            match m with
+            | :? Constructor as m ->
+                let tpvars = typeParameter @ m.TypeArgs
 
-            let body =
-                if (m.Body = null) then
-                    None
-                else
-                    Some(statement m.Body)
+                let body =
+                    if (m.Body = null) then
+                        None
+                    else
+                        Some(statement m.Body)
 
-            let mName = m.Name
+                let mName = m.Name
 
-            let input =
-                Y.InputSpec(formal @ m.Ins, condition @ m.Req)
+                let input =
+                    Y.InputSpec(formal @ m.Ins, condition @ m.Req)
 
-            let output = condition @ m.Ens
-            [Y.ClassConstructor(mName, tpvars, input, output, body, namedMeta m)]
-        | :? Function as m ->
-            // keywords function (ghost), function method, predicate (ghost)
-            let tpvars = typeParameter @ m.TypeArgs
+                let output = condition @ m.Ens
+                [Y.ClassConstructor(mName, tpvars, input, output, body, namedMeta m)]
+            | :? Function as m ->
+                // keywords function (ghost), function method, predicate (ghost)
+                let tpvars = typeParameter @ m.TypeArgs
 
-            let input =
-                Y.InputSpec(formal @ m.Formals, condition @ m.Req)
+                let input =
+                    Y.InputSpec(formal @ m.Formals, condition @ m.Req)
 
-            let ensures = condition @ m.Ens
+                let ensures = condition @ m.Ens
 
-            let output =
-                // always a single output; m.Result is null if that output is unnamed
-                if m.Result <> null then
-                    Y.OutputSpec([ formal m.Result ], ensures)
-                else
-                    Y.outputType (tp m.ResultType, ensures)
+                let output =
+                    // always a single output; m.Result is null if that output is unnamed
+                    if m.Result <> null then
+                        Y.OutputSpec([ formal m.Result ], ensures)
+                    else
+                        Y.outputType (tp m.ResultType, ensures)
 
-            let modifies = [] // functions do not modify
+                let modifies = [] // functions do not modify
 
-            let reads =
-                List.ofSeq m.Reads
-                |> List.map (fun (e: FrameExpression) -> expr e.E)
+                let reads =
+                    List.ofSeq m.Reads
+                    |> List.map (fun (e: FrameExpression) -> expr e.E)
 
-            let decreases =
-                List.ofSeq m.Decreases.Expressions
-                |> List.map expr
+                let decreases =
+                    List.ofSeq m.Decreases.Expressions
+                    |> List.map expr
 
-            let body =
-                if (m.Body = null) then
-                    None
-                else
-                    Some(expr m.Body)
+                let body =
+                    if (m.Body = null) then
+                        None
+                    else
+                        Some(expr m.Body)
 
-            let mName = m.Name
-            let meta = namedMeta m
+                let mName = m.Name
+                let meta = namedMeta m
 
             let yilMethodType =
                 methodType (m.ByMethodDecl <> null, m.GetFunctionDeclarationKeywords(dafnyOptions))
 
-            [Y.Method(
-                yilMethodType,
-                mName,
-                tpvars,
-                input,
-                output,
-                modifies,
-                reads,
-                decreases,
-                body,
-                m.IsGhost,
-                m.IsStatic,
-                m.IsOpaque,
-                meta
-            )]
-        | :? Method as m ->
-            // keywords method, lemma (ghost)
-            let tpvars = typeParameter @ m.TypeArgs
-            let ins = formal @ m.Ins
-            let reqs = condition @ m.Req
-            let input = Y.InputSpec(ins, reqs)
-            let outs = formal @ m.Outs
-            let ens = condition @ m.Ens
-            let output = Y.OutputSpec(outs, ens)
-
-            let modifies =
-                m.Mod.Expressions
-                |> List.ofSeq
-                |> List.map (fun (e: FrameExpression) -> expr e.E)
-
-            let decreases =
-                m.Decreases.Expressions
-                |> List.ofSeq
-                |> List.map expr
-
-            let body =
-                if (m.Body = null) then
-                    None
-                else
-                    Some(statement m.Body)
-
-            let mName = m.Name
-
-            let yilMethodType =
-                match m with
-                | :? Lemma -> Y.IsLemma
-                | _ -> Y.IsMethod
-
-            if mName.StartsWith(DafnyReveal) then
-                []  // not written explicitly
-            else
-                [Y.Method(
+                [ Y.Method(
                     yilMethodType,
                     mName,
                     tpvars,
                     input,
                     output,
                     modifies,
-                    [],
+                    reads,
                     decreases,
                     body,
                     m.IsGhost,
                     m.IsStatic,
                     m.IsOpaque,
-                    namedMeta m
-                )]
-        | :? ConstantField as m ->
-            let mName = m.Name
-            let meta = namedMeta m
+                    meta
+                ) ]
+            | :? Method as m ->
+                // keywords method, lemma (ghost)
+                let tpvars = typeParameter @ m.TypeArgs
+                let ins = formal @ m.Ins
+                let reqs = condition @ m.Req
+                let input = Y.InputSpec(ins, reqs)
+                let outs = formal @ m.Outs
+                let ens = condition @ m.Ens
+                let output = Y.OutputSpec(outs, ens)
 
-            let dfO =
-                if m.Rhs = null then
-                    None
+                let modifies =
+                    m.Mod.Expressions
+                    |> List.ofSeq
+                    |> List.map (fun (e: FrameExpression) -> expr e.E)
+
+                let decreases =
+                    m.Decreases.Expressions
+                    |> List.ofSeq
+                    |> List.map expr
+
+                let body =
+                    if (m.Body = null) then
+                        None
+                    else
+                        Some(statement m.Body)
+
+                let mName = m.Name
+
+                let yilMethodType =
+                    match m with
+                    | :? Lemma -> Y.IsLemma
+                    | _ -> Y.IsMethod
+
+                if mName.StartsWith(DafnyReveal) then
+                    []  // not written explicitly
                 else
-                    Some(expr m.Rhs)
+                    [Y.Method(
+                        yilMethodType,
+                        mName,
+                        tpvars,
+                        input,
+                        output,
+                        modifies,
+                        [],
+                        decreases,
+                        body,
+                        m.IsGhost,
+                        m.IsStatic,
+                        m.IsOpaque,
+                        namedMeta m
+                    )]
+            | :? ConstantField as m ->
+                let mName = m.Name
+                let meta = namedMeta m
 
-            [Y.Field(mName, tp m.Type, dfO, m.IsGhost, m.IsStatic, isMutable = false, meta = meta)]
-        | :? Field as m ->
-            let mName = m.Name
-            let meta = namedMeta m
-            // Non-constant fields do not have a RHS in Dafny
-            // They are always initialized in the `constructor`
-            [Y.Field(mName, tp m.Type, None, m.IsGhost, m.IsStatic, isMutable = true, meta = meta)]
-        | _ -> unsupported (m.ToString())
+                let dfO =
+                    if m.Rhs = null then
+                        None
+                    else
+                        Some(expr m.Rhs)
+
+                [Y.Field(mName, tp m.Type, dfO, m.IsGhost, m.IsStatic, isMutable = false, meta = meta)]
+            | :? Field as m ->
+                let mName = m.Name
+                let meta = namedMeta m
+                // Non-constant fields do not have a RHS in Dafny
+                // They are always initialized in the `constructor`
+                [Y.Field(mName, tp m.Type, None, m.IsGhost, m.IsStatic, isMutable = true, meta = meta)]
+            | _ -> unsupported (m.ToString())
+        List.map (fun d -> updateDeclByAttributes d m.Attributes) result
 
     and formal (f: Formal) : Y.LocalDecl =
         Y.LocalDecl(f.Name, tp f.Type, f.IsGhost)
@@ -708,7 +761,8 @@ module DafnyToYIL =
             | _ -> unsupported $"Literal value {e.ToString()}"
         | :? LambdaExpr as e ->
             let vars = boundVar @ e.BoundVars
-            Y.EFun(vars, tp e.Body.Type, expr e.Body)
+            let cond = if e.Range = null then None else Some(expr e.Range)
+            Y.EFun(vars, cond, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e -> Y.ESeqSelect(expr e.Seq, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
             // TODO check if this can occur for anything but multi-dimensional arrays
@@ -1058,7 +1112,13 @@ module DafnyToYIL =
             Y.EBreak None
         | :? MatchStmt as s -> Y.EMatch(expr s.Source, tp s.Source.Type, case @ s.Cases, None)
         | :? PrintStmt as s -> Y.EPrint(expr @ s.Args)
-        | :? AssertStmt as s -> Y.EAssert(expr s.Expr)
+        | :? AssertStmt as s ->
+            let proof =
+                if s.Proof = null then
+                    None
+                else
+                    Some(statement s.Proof)
+            Y.EAssert(expr s.Expr, proof)
         | :? AssumeStmt as s -> Y.EAssume(expr s.Expr)
         | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
@@ -1147,7 +1207,7 @@ module DafnyToYIL =
             // TODO: Translate the lambda expression and get rid of it in the YILToJava translation to make this code agnostic of Java
             if r.ElementInit <> null then
                 match expr r.ElementInit with
-                | Y.EFun (_, Y.TBool _, Y.EBool false) -> ()
+                | Y.EFun (_, _, Y.TBool _, Y.EBool false) -> ()
                 | _ -> unsupported "Array initialization not supported or does not match Java default type"
             else
                 ()

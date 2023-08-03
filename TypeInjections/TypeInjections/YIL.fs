@@ -82,13 +82,16 @@ module YIL =
     type Meta =
         { comment: string option
           position: Position option
-          prelude: string }
+          prelude: string
+          attributes: Map<string, string list> }
         override this.GetHashCode() = 0
         // we make all Meta objects equal so that they are ignored during diffing
         override this.Equals(that: Object) =
             match that with
             | :? Meta -> true
             | _ -> false
+        member this.addAttribute(k: string, v: string list) =
+            { this with attributes=this.attributes.Add(k, v) }
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
     and Position =
         { filename: String
@@ -102,7 +105,8 @@ module YIL =
     let emptyMeta =
         { comment = None
           position = None
-          prelude = "" }
+          prelude = ""
+          attributes = Map.empty }
 
     /// name of nonymous variables
     let anonymous = "_"
@@ -166,7 +170,7 @@ module YIL =
             body: Expr option *
             meta: Meta
         (* Type definitions
-           if predicate is given: HOL-style subtype definitions (omitting the witness here)
+           if predicate is given: HOL-style subtype definitions
              else: type synonym
            if isNew: type is not a subtype of the supertype (which must be nat or real and thus tpvars = [])
         *)
@@ -174,7 +178,7 @@ module YIL =
             name: string *
             tpvars: TypeArg list *
             super: Type *
-            predicate: (string * Expr) option *
+            predicate: (string * Expr * Witness) option *
             isNew: bool *
             meta: Meta
         (* Dafny declares mutable fields only in classes, and then without initializer deferring initialization to the class constructor.
@@ -212,6 +216,7 @@ module YIL =
             | Module (_, _, meta) -> meta
             | Datatype (_, _, _, _, meta) -> meta
             | Class (_, _, _, _, _, meta) -> meta
+            | ClassConstructor (_, _, _, _, _, meta) -> meta
             | Method (_, _, _, _, _, _, _, _, _, _, _, _, meta) -> meta
             | Field (_, _, _, _, _, _, meta) -> meta
             | TypeDef (_, _, _, _, _, meta) -> meta
@@ -265,6 +270,21 @@ module YIL =
             match this with
             | Module _ -> true
             | _ -> false
+        
+        member this.updateMeta(meta: Meta) =
+            match this with
+            | Module (a, b, _) -> Module(a, b, meta)
+            | Datatype (a, b, c, d, _) -> Datatype(a, b, c, d, meta)
+            | Class (a, b, c, d, e, _) -> Class(a, b, c, d, e, meta)
+            | ClassConstructor (a, b, c, d, e, _) -> ClassConstructor(a, b, c, d, e, meta)
+            | Method (a, b, c, d, e, f, g, h, i, j, k, l, _) -> Method(a, b, c, d, e, f, g, h, i, j, k, l, meta)
+            | Field (a, b, c, d, e, f, _) -> Field(a, b, c, d, e, f, meta)
+            | TypeDef (a, b, c, d, e, _) -> TypeDef(a, b, c, d, e, meta)
+            | _ -> this
+    
+    and Witness =
+        | CompiledZero
+        | OptOut
 
     // ""/+/-/*/! for non/co/contra/co/non-variant ("" and + are strict); true for equality required; true for non-heap based
     and TypeArg = string * (string * bool * bool)
@@ -551,7 +571,7 @@ module YIL =
         | EOld of Expr // used in ensures conditions of methods in classes to refer to previous state
         | ETuple of elems: Expr list
         | EProj of tuple: Expr * index: int
-        | EFun of vars: LocalDecl list * out: Type * body: Expr
+        | EFun of vars: LocalDecl list * cond: Condition option * out: Type * body: Expr
         // *** introduction/elimination forms for built-in type operators
         | ESet of tp: Type * elems: Expr list
         | ESetComp of lds: LocalDecl list * p: Expr * body: Expr // set comprehension {x in lds | p(lds) : f(x)}
@@ -621,7 +641,7 @@ module YIL =
         *)
         | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
-        | EAssert of Expr
+        | EAssert of expr: Expr * proof: Expr option
         | EExpect of Expr // dafny expect statement (non-ghost variant of assert statement)
         | EAssume of Expr // dafny implication introduction
         | EReveal of Expr list // dafny `reveal ... ;` proof directive
@@ -924,16 +944,14 @@ module YIL =
                 ancs
                 |> List.tryFindIndex (fun (d: Decl) -> d.isModule ())
 
-            let firstMod =
-                match firstModO with
-                | Some m -> m
-                | None -> failwith "no module path"
+            if firstModO.IsNone then
+                Path []  // global
+            else
+                let modNames =
+                    ancs.GetSlice(firstModO, None)
+                    |> List.map (fun d -> d.name)
 
-            let modNames =
-                ancs.GetSlice(Some firstMod, None)
-                |> List.map (fun d -> d.name)
-
-            Path(List.rev modNames)
+                Path(List.rev modNames)
 
         member this.importPaths = importPaths
 
@@ -1087,7 +1105,11 @@ module YIL =
         member this.decls(ds: Decl list, pctx: Context) = this.declsGeneral (ds, pctx, true)
         // array dimensions/indices
         member this.dims(ds: Expr list, pctx: Context) = "[" + this.exprsNoBr ds ", " pctx + "]"
-        member this.meta(_: Meta) = ""
+        // attributes
+        member this.meta(a: Meta) =
+            let attr = Map.toList a.attributes
+            let attrStr = List.map (fun (k: string, v: string list) -> "{:" + k + (if v.Length = 0 then "" else " " + listToString(v, ", ")) + "} ") attr
+            listToString(attrStr, "")
 
         member this.ghost(g: bool) = if g then "ghost " else ""
 
@@ -1108,7 +1130,8 @@ module YIL =
 
             let decls ds = this.decls (ds, pctx.enter (d.name))
             let expr (e: Expr) : string = this.expr e pctx
-            // comm +
+            
+            comm +
             match d with
             | Include _ -> ""
             | Module (n, ds, a) -> "module " + (this.meta a) + n + (decls ds)
@@ -1135,16 +1158,20 @@ module YIL =
                        + listToString (List.map this.classType p, ",")
                        + " ")
                 + (decls ds)
-            | TypeDef (n, tpvs, sup, predO, isNew, _) ->
+            | TypeDef (n, tpvs, sup, predO, isNew, a) ->
                 (if isNew then "newtype " else "type ")
+                + (this.meta a)
                 + n
                 + (this.tpvars true false tpvs)
                 + " = "
                 + (match predO with
-                   | Some (x, p) ->
+                   | Some (x, p, w) ->
                        this.localDecl (LocalDecl(x, sup, false))
                        + " | "
                        + (this.expr p pctx)
+                       + (match w with
+                          | CompiledZero -> ""
+                          | OptOut -> "\n" + indentString + "witness *")
                    | None -> this.tp sup)
             | Field (n, t, eO, g, s, _, a) ->
                 this.stat (s, pctx)
@@ -1155,7 +1182,7 @@ module YIL =
                 + ": "
                 + (this.tp t)
                 + this.exprO (eO, " := ", pctx)
-            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, o, _) ->
+            | Method (methodType, n, tpvs, ins, outs, modifies, reads, decreases, b, g, s, o, a) ->
                 let outputsS =
                     match outs.outputType with
                     | Some t -> this.tp t
@@ -1173,11 +1200,8 @@ module YIL =
                    | IsGreatestPredicate -> ""  // already ghost
                    | _ -> this.ghost (g))
                 + methodType.ToString()
-                + (if b.IsNone then
-                       " {:axiom}"
-                   else
-                       "")
                 + " "
+                + (this.meta a)
                 + n
                 + (this.tpvars false g tpvs)
                 + (this.localDeclsBr (ins.decls, true))
@@ -1293,9 +1317,6 @@ module YIL =
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
 
             match e with
-            | EAssert e -> "assert " + (expr e) + ";"
-            | EAssume e -> "assume " + (expr e) + ";"
-            | EExpect e -> "expect " + (expr e) + ";"
             | EBlock es ->
                 if es.Length = 0 then
                     "{}"  // empty block
@@ -1410,6 +1431,14 @@ module YIL =
                 + (exprsNoBr d ", ")
                 + "; "
                 + (this.statement e pctx)
+            | EAssert (e, p) ->
+                "assert "
+                + (expr e)
+                + (match p with
+                   | None -> ";"
+                   | Some proof -> " by " + (this.statement proof pctx))
+            | EAssume _
+            | EExpect _
             | EDecls _
             | EAnonApply _
             | EMethodApply _
@@ -1455,7 +1484,7 @@ module YIL =
                 let n3 = n2.Replace("#", "x") // Variables with no names
                 n3
             | EThis -> "this"
-            | ENew (ct, _) -> "new " + this.classType (ct) + "()"
+            | ENew (ct, args) -> "new " + this.classType (ct) + (exprs args)
             | ENull _ -> "null"
             | EMemberRef (r, m, _) -> (receiver r) + m.name
             | EBool (v) ->
@@ -1483,9 +1512,10 @@ module YIL =
             | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr 11 e + "." + i.ToString()
-            | EFun (vs, _, e) ->
+            | EFun (vs, cond, _, e) ->
                 (if 0 < precedence then "(" else "")
                 + (this.localDeclsBr (vs, true))
+                + (Option.defaultValue "" (Option.map (fun c -> " " + this.condition(true, c, pctx)) cond))
                 + " => "
                 + (expr 0 e)
                 + (if 0 < precedence then ")" else "")
@@ -1558,12 +1588,15 @@ module YIL =
                     | EBlock []
                     | ECommented (_, EBlock []) -> false
                     | _ -> true
-
-                let esS =
-                    exprsNoBr (List.filter notEmptyBlock es) "; "
-
-                let s = indented (esS, false) // no braces - Dafny parses them as sets
-                s
+                let esNonEmpty = List.filter notEmptyBlock es
+                if esNonEmpty.IsEmpty then
+                    ""
+                else
+                    // statement 0, statement 1, ..., statement n-2, expr n-1
+                    let sts = List.map (fun x -> this.statement x pctx) esNonEmpty[..esNonEmpty.Length - 2]
+                    let esS = String.concat "\n" (sts @ [ expr 0 (esNonEmpty.Item(esNonEmpty.Length - 1)) ])
+                    // no braces - Dafny parses them as sets
+                    "\n" + esS
             | ELet (v, x, orfail, lhs, d, e) ->
                 "var "
                 + (exprsNoBr lhs ", ")
@@ -1666,7 +1699,12 @@ module YIL =
                 + (tp t)
                 + (if 9 < precedence then ")" else "")
             | EPrint es -> "print " + (String.concat ", " (List.map (expr 0) es))
-            | EAssert e -> "assert " + (expr 0 e)
+            | EAssert (e, p) ->
+                "assert "
+                + (expr 0 e)
+                + (match p with
+                   | None -> ""
+                   | Some proof -> " by " + (this.statement proof pctx))
             | EAssume e -> "assume " + (expr 0 e)
             | EExpect e -> "expect " + (expr 0 e)
             | EReveal es ->

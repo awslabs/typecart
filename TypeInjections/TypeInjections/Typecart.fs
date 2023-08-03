@@ -134,33 +134,38 @@ module Typecart =
         let combinePrefix = "Combine"
         // pipelines for transforming old, new, joint, translations
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
-            [ Analysis.FilterDecls(fun p -> not (List.contains p joint))
+            [ Analysis.FilterDeclsAndPrefixImports(
+                (fun p -> not (List.exists (fun (q: YIL.Path) -> q.isAncestorOf (p)) joint)),
+                "Joint"
+              )
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(oldOrNewPrefix (old))
-              Analysis.PrefixUnfoundImports("Joint")
+              Analysis.WrapTopDecls(oldOrNewPrefix (old))
               Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(oldOrNewPrefix (old)) ]
 
         let jointPipeline (joint: YIL.Path list) : Traverser.Transform list =
-            [ Analysis.FilterDecls(fun p -> List.contains p joint)
+            [ Analysis.FilterDeclsAndPrefixImports(
+                (fun p -> (List.exists (fun (q: YIL.Path) -> q.isAncestorOf (p)) joint)),
+                "(no prefix)"
+              )
               Analysis.LemmasToAxioms()
               Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(jointPrefix)
+              Analysis.WrapTopDecls(jointPrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
         let combinePipeline : Traverser.Transform list =
-            [ Analysis.AddImports(
-                [ "joint.dfy"; "old.dfy"; "new.dfy" ],
-                [ "Joint"
-                  "Old"
-                  "New"
-                  "Translations" ]
+            [ Analysis.UnqualifyPaths()
+              Analysis.WrapTopDecls(combinePrefix)
+              Analysis.AddImports(
+                  [ "joint.dfy"; "old.dfy"; "new.dfy" ],
+                  [ "Joint"
+                    "Old"
+                    "New"
+                    "Translations" ]
               )
-              Analysis.UnqualifyPaths()
-              Analysis.PrefixTopDecls(combinePrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.InsertTranslationFunctionsForBuiltinTypeOperators() ]
 
@@ -188,7 +193,7 @@ module Typecart =
             this.logger "***** generating translation code"
 
             let combineYIL, jointPaths =
-                Translation.prog (oldYIL, "Combine", diff)
+                Translation.prog (oldYIL, newYIL, "Combine", diff)
 
             // emitting output
             this.logger "************ emitting output"

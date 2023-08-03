@@ -130,10 +130,9 @@ module Differ =
         | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) ->
             nO = nN
             && isNO = isNN
-            && (prO.IsNone && prN.IsNone
-                || (prO.IsSome
-                    && prN.IsSome
-                    && (fst prO.Value) = (fst prN.Value)))
+            && (Option.map (fun (n, _, _) -> n) prO) = (Option.map (fun (n, _, _) -> n) prN)
+        | Datatype (nO, tsO, csO, msO, _), TypeDef (nN, tsN, spN, prN, isNN, _) -> nO = nN
+        | TypeDef (nO, tsO, spO, prO, isNO, _), Datatype (nN, tsN, csN, msN, _) -> nO = nN
         | _ -> false
 
     /// diffs two similar declarations
@@ -169,12 +168,13 @@ module Differ =
         | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) when
             // changing variable name (fst pr) not supported
             isNO = isNN
-            && (prO.IsNone && prN.IsNone
-                || (prO.IsSome
-                    && prN.IsSome
-                    && (fst prO.Value) = (fst prN.Value))) ->
-            let s = Option.map snd
+            && (Option.map (fun (n, _, _) -> n) prO) = (Option.map (fun (n, _, _) -> n) prN) ->
+            let s = Option.map (fun (_, e, _) -> e)
             Some(Diff.TypeDef(name (nO, nN), typeargs (tsO, tsN), tp (spO, spN), exprO (s prO, s prN)))
+        | Datatype (nO, tsO, csO, msO, _), TypeDef (nN, tsN, spN, prN, isNN, _) when nO = nN ->
+            Some(Diff.Datatype(name (nO, nN), typeargs (tsO, tsN), Diff.UpdateList [], Diff.UpdateList []))
+        | TypeDef (nO, tsO, spO, prO, isNO, _), Datatype (nN, tsN, csN, msN, _) when nO = nN ->
+            Some(Diff.Datatype(name (nO, nN), typeargs (tsO, tsN), Diff.UpdateList [], Diff.UpdateList []))
         | _ -> None
 
     /// diffs two sets of datatype constructors

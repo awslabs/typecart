@@ -7,7 +7,12 @@ module Classes {
     }
     function getX(): int
       reads this
-    {x}
+    {
+      // dummy variables to ensure that we support "requires" here
+      var es := [x];
+      var _ := seq(|es|, i requires 0 <= i < |es| => es[i]);
+      x
+    }
   }
 
   class Wrapper<A> {
