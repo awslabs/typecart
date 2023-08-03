@@ -615,9 +615,17 @@ module Translation =
                         |> List.map (fun c -> expr oldCtx c)
                         |> List.unzip
 
-                    // We do not generate new requires clauses here!
-                    // This is to ensure that the user writes the forward translation function
-                    // for the old input correctly to ensure the new requires clause.
+                    // new requires clauses become ensures arguments
+                    let newCtx =
+                        if isStatic then
+                            ctxN
+                        else
+                            ctxN.setThisDecl (newInstDecl)
+
+                    let _, inputEnsuresN =
+                        ins_n.conditions
+                        |> List.map (fun c -> expr newCtx c)
+                        |> List.unzip
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
@@ -668,7 +676,9 @@ module Translation =
                         | None -> EBool true
                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                     // but that is redundant due to our highly restricted treatment of classes
-                    let outSpec = OutputSpec([], [ outputsTranslation ])
+                    // New inputs' ensures becomes "output spec" here because "input spec" contains requires
+                    // and "output spec" contains ensures.
+                    let outSpec = OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
                     // The body yields the proof of the lemma.
                     let proof =
