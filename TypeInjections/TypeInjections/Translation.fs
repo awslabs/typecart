@@ -617,7 +617,7 @@ module Translation =
 
                     // We do not generate new requires clauses here!
                     // This is to ensure that the user writes the forward translation function
-                    // for the old output correctly to ensure the new requires clause.
+                    // for the old input correctly to ensure the new requires clause.
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
