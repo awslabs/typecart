@@ -125,8 +125,7 @@ module Typecart =
 
         // turn dafny AST representation of directory into a YIL AST
         member this.toYILProgram(projectName: string, reporter) =
-            this.toDafnyAST (projectName, reporter)
-            |> DafnyToYIL.program
+            DafnyToYIL.program(this.toDafnyAST(projectName, reporter), reporter.Options)
 
     // API entry
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =

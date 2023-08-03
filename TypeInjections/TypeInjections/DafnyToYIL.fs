@@ -48,16 +48,19 @@ module DafnyToYIL =
     let DafnyReads = "reads" // the special 'reads' member of a function
     let DafnyArrayPrefix = "array"
     let DafnyReveal = "reveal_"
+    
+    let mutable dafnyOptions = DafnyOptions.Default
 
     // ***** the mutually recursive functions
 
     (* a program concatenates the input file with all its dependencies, in reverse dependency order
        declarations in a file or module are wrapped in default classes (and a default module if needed)
        and implicitly static *)
-    let rec program (p: Program) : Y.Program =
+    let rec program (p: Program, options: DafnyOptions) : Y.Program =
         let decls = p.DefaultModuleDef.TopLevelDecls
-        let declsRev = List.rev (fromIList decls)
+        let declsRev = List.rev (fromIEnumerable decls)
         let ddecls = List.collect decl declsRev
+        dafnyOptions <- options
 
         { name = p.Name
           decls = ddecls
@@ -97,10 +100,10 @@ module DafnyToYIL =
             if d.TypeArgs.Count <> 0 then
                 unsupported "module with type parameters"
 
-            let ms = d.ModuleDef.TopLevelDecls
+            let ms = fromIEnumerable d.ModuleDef.TopLevelDecls
             let dName = d.Name
             let meta = namedMetaModDef d.ModuleDef
-            [ Y.Module(dName, decl @/ ms, meta) ]
+            [ Y.Module(dName, List.collect decl ms, meta) ]
         | :? AliasModuleDecl as d ->
             (* Dafny allows "import M", "import m = M" or "import opened M" where M is a module name.
                Either way, the names of M later appear with fully qualified paths. *)
@@ -110,10 +113,10 @@ module DafnyToYIL =
             if not (fromIList(d.Exports).IsEmpty) then
                 unsupported "import with exports"
 
-            if d.CompileName = d.Signature.ModuleDef.DafnyName then
+            if d.GetCompileName(dafnyOptions) = d.Signature.ModuleDef.DafnyName then
                 [ Y.Import(Y.ImportDefault(d.Opened, pathOfModule (d.Signature.ModuleDef))) ]
             else
-                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.CompileName ], pathOfModule (d.Signature.ModuleDef))) ]
+                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.GetCompileName(dafnyOptions) ], pathOfModule (d.Signature.ModuleDef))) ]
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs
@@ -155,12 +158,13 @@ module DafnyToYIL =
             let meta = namedMeta d
             let typeVars = typeParameter @ d.TypeArgs
             [ Y.Class(dName, isTrait d, typeVars, classType @ d.ParentTraits, List.concat (memberDecl @ d.Members), meta) ]
-        | :? OpaqueTypeDecl as d ->
+        // removed in Dafny 4.2.0
+        (* | :? OpaqueTypeDecl as d ->
             let dName = d.Name
             let meta = namedMeta d
             // Misuse Datatype for now when translating opaque types
             let typeVars = typeParameter @ d.TypeArgs
-            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ]
+            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ] *)
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
@@ -397,7 +401,7 @@ module DafnyToYIL =
                 let meta = namedMeta m
 
                 let yilMethodType =
-                    methodType (m.ByMethodDecl <> null, m.FunctionDeclarationKeywords)
+                    methodType (m.ByMethodDecl <> null, m.GetFunctionDeclarationKeywords(dafnyOptions))
 
                 [ Y.Method(
                     yilMethodType,
