@@ -648,7 +648,8 @@ module Translation =
                     let inSpec =
                         InputSpec(
                             inputs,
-                            inputRequiresO @ inputsTranslations @ losslessAssumptions
+                            inputRequiresO
+                            @ inputsTranslations @ losslessAssumptions
                         )
 
                     // we don't need the ensures-conditions of the method
@@ -678,7 +679,8 @@ module Translation =
                     // but that is redundant due to our highly restricted treatment of classes
                     // New inputs' ensures becomes "output spec" here because "input spec" contains requires
                     // and "output spec" contains ensures.
-                    let outSpec = OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
+                    let outSpec =
+                        OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
                     // The body yields the proof of the lemma.
                     let proof =
@@ -1087,7 +1089,7 @@ module Translation =
             let pathOfOld =
                 fun (decl: Decl) -> Path [ nameD.getOld; decl.name ]
 
-            let mO = ctxOm.lookupCurrent()
+            let mO = ctxOm.lookupCurrent ()
 
             let childPaths = List.map pathOfOld mO.children
             let sameChildren = List.map pathOfOld (declD.getSame ())

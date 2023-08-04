@@ -65,9 +65,10 @@ module Traverser =
               meta = p.meta }
 
         member this.importType(ctx: Context, e: ImportType) =
+            // lhs in ImportEquals is just a name.
             match e with
             | ImportDefault (o, p) -> ImportDefault(o, this.path (ctx, p))
-            | ImportEquals (o, lhs, rhs) -> ImportEquals(o, this.path (ctx, lhs), this.path (ctx, rhs))
+            | ImportEquals (o, lhs, rhs) -> ImportEquals(o, lhs, this.path (ctx, rhs))
 
         member this.exportType(ctx: Context, e: ExportType) =
             let path p = this.path (ctx, p)
@@ -89,7 +90,7 @@ module Traverser =
                         ds
 
                 let moduleCtx =
-                    List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n).clearImport()) imports
+                    List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n).clearImport ()) imports
 
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (moduleCtx, d)) ds

@@ -116,7 +116,7 @@ module DafnyToYIL =
             if d.GetCompileName(dafnyOptions) = d.Signature.ModuleDef.DafnyName then
                 [ Y.Import(Y.ImportDefault(d.Opened, pathOfModule (d.Signature.ModuleDef))) ]
             else
-                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.GetCompileName(dafnyOptions) ], pathOfModule (d.Signature.ModuleDef))) ]
+                [ Y.Import(Y.ImportEquals(d.Opened, d.GetCompileName(dafnyOptions), pathOfModule (d.Signature.ModuleDef))) ]
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs

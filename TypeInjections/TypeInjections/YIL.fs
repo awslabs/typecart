@@ -360,7 +360,7 @@ module YIL =
 
     and ImportType =
         | ImportDefault of opened: bool * dir: Path
-        | ImportEquals of opened: bool * lhsDir: Path * rhsDir: Path
+        | ImportEquals of opened: bool * lhsDir: string * rhsDir: Path
         override this.ToString() =
             match this with
             | ImportDefault (o, p) -> "import " + (if o then "opened " else "") + p.ToString()
