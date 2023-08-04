@@ -235,7 +235,14 @@ module Traverser =
             | ESeqSelect (s, t, elem, frI, toI) -> ESeqSelect(rcE s, rcT t, elem, rcEo frI, rcEo toI)
             | ESeqUpdate (s, i, e) -> ESeqUpdate(rcE s, rcE i, rcE e)
             | EToString es -> EToString(rcEs es)
-            | EArray (t, dim) -> EArray(rcT t, dim)
+            | EArray (t, dim, init) ->
+                let initT =
+                    match init with
+                    | Uninitialized -> Uninitialized
+                    | ValueList es -> ValueList(rcEs es)
+                    | ComprehensionLambda e -> ComprehensionLambda(rcE e)
+
+                EArray(rcT t, dim, initT)
             | EMultiSelect (a, i) -> EMultiSelect(rcE a, i)
             | EArrayUpdate (a, i, e) -> EArrayUpdate(rcE a, i, rcE e)
             | EMapKeys m -> EMapKeys(rcE m)

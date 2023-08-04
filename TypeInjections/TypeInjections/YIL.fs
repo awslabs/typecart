@@ -556,7 +556,7 @@ module YIL =
         | EThis
         | ENew of tp: ClassType * args: Expr list
         | ENull of tp: Type
-        | EArray of tp: Type * dim: Expr list // fixed size uninitialized array
+        | EArray of tp: Type * dim: Expr list * init: ArrayInitializer
         // built-in values of base types (literals)
         // Dafny represents nat literals as TInt literals even if the context demands it have type TNat.
         | EBool of bool
@@ -668,6 +668,16 @@ module YIL =
        Dafny also allows :- V, which corresponds to a monadic return, but we do not allow that.
     *)
     and UpdateRHS = { df: Expr; monadic: Type option }
+    
+    (* array initializers:
+       Uninitialized: new int[5,6]
+       ValueList: new int[][2,3,5,7,11] (equivalent to new int[5][2,3,5,7,11], must be 1-dimensional)
+       ComprehensionLambda: new int[5](i => i*i)
+    *)
+    and ArrayInitializer =
+        | Uninitialized
+        | ValueList of Expr list
+        | ComprehensionLambda of Expr
 
     (* a receiver is the lhs of the . operator when accessing child declarations
     *)
@@ -1543,7 +1553,7 @@ module YIL =
                     + exprO t ""
                     + "]"
             | ESeqUpdate (s, i, e) -> (expr 11 s) + "[" + (expr 11 i) + " := " + (expr 0 e) + "]"
-            | EArray (t, d) -> "new " + t.ToString() + dims (d)
+            | EArray (t, d, i) -> "new " + t.ToString() + dims (d) + this.arrayInitializer(i, pctx)
             | EMultiSelect (a, i) -> (expr 11 a) + dims (i)
             | EArrayUpdate (a, i, e) -> (expr 11 a) + dims (i) + " := " + (expr 0 e)
             | EMapKeys (e) -> (expr 11 e) + ".Keys"
@@ -1836,6 +1846,12 @@ module YIL =
 
         member this.classType(ct: ClassType) =
             ct.path.ToString() + (this.tps ct.tpargs)
+        
+        member this.arrayInitializer(init: ArrayInitializer, pctx: Context) =
+            match init with
+            | Uninitialized -> ""
+            | ValueList es -> this.dims(es, pctx)
+            | ComprehensionLambda e -> "(" + (this.expr e pctx) + ")"
 
         member this.receiver(rcv: Receiver, pctx: Context) =
             // do not print out the "." separator if receiver is empty.
