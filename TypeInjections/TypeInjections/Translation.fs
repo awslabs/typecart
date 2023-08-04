@@ -1073,37 +1073,39 @@ module Translation =
     /// - generates the Translations part.
     /// A subsequent step is expected to copy the old and new program and prefix the names in all toplevel
     /// declarations with either "Joint." or "New.", resp. "Old.".
-    let translateModule (ctxO: Context, ctxN: Context, m: Decl, pD: Diff.Decl) =
-        let ctxOm = ctxO.enter (m.name) // enter decl of m
-        let ctxNm = ctxN.enter (m.name) // enter decl of m
+    let translateModule (ctxO: Context, ctxN: Context, pD: Diff.Decl) =
+        let ctxOm = ctxO.enter (pD.name.getOld) // enter decl of m
+        let ctxNm = ctxN.enter (pD.name.getNew) // enter decl of m
 
         let inputOk (nameO: string) (nameD: Diff.Name) =
             match nameD with
             | Diff.SameName s -> nameO = s
             | Diff.Rename (o, n) -> nameO = o
 
-        match m, pD with
-        | Module _ as m, Diff.Module (nameD, declD) when (inputOk m.name nameD) ->
-            let pathOf =
-                fun (decl: Decl) -> Path [ m.name; decl.name ]
+        match pD with
+        | Diff.Module (nameD, declD) ->
+            let pathOfOld =
+                fun (decl: Decl) -> Path [ nameD.getOld; decl.name ]
 
-            let childPaths = List.map pathOf m.children
-            let sameChildren = List.map pathOf (declD.getSame ())
+            let mO = ctxOm.lookupCurrent()
+
+            let childPaths = List.map pathOfOld mO.children
+            let sameChildren = List.map pathOfOld (declD.getSame ())
 
             let changedChildren =
                 Utils.listDiff (childPaths, sameChildren)
 
             let changedClosed =
-                Analysis.dependencyClosure (ctxOm, m.children, changedChildren)
+                Analysis.dependencyClosure (ctxOm, mO.children, changedChildren)
 
             let jointPaths =
                 Utils.listDiff (childPaths, changedClosed)
 
-            Console.WriteLine($" ***** DEPENDENCY CLOSURE FOR {m.name} *****")
+            Console.WriteLine($" ***** DEPENDENCY CLOSURE FOR {mO.name} *****")
             List.iter (fun (Path x) -> Console.WriteLine(String.concat ", " x)) changedClosed
-            Console.WriteLine($" ***** JOINT PATHS FOR {m.name} *****")
+            Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} *****")
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
-            Console.WriteLine($" ***** JOINT PATHS FOR {m.name} END *****")
+            Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
             let tr =
                 Translator(ctxOm, ctxNm, declD, jointPaths)

@@ -101,6 +101,16 @@ module Diff =
     type Name =
         | SameName of string
         | Rename of string * string
+        member this.getOld =
+            match this with
+            | SameName o
+            | Rename (o, _) -> o
+
+        member this.getNew =
+            match this with
+            | SameName n
+            | Rename (_, n) -> n
+
 
     and Program =
         { name: Name

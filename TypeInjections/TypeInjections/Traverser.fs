@@ -89,7 +89,7 @@ module Traverser =
                         ds
 
                 let moduleCtx =
-                    List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter (n)) imports
+                    List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n).clearImport()) imports
 
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (moduleCtx, d)) ds

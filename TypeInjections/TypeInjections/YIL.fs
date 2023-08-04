@@ -1035,6 +1035,8 @@ module YIL =
         // add and remove imports
         member this.addImport(importType: ImportType) =
             Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths, thisDecl)
+        member this.clearImport() =
+            Context(prog, currentDecl, tpvars, vars, pos, [], thisDecl)
 
     (* ***** printer for the language above
 
