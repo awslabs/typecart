@@ -1204,21 +1204,22 @@ module DafnyToYIL =
             // name := value
             expr r.Expr
         | :? TypeRhs as r ->
-            // When using an array initialization, make sure it matches Java's default
-            // TODO: Translate the lambda expression and get rid of it in the YILToJava translation to make this code agnostic of Java
-            if r.ElementInit <> null then
-                match expr r.ElementInit with
-                | Y.EFun (_, _, Y.TBool _, Y.EBool false) -> ()
-                | _ -> unsupported "Array initialization not supported or does not match Java default type"
-            else
-                ()
             // name := new ...
             if r.ArrayDimensions <> null then
-                // name := new A[dimensions]
-                Y.EArray(tp r.EType, expr @ r.ArrayDimensions)
+                // name := new A[dimensions]...
+                let init: Y.ArrayInitializer =
+                    if r.ElementInit <> null then
+                        // name := new A[dimensions](initializer)
+                        Y.ComprehensionLambda(expr r.ElementInit)
+                    elif r.InitDisplay <> null then
+                        // name := new A[dimension][values]
+                        Y.ValueList(expr @ r.InitDisplay)
+                    else
+                        Y.Uninitialized
+                Y.EArray(tp r.EType, expr @ r.ArrayDimensions, init)
             else
                 (* This is not correct if anything but a default constructor is to be applied.
-                   That is find because in Yucca, this case only occurs for constructing iterators.
+                   That is fine because in Yucca, this case only occurs for constructing iterators.
                 *)
                 let ct = classType (r.Type)
 
