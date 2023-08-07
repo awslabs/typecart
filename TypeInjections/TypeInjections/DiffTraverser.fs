@@ -93,34 +93,111 @@ module DiffTraverser =
 
         member this.declDefault(ctxO: Context, ctxN: Context, d: Diff.Decl) =
             let name n = this.name (ctxO, ctxN, n)
-            let tp t = this.tp (ctxO, ctxN, t)
-            let inputSpec spec = this.inputSpec (ctxO, ctxN, spec)
-            let outputSpec spec = this.outputSpec (ctxO, ctxN, spec)
-            let exprO e = this.exprO (ctxO, ctxN, e)
-            let decls ds = this.list (ctxO, ctxN, ds, this.decl)
 
-            let typeargs ts =
-                this.list (ctxO, ctxN, ts, this.typearg)
+            let decls ctxOb ctxNb ds = this.list (ctxOb, ctxNb, ds, this.decl)
 
-            let classtypes cs =
-                this.list (ctxO, ctxN, cs, this.classtype)
+            let typeargs ctxOb ctxNb ts =
+                this.list (ctxOb, ctxNb, ts, this.typearg)
 
-            let datatypeConstructors dcs =
-                this.list (ctxO, ctxN, dcs, this.datatypeConstructor)
+            let classtypes ctxOb ctxNb cs =
+                this.list (ctxOb, ctxNb, cs, this.classtype)
 
-            let conditions conds =
-                this.list (ctxO, ctxN, conds, this.condition)
+            let datatypeConstructors ctxOb ctxNb dcs =
+                this.list (ctxOb, ctxNb, dcs, this.datatypeConstructor)
+
+            let conditions ctxOb ctxNb conds =
+                this.list (ctxOb, ctxNb, conds, this.condition)
 
             match d with
-            | Diff.Module (n, ds) -> Diff.Module(name n, decls ds)
-            | Diff.Class (n, ts, cs, ds) -> Diff.Class(name n, typeargs ts, classtypes cs, decls ds)
-            | Diff.Datatype (n, ts, dcs, ds) -> Diff.Datatype(name n, typeargs ts, datatypeConstructors dcs, decls ds)
+            | Diff.Module (n, ds) ->
+                let imports =
+                    List.choose
+                        (function
+                        | Import it -> Some it
+                        | _ -> None)
+
+                let ctxOm =
+                    List.fold
+                        (fun (ctx: Context) -> ctx.addImport)
+                        (ctxO.enter(n.getOld).clearImport ())
+                        (imports (ds.getOld ()))
+
+                let ctxNm =
+                    List.fold
+                        (fun (ctx: Context) -> ctx.addImport)
+                        (ctxN.enter(n.getNew).clearImport ())
+                        (imports (ds.getNew ()))
+
+                Diff.Module(name n, decls ctxOm ctxNm ds)
+            | Diff.Class (n, ts, cs, ds) ->
+                let ctxOb =
+                    ctxO.enter(n.getOld).addTpvars (ts.getOld ())
+
+                let ctxNb =
+                    ctxN.enter(n.getNew).addTpvars (ts.getNew ())
+
+                Diff.Class(name n, typeargs ctxOb ctxNb ts, classtypes ctxOb ctxNb cs, decls ctxOb ctxNb ds)
+            | Diff.Datatype (n, ts, dcs, ds) ->
+                let ctxOb =
+                    ctxO.enter(n.getOld).addTpvars (ts.getOld ())
+
+                let ctxNb =
+                    ctxN.enter(n.getNew).addTpvars (ts.getNew ())
+
+                Diff.Datatype(
+                    name n,
+                    typeargs ctxOb ctxNb ts,
+                    datatypeConstructors ctxOb ctxNb dcs,
+                    decls ctxOb ctxNb ds
+                )
             | Diff.ClassConstructor (n, ts, ins, conds, e) ->
-                Diff.ClassConstructor(name n, typeargs ts, inputSpec ins, conditions conds, exprO e)
-            | Diff.TypeDef (n, ts, t, e) -> Diff.TypeDef(name n, typeargs ts, tp t, exprO e)
-            | Diff.Field (n, t, e) -> Diff.Field(name n, tp t, exprO e)
+                let ctxOh =
+                    ctxO.enter(n.getOld).addTpvars (ts.getOld ())
+
+                let ctxNh =
+                    ctxN.enter(n.getNew).addTpvars (ts.getNew ())
+
+                let ctxOb =
+                    ctxOh.add(ins.decls.getOld ()).enterBody ()
+
+                let ctxNb =
+                    ctxNh.add(ins.decls.getNew ()).enterBody ()
+
+                Diff.ClassConstructor(
+                    name n,
+                    typeargs ctxOh ctxNh ts,
+                    this.inputSpec (ctxOh, ctxNh, ins),
+                    conditions ctxOh ctxNh conds,
+                    this.exprO (ctxOb, ctxNb, e)
+                )
+            | Diff.TypeDef (n, ts, t, e) ->
+                let ctxOe = ctxO.addTpvars (ts.getOld ())
+                let ctxNe = ctxN.addTpvars (ts.getNew ())
+                Diff.TypeDef(name n, typeargs ctxOe ctxNe ts, this.tp (ctxOe, ctxNe, t), this.exprO (ctxOe, ctxNe, e))
+            | Diff.Field (n, t, e) -> Diff.Field(name n, this.tp (ctxO, ctxN, t), this.exprO (ctxO, ctxN, e))
             | Diff.Method (n, ts, ins, outs, e) ->
-                Diff.Method(name n, typeargs ts, inputSpec ins, outputSpec outs, exprO e)
+                let ctxOh =
+                    ctxO.enter(n.getOld).addTpvars (ts.getOld ())
+
+                let ctxNh =
+                    ctxN.enter(n.getNew).addTpvars (ts.getNew ())
+
+                let ctxOi = ctxOh.add (ins.decls.getOld ())
+                let ctxNi = ctxNh.add (ins.decls.getNew ())
+
+                let ctxOb =
+                    ctxOi.add(outs.namedDecls.getOld ()).enterBody ()
+
+                let ctxNb =
+                    ctxNi.add(outs.namedDecls.getNew ()).enterBody ()
+
+                Diff.Method(
+                    name n,
+                    typeargs ctxOh ctxNh ts,
+                    this.inputSpec (ctxOh, ctxNh, ins),
+                    this.outputSpec (ctxOi, ctxNi, outs),
+                    this.exprO (ctxOb, ctxNb, e)
+                )
             | Diff.Import importT -> Diff.Import importT
             | Diff.Export exportT -> Diff.Export exportT
             | Diff.DUnimplemented -> Diff.DUnimplemented

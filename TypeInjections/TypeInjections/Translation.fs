@@ -3,7 +3,6 @@ namespace TypeInjections
 open System
 open TypeInjections.Diff
 open TypeInjections.YIL
-open YIL
 
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =

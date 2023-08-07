@@ -79,6 +79,26 @@ module Diff =
                     | Delete y -> Some y
                     | _ -> None)
                 this.elements
+        /// the old elements
+        member this.getOld() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y
+                    | Delete y
+                    | Update (y, _, _) -> Some y
+                    | Add _ -> None)
+                this.elements
+        /// the new elements
+        member this.getNew() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y
+                    | Add y
+                    | Update (_, y, _) -> Some y
+                    | Delete _ -> None)
+                this.elements
 
     /// change in an element of a list of YIL.y with comparision type Diff.d
     and Elem<'y, 'd> =
@@ -187,6 +207,29 @@ module Diff =
         member this.decls =
             match this with
             | OutputSpec (lds, _) -> lds
+
+        member this.namedDecls =
+            this.decls.elements
+            |> List.choose
+                (fun ldD ->
+                    match ldD with
+                    | Same ld
+                    | Add ld
+                    | Delete ld ->
+                        if ld.isAnonymous () then
+                            None
+                        else
+                            Some(ldD)
+                    | Update (ldO, ldN, _) ->
+                        if ldO.isAnonymous () && ldN.isAnonymous () then
+                            None
+                        elif ldO.isAnonymous () then
+                            Some(Add(ldN))
+                        elif ldN.isAnonymous () then
+                            Some(Delete(ldO))
+                        else
+                            Some(ldD))
+            |> UpdateList
 
         member this.conditions =
             match this with
