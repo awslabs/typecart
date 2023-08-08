@@ -46,7 +46,7 @@ module Translation =
     let unsupported s = "unsupported: " + s
 
     /// translates a program, encapsulates global data/state for use during translation
-    type Translator(ctxO: Context, ctxN: Context, declsD: Diff.DeclList, jointDecls: Path list) =
+    type Translator(ctxO: Context, ctxN: Context, declsD: Diff.DeclList, jointDecls: Path list, changedDecls: Set<Path>) =
         /// old, new, and translations path for a path
         // This is the only place that uses the literal prefix strings.
         let rec path (p: Path) : Path * Path * Path =
@@ -59,6 +59,7 @@ module Translation =
                 (p.prefix "Old", p.prefix "New", p)
         and isJoint (p: Path) : bool =
             List.exists (fun (j: Path) -> j.isAncestorOf p) jointDecls
+        and changedInOld (p: Path) : bool = changedDecls.Contains(p)
         and name (s: string) =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
@@ -461,7 +462,7 @@ module Translation =
 
                 translations @ memberLemmasWithPrefix
             // immutable fields with initializer yield a lemma, mutable fields yield nothing
-            | Diff.Field (_, tpD, dfD) ->
+            | Diff.Field (_, tpD, dfD) when changedInOld (ctxOI.currentDecl) ->
                 match declO with
                 | Field (_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
                 | Field (_, t, _, _, _, _, _) ->
@@ -502,8 +503,9 @@ module Translation =
                           emptyMeta
                       ) ]
                 | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
+            | Diff.Field _ -> [] // unchanged fields produce nothing
             // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-            | Diff.Method (_, tvsD, insD, outsD, bdD) ->
+            | Diff.Method (_, tvsD, insD, outsD, bdD) when changedInOld (ctxOI.currentDecl) ->
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
@@ -723,6 +725,7 @@ module Translation =
                           emptyMeta
                       ) ]
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
+            | Diff.Method _ -> [] // unchanged methods produce nothing
         and typeDeclHeader (p: Path, dO: Decl, dN: Decl) =
             assert (dO.name = dN.name)
             typeDeclHeaderMain (p, dO.name, dO.tpvars, dN.tpvars)
@@ -1108,8 +1111,9 @@ module Translation =
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
+            // TODO: We do not support telling which paths are changed here
             let tr =
-                Translator(ctxOm, ctxNm, declD, jointPaths)
+                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -1141,8 +1145,11 @@ module Translation =
         printPaths ("dependency closure of changed", changedClosed)
         printPaths ("joint", jointPaths)
 
+        let changedInOld =
+            DiffAnalysis.changedInOld (Context(pO), Context(pN), pD)
+
         let tr =
-            Translator(Context(pO), Context(pN), pD.decls, jointPaths)
+            Translator(Context(pO), Context(pN), pD.decls, jointPaths, changedInOld)
 
         let translations =
             { name = newName

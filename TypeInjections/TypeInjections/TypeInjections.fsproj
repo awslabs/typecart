@@ -20,6 +20,7 @@
         <Compile Include="Diff.fs" />
         <Compile Include="Differ.fs" />
         <Compile Include="DiffTraverser.fs" />
+        <Compile Include="DiffAnalysis.fs" />
         <Compile Include="Translation.fs" />
         <Compile Include="Typecart.fs" />
         <Compile Include="Program.fs" />

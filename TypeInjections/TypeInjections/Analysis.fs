@@ -66,6 +66,56 @@ module Analysis =
         List.iter add start
         closure
 
+    /// Returns a set of all decls (in Set<Path>) that uses anything in start
+    type GatherDeclsUsingPaths(start: Set<Path>) =
+        inherit Traverser.Identity()
+        
+        let mutable result: Set<Path> = Set.empty
+        
+        override this.path(ctx: Context, p: Path): Path =
+            if start.Contains(p) then
+                result <- result.Add(ctx.currentDecl)
+            p
+
+        override this.constructor(ctx: Context, cons: DatatypeConstructor) =
+            // Note: datatype constructors are not calling this.path
+            if start.Contains(ctx.currentDecl.child(cons.name)) then
+                result <- result.Add(ctx.currentDecl)
+            
+            let insT = this.localDeclList (ctx, cons.ins)
+
+            { name = cons.name
+              ins = insT
+              meta = cons.meta }
+        
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Module (n, _, _)
+            | Datatype (n, _, _, _, _)
+            | Class (n, _, _, _, _, _)
+            | TypeDef (n, _, _, _, _, _)
+            | Field (n, _, _, _, _, _, _)
+            | Method (_, n, _, _, _, _, _, _, _, _, _, _, _)
+            | ClassConstructor (n, _, _, _, _, _) ->
+                if start.Contains(ctx.currentDecl.child(n)) then
+                    result <- result.Add(ctx.currentDecl.child(n))
+            | _ -> ()
+            this.declDefault(ctx, d)
+            
+        member this.gather(prog: Program) =
+            this.progDefault(prog) |> ignore
+            result
+        
+    let dependencyClosureByGatherDeclsUsingPaths (prog: Program, start: Set<Path>) =
+        let mutable prev_closure: Set<Path> = Set.empty
+        let mutable closure = start
+
+        while prev_closure <> closure do
+            prev_closure <- closure
+            closure <- GatherDeclsUsingPaths(closure).gather(prog)
+
+        closure
+
     /// filters declarations by applying a predicate to their path;
     /// prefix imports to removed declarations
     type FilterDeclsAndPrefixImports(keep: Path -> bool, prefix: string) =
@@ -191,7 +241,11 @@ module Analysis =
                 this.addPathLowPriority(ctx.modulePath(), cons.name, ctx.currentDecl.child(cons.name))
             else
                 this.addPath(ctx.currentDecl, cons.name, ctx.currentDecl.child(cons.name))
-            cons
+            let insT = this.localDeclList (ctx, cons.ins)
+
+            { name = cons.name
+              ins = insT
+              meta = cons.meta }
         
         override this.decl(ctx: Context, d: Decl) : Decl list =
             if phase = 0 then
@@ -471,13 +525,20 @@ module Analysis =
             | Method (IsLemma, a, b, c, d, e, f, g, _, h, i, j, k) ->
                 [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k) ]
             | d -> this.declDefault (ctx, d)
+    
+    /// we need to leave a qualified version of YIL for combined to resolve names
+    type LeaveQualifiedYILForCombined() =
+        inherit Traverser.Identity()
+        override this.ToString() = "leaving qualified YIL for combined"
 
     type Pipeline(passes: Traverser.Transform list) =
-        member this.apply(prog: Program) =
+        member this.apply(prog: Program, otherProgs: Program list) =
             let mutable pM = prog
+            let mutable pPreserved = prog
             
             // We need to gather the paths at the beginning before filtering joint/old/new.
-            let allPaths = GatherAllPaths().gather(prog)
+            let allPathsInProg = GatherAllPaths().gather(prog)
+            let allPaths = List.foldBack (Map.foldBack Map.add) (List.map (GatherAllPaths().gather) otherProgs) allPathsInProg
             let visiblePaths = GatherVisiblePaths().gather(prog, allPaths)
 
             passes
@@ -487,8 +548,11 @@ module Analysis =
                     | :? UnqualifyPaths as p ->
                         Console.WriteLine(p.ToString())
                         pM <- p.run(pM, visiblePaths)
+                    | :? LeaveQualifiedYILForCombined as p ->
+                        Console.WriteLine(p.ToString())
+                        pPreserved <- pM
                     | _ ->
                         Console.WriteLine(pass.ToString())
                         pM <- pass.prog pM)
 
-            pM
+            pM, pPreserved

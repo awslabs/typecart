@@ -85,7 +85,7 @@ module DiffTraverser =
 
         abstract member prog : Context * Context * Diff.Program -> Diff.Program
 
-        default this.prog(ctxO: Context, ctxN: Context, prog: Diff.Program) =
+        member this.progDefault(ctxO: Context, ctxN: Context, prog: Diff.Program) =
             { name = prog.name
               decls = this.list (ctxO, ctxN, prog.decls, this.decl) }
 
@@ -208,3 +208,4 @@ module DiffTraverser =
         inherit Transform()
 
         override this.decl(ctxO: Context, ctxN: Context, d: Diff.Decl) = base.declDefault (ctxO, ctxN, d)
+        override this.prog(ctxO: Context, ctxN: Context, prog: Diff.Program) = base.progDefault (ctxO, ctxN, prog)
