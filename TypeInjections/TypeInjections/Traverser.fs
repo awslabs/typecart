@@ -41,6 +41,10 @@ module Traverser =
         member this.exprO(ctx: Context, eO: Expr option) =
             Option.map (fun t -> this.expr (ctx, t)) eO
 
+        /// translates an optional condition
+        member this.conditionO(ctx: Context, eO: Condition option) =
+            Option.map (fun t -> this.condition (ctx, t)) eO
+
         /// translates a list of types
         member this.tpList(ctx: Context, ts: Type list) = List.map (fun t -> this.tp (ctx, t)) ts
         /// translates an optional type
@@ -264,7 +268,7 @@ module Traverser =
             | EFun (ins, cond, out, bd) ->
                 EFun(
                     this.localDeclList (ctx, ins),
-                    this.exprO (ctx.add ins, cond),
+                    this.conditionO (ctx.add ins, cond),
                     rcT out,
                     this.expr (ctx.add ins, bd)
                 )
@@ -354,7 +358,7 @@ module Traverser =
 
         /// transforms a condition
         abstract member condition : Context * Condition -> Condition
-        default this.condition(ctx, c) = this.expr (ctx, c)
+        default this.condition(ctx, c) = this.expr (ctx, fst c), snd c
 
         /// convenience method for the common case of lists of declarations
         abstract member conditionList : Context * Condition list -> Condition list

@@ -127,13 +127,13 @@ module Translation =
                         let nO, nN, _ = typearg (plainTypeArg n)
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
-        and backward_compatible (insT: (Expr * Expr) list) (insN: LocalDecl list) : Expr list =
-            List.map (fun ((f1, f2), inN: LocalDecl) -> EEqual(EVar(inN.name), f1)) (List.zip insT insN)
-        and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Expr =
+        and backward_compatible (insT: (Condition * Condition) list) (insN: LocalDecl list) : Condition list =
+            List.map (fun ((f1, f2), inN: LocalDecl) -> EEqual(EVar(inN.name), fst f1), snd f1) (List.zip insT insN)
+        and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
             // forall x1_O: U_O :: U_back(U(x1_O)) == x1_O
             let nO, _, _ = name "x"
             let ld = LocalDecl(nO, tO, true)
-            EQuant(Forall, [ ld ], None, EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO))
+            EQuant(Forall, [ ld ], None, EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
             List.collect (decl contextO contextN) dsD.elements
         and decl (contextO: Context) (contextN: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
@@ -349,7 +349,7 @@ module Translation =
                                  else
                                      pO.child ctrO.name),
                                 [],
-                                (if isForward then insT1 else insT2)
+                                fst (List.unzip (if isForward then insT1 else insT2))
                             )
                         )
                     | Diff.Update _ ->
@@ -364,7 +364,7 @@ module Translation =
                                  else
                                      pO.child ctrO.name),
                                 [],
-                                (if isForward then insT1 else insT2)
+                                fst (List.unzip (if isForward then insT1 else insT2))
                             )
                         )
 
@@ -494,7 +494,7 @@ module Translation =
                         sr parentO, sr parentN
 
                     let fieldsTranslation =
-                        EEqual(tT1 (EMemberRef(recO, pO, [])), EMemberRef(recN, pN, []))
+                        EEqual(tT1 (EMemberRef(recO, pO, [])), EMemberRef(recN, pN, [])), None
 
                     [ Method(
                           IsLemma,
@@ -622,7 +622,10 @@ module Translation =
 
                     let inputRequiresO, _ =
                         ins_o.conditions
-                        |> List.map (fun c -> expr oldCtx c)
+                        |> List.map
+                            (fun c ->
+                                let es = expr oldCtx (fst c)
+                                (fst es, snd c), (snd es, snd c))
                         |> List.unzip
 
                     // new requires clauses become ensures arguments
@@ -634,7 +637,10 @@ module Translation =
 
                     let _, inputEnsuresN =
                         ins_n.conditions
-                        |> List.map (fun c -> expr newCtx c)
+                        |> List.map
+                            (fun c ->
+                                let es = expr newCtx (fst c)
+                                (fst es, snd c), (snd es, snd c))
                         |> List.unzip
 
                     // insT is (f1(old), f2(new))
@@ -683,8 +689,8 @@ module Translation =
 
                     let outputsTranslation =
                         match outputTypeT with
-                        | Some ot -> EEqual(resultN, (fst ot) resultO)
-                        | None -> EBool true
+                        | Some ot -> EEqual(resultN, (fst ot) resultO), None
+                        | None -> EBool true, None
                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                     // but that is redundant due to our highly restricted treatment of classes
                     // New inputs' ensures becomes "output spec" here because "input spec" contains requires
@@ -786,11 +792,14 @@ module Translation =
             let nO, nN, _ = name ld.name
             let tO, tN, tT = tp (ld.tp, ld.tp)
             let g = ld.ghost
-            LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), ((fst tT) (EVar nO), (snd tT) (EVar nN))
+            LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
         and localDecl2 (ldO: LocalDecl, ldN: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
             let nO, nN, _ = name2 (ldO.name, ldN.name)
             let tO, tN, tT = tp (ldO.tp, ldN.tp)
-            LocalDecl(nO, tO, ldO.ghost), LocalDecl(nN, tN, ldN.ghost), ((fst tT) (EVar nO), (snd tT) (EVar nN))
+
+            LocalDecl(nO, tO, ldO.ghost),
+            LocalDecl(nN, tN, ldN.ghost),
+            (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
         and listOfFuncToFuncOfList (l: (Expr -> Expr) List) =
             (fun x -> List.map (fun (a, b) -> a b) (List.zip l x))
         and diag (x: Expr, y: Expr) = EEqual(x, y)
@@ -1157,7 +1166,7 @@ module Translation =
             DiffAnalysis.changedInOld (Context(pO), Context(pN), pD)
 
         printPaths ("changed in old", Set.toList changedInOld)
-        
+
         // If we want to generate lemmas even if the function/method is not affected by the change.
         let alwaysGenerateLemmas = false
 

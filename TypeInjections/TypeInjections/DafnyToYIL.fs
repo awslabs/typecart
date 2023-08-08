@@ -512,7 +512,9 @@ module DafnyToYIL =
 
         (t.Name, (v, e, h))
 
-    and condition (a: AttributedExpression) : Y.Condition = expr a.E
+    and condition (a: AttributedExpression) : Y.Condition =
+        let label = if a.Label = null then None else Some(a.Label.Name)
+        (expr a.E, label)
 
     and tp (t: Type) : Y.Type =
 
@@ -695,6 +697,9 @@ module DafnyToYIL =
                     Y.ELet(List.concat vars, e.Exact, true, lhs, rhs, body)
                 | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
+        // NameSegment is a subtype of ConcreteSyntaxExpression
+        | :? NameSegment as e ->
+            Y.EVar(e.Name)
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
             if e.ResolvedExpression = null then
@@ -762,7 +767,7 @@ module DafnyToYIL =
             | _ -> unsupported $"Literal value {e.ToString()}"
         | :? LambdaExpr as e ->
             let vars = boundVar @ e.BoundVars
-            let cond = if e.Range = null then None else Some(expr e.Range)
+            let cond = if e.Range = null then None else Some(expr e.Range, None)
             Y.EFun(vars, cond, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e -> Y.ESeqSelect(expr e.Seq, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
