@@ -485,8 +485,10 @@ module YIL =
         member this.isAnonymous() = this.name = anonymous
 
 
-    (* pre/postcondition of a method/lemma *)
-    and Condition = Expr
+    (* pre/postcondition of a method/lemma
+       A "requires" statement may have a label.
+     *)
+    and Condition = Expr * string option
 
     (* constructor of an inductive type
     *)
@@ -1294,7 +1296,12 @@ module YIL =
                 else
                     "ensures"
 
-            kw + " " + (this.expr c pctx)
+            kw
+            + " "
+            + (match snd c with
+               | None -> ""
+               | Some label -> label + ":")
+            + (this.expr (fst c) pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) =
             c.name + (this.localDeclsBr (c.ins, true))
