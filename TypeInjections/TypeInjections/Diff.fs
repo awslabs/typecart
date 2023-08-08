@@ -147,6 +147,17 @@ module Diff =
         | Import of importT: YIL.ImportType
         | Export of exportT: YIL.ExportType
         | DUnimplemented
+        member this.nameO =
+            match this with
+            | Module (n, _)
+            | Class (n, _, _, _)
+            | Datatype (n, _, _, _)
+            | ClassConstructor (n, _, _, _, _)
+            | TypeDef (n, _, _, _)
+            | Field (n, _, _)
+            | Method (n, _, _, _, _) -> Some n
+            | _ -> None
+
         member this.name =
             match this with
             | Module (n, _) -> n

@@ -1148,6 +1148,8 @@ module Translation =
         let changedInOld =
             DiffAnalysis.changedInOld (Context(pO), Context(pN), pD)
 
+        printPaths ("changed in old", Set.toList changedInOld)
+
         let tr =
             Translator(Context(pO), Context(pN), pD.decls, jointPaths, changedInOld)
 

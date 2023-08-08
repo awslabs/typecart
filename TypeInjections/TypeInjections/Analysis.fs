@@ -116,6 +116,47 @@ module Analysis =
 
         closure
 
+    /// Returns a set of paths that is all children (subtrees) of a input set of paths. (unused)
+    type GatherPathsSubtree(start: Set<Path>) =
+        inherit Traverser.Identity()
+        
+        let mutable result: Set<Path> = start
+        
+        member this.addPath(p: Path) =
+            if Set.exists (fun (q: Path) -> q.isAncestorOf(p)) start then
+                result <- result.Add(p)
+
+        override this.path(ctx: Context, p: Path) =
+            this.addPath(p)
+            p
+        
+        override this.constructor(ctx: Context, cons: DatatypeConstructor) =
+            // Note: datatype constructors are not calling this.path
+            this.addPath(ctx.currentDecl.child(cons.name))
+            let insT = this.localDeclList (ctx, cons.ins)
+
+            { name = cons.name
+              ins = insT
+              meta = cons.meta }
+        
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Module (n, _, _)
+            | Datatype (n, _, _, _, _)
+            | Class (n, _, _, _, _, _)
+            | TypeDef (n, _, _, _, _, _)
+            | Field (n, _, _, _, _, _, _)
+            | Method (_, n, _, _, _, _, _, _, _, _, _, _, _)
+            | ClassConstructor (n, _, _, _, _, _) ->
+                this.addPath(ctx.currentDecl.child(n))
+            | _ -> ()
+            
+            this.declDefault(ctx, d)
+
+        member this.gather(prog: Program) =
+            this.progDefault(prog) |> ignore
+            result
+
     /// filters declarations by applying a predicate to their path;
     /// prefix imports to removed declarations
     type FilterDeclsAndPrefixImports(keep: Path -> bool, prefix: string) =

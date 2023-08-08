@@ -931,6 +931,7 @@ module YIL =
         member this.tpvars = tpvars
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
+        member this.lookupByPath(p: Path) = lookupByPath (prog, p)
         member this.pos = pos
         
         member this.thisDecl = thisDecl
