@@ -46,7 +46,15 @@ module Translation =
     let unsupported s = "unsupported: " + s
 
     /// translates a program, encapsulates global data/state for use during translation
-    type Translator(ctxO: Context, ctxN: Context, declsD: Diff.DeclList, jointDecls: Path list, changedDecls: Set<Path>) =
+    type Translator
+        (
+            ctxO: Context,
+            ctxN: Context,
+            declsD: Diff.DeclList,
+            jointDecls: Path list,
+            changedDecls: Set<Path>,
+            alwaysGenerateLemmas: bool
+        ) =
         /// old, new, and translations path for a path
         // This is the only place that uses the literal prefix strings.
         let rec path (p: Path) : Path * Path * Path =
@@ -59,7 +67,8 @@ module Translation =
                 (p.prefix "Old", p.prefix "New", p)
         and isJoint (p: Path) : bool =
             List.exists (fun (j: Path) -> j.isAncestorOf p) jointDecls
-        and changedInOld (p: Path) : bool = changedDecls.Contains(p)
+        and changedInOld (p: Path) : bool =
+            alwaysGenerateLemmas || changedDecls.Contains(p)
         and name (s: string) =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
@@ -1111,9 +1120,8 @@ module Translation =
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
-            // TODO: We do not support telling which paths are changed here
             let tr =
-                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty)
+                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -1149,9 +1157,12 @@ module Translation =
             DiffAnalysis.changedInOld (Context(pO), Context(pN), pD)
 
         printPaths ("changed in old", Set.toList changedInOld)
+        
+        // If we want to generate lemmas even if the function/method is not affected by the change.
+        let alwaysGenerateLemmas = false
 
         let tr =
-            Translator(Context(pO), Context(pN), pD.decls, jointPaths, changedInOld)
+            Translator(Context(pO), Context(pN), pD.decls, jointPaths, changedInOld, alwaysGenerateLemmas)
 
         let translations =
             { name = newName
