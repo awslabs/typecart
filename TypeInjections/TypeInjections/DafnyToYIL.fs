@@ -953,8 +953,13 @@ module DafnyToYIL =
                     Y.EDecls(vs, lhs, ds)
             | :? AssignSuchThatStmt as u ->
                 let c = expr u.Expr
+                let token =
+                    if u.AssumeToken = null then
+                        None
+                    else
+                        Some u.AssumeToken.Token.``val``
                 // see comment at the definition of UpdateRHS
-                let rhs: Y.UpdateRHS = { df = c; monadic = None; extraVisibleLds = Some vs; token = None }
+                let rhs: Y.UpdateRHS = { df = c; monadic = None; extraVisibleLds = Some vs; token = token }
                 Y.EDecls(vs, lhs, [ rhs ])
             | :? AssignOrReturnStmt as u ->
                 (* See the comment on the case for AssignOrReturnStmt in the method 'statement'
@@ -1044,8 +1049,13 @@ module DafnyToYIL =
         | :? AssignSuchThatStmt as s ->
             let lhss = expr @ s.Lhss
             let rhs = expr s.Expr
+            let token =
+                if s.AssumeToken = null then
+                    None
+                else
+                    Some s.AssumeToken.Token.``val``
             // see comment at the definition of UpdateRHS
-            Y.EUpdate(lhss, { df = rhs; monadic = None; extraVisibleLds = Some []; token = None })
+            Y.EUpdate(lhss, { df = rhs; monadic = None; extraVisibleLds = Some []; token = token })
         | :? VarDeclPattern as s ->
             (* Because we do not cover constructor patterns anyway, we can simply use a Decl to represent a let statement.
                These statements (only?) occur when a match statement is rewritten during resolution
@@ -1255,10 +1265,17 @@ module DafnyToYIL =
        the first of which contains a variable declaration, whose update statement has the needed RHS *)
     and rhsOfMonadicUpdate (ar: AssignOrReturnStmt) : Y.UpdateRHS =
         let res = fromIList ar.ResolvedStatements
-
+        let token =
+            if ar.KeywordToken = null then
+                None
+            else
+                Some ar.KeywordToken.Token.``val``
+        (* token: IfStmt=None, AssertStmt="assert", AssumeStmt="assume", ExpectStmt="expect"*)
         match res with
         | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? IfStmt; :? UpdateStmt ]
-        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssertStmt; :? UpdateStmt ] ->
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssertStmt; :? UpdateStmt ]
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssumeStmt; :? UpdateStmt ]
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? ExpectStmt; :? UpdateStmt ] ->
             let ds = rhsOfUpdate (u)
 
             if ds.Length <> 1 then
@@ -1266,5 +1283,5 @@ module DafnyToYIL =
 
             let d = ds.Head.df
             let t = (boundVar @ v.Locals).Head.tp
-            { df = d; monadic = Some(t); extraVisibleLds = None; token = None }
+            { df = d; monadic = Some(t); extraVisibleLds = None; token = token }
         | _ -> error "Unexpected resolution"

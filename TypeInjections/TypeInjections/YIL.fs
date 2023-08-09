@@ -1845,7 +1845,11 @@ module YIL =
                 match u.extraVisibleLds with
                 | None -> pctx
                 | Some lds -> pctx.add lds
-            " " + op + " " + (this.expr u.df pctxI)
+            let token =
+                match u.token with
+                | None -> ""
+                | Some t -> " " + t
+            " " + op + token + " " + (this.expr u.df pctxI)
 
         member this.updates (u: UpdateRHS list) (pctx: Context) =
             if u.Length = 0 then
