@@ -53,7 +53,8 @@ module Translation =
             declsD: Diff.DeclList,
             jointDecls: Path list,
             changedDecls: Set<Path>,
-            alwaysGenerateLemmas: bool
+            alwaysGenerateLemmas: bool,
+            useForallInFunctionArguments: bool
         ) =
         /// old, new, and translations path for a path
         // This is the only place that uses the literal prefix strings.
@@ -127,8 +128,36 @@ module Translation =
                         let nO, nN, _ = typearg (plainTypeArg n)
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
-        and backward_compatible (insT: (Condition * Condition) list) (insN: LocalDecl list) : Condition list =
-            List.map (fun ((f1, f2), inN: LocalDecl) -> EEqual(EVar(inN.name), fst f1), snd f1) (List.zip insT insN)
+        and backward_compatible
+            (insT: (Condition * Condition) list)
+            (insO: LocalDecl list)
+            (insN: LocalDecl list)
+            : Condition list =
+            let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: LocalDecl) (inN: LocalDecl) =
+                if not useForallInFunctionArguments then
+                    // x_N == forward(x_O)
+                    EEqual(localDeclTerm inN, oldToNew)
+                else
+                    match newToOld with
+                    | EFun (vars, cond, _, body) ->
+                        // function f: A -> B
+                        // NewToOld is (a_O: A_O) => B_backward(f_N(A_forward(a_O)))
+                        // forall a_O: A_O :: B_backward(f_N(A_forward(a_O))) == f_O(A_O)
+                        EQuant(
+                            Forall,
+                            vars,
+                            Option.map fst cond,
+                            EEqual(body, EAnonApply(localDeclTerm inO, List.map localDeclTerm vars))
+                        )
+                    | _ ->
+                        // not a function
+                        // x_N == forward(x_O)
+                        EEqual(localDeclTerm inN, oldToNew)
+
+            List.map
+                (fun ((f1, f2), inO: LocalDecl, inN: LocalDecl) ->
+                    translationCondition (fst f1) (fst f2) inO inN, snd f1)
+                (List.zip3 insT insO insN)
         and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
             // forall x1_O: U_O :: U_back(U(x1_O)) == x1_O
             let nO, _, _ = name "x"
@@ -603,7 +632,7 @@ module Translation =
                     let _, insN, _ =
                         List.unzip3 (List.map localDecl ins_n.decls)
                     // translations from old inputs to new inputs
-                    let _, insN_translated, insT =
+                    let insO_translated, insN_translated, insT =
                         List.unzip3 (List.map localDecl2 (insD.decls.getSameOrUpdate ()))
 
                     // TODO: remove unused backward translation functions
@@ -647,9 +676,12 @@ module Translation =
                     // backward compatibility: new == f1(old)
                     let inputsTranslations =
                         if isStatic then
-                            backward_compatible insT insN_translated
+                            backward_compatible insT insO_translated insN_translated
                         else
-                            backward_compatible (instancesTranslation :: insT) (newInstDecl :: insN_translated)
+                            backward_compatible
+                                (instancesTranslation :: insT)
+                                (oldInstDecl :: insO_translated)
+                                (newInstDecl :: insN_translated)
 
                     // lossless assumptions
                     let losslessAssumptions =
@@ -1130,7 +1162,7 @@ module Translation =
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
             let tr =
-                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true)
+                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true, true)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -1170,8 +1202,20 @@ module Translation =
         // If we want to generate lemmas even if the function/method is not affected by the change.
         let alwaysGenerateLemmas = false
 
+        // If we want to expand all function arguments' requirements by one level from lambda expressions
+        // to forall expressions.
+        let useForallInFunctionArguments = true
+
         let tr =
-            Translator(Context(pO), Context(pN), pD.decls, jointPaths, changedInOld, alwaysGenerateLemmas)
+            Translator(
+                Context(pO),
+                Context(pN),
+                pD.decls,
+                jointPaths,
+                changedInOld,
+                alwaysGenerateLemmas,
+                useForallInFunctionArguments
+            )
 
         let translations =
             { name = newName
