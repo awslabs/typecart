@@ -1361,17 +1361,15 @@ module YIL =
                 $"break %s{label};"
             (* CalcStmt *)
             (* ExpectStmt *)
-            | EQuant (Forall as q, lds, r, b) ->
-                "(forall"
-                + q.ToString()
+            | EQuant (q, lds, r, b) ->
+                q.ToString()
                 + " "
                 + this.localDeclsBr (lds, false)
-                + " :: "
                 + (match r with
-                   | Some e -> expr e + (if q = Forall then " ==> " else " && ")
+                   | Some e -> " | " + expr e
                    | None -> "")
-                + (expr b)
-                + ");"
+                + " "
+                + (this.statement b pctx)
             | EIf (c, t, e) ->
                 let elsePart =
                     match e with
