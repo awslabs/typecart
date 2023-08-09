@@ -1433,7 +1433,7 @@ module YIL =
                     | Some l -> sprintf "%s: " l
                     | None -> ""
 
-                sprintf "%s while (%s) %s" label (expr c) (this.statement e pctx)
+                sprintf "%swhile (%s) %s" label (expr c) (this.statement e pctx)
             | EFor (index, init, last, up, body) ->
                 let d = EDecls([index], [ EVar index.name ], [ plainUpdate init ])
 
