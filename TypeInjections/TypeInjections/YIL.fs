@@ -1866,11 +1866,25 @@ module YIL =
                               elif List.forall (fun (x: Type option) -> x.IsSome) monadicList then
                                   Some(TTuple (List.map (fun (x: Type option) -> x.Value) monadicList))
                               else
-                                  error "RHS must be either all monadic or all non-monadic"
-                let op = if monadic.IsSome then ":-" else ":="
+                                  failwith "RHS must be either all monadic or all non-monadic"
+                let op =
+                    if monadic.IsSome then
+                        ":-"
+                    elif u.Head.extraVisibleLds.IsSome then
+                        ":|"
+                    else
+                        ":="
+                
+                let pctxI =
+                    match u.Head.extraVisibleLds with
+                    | None -> pctx
+                    | Some lds ->
+                        if u.Length <> 1 then
+                            failwith "\":|\" used with more than one RHS"
+                        pctx.add lds
                 
                 let rhsExprs = List.map (fun (x: UpdateRHS) -> x.df) u
-                " " + op + " " + (this.exprsNoBr rhsExprs ", " pctx)
+                " " + op + " " + (this.exprsNoBr rhsExprs ", " pctxI)
 
         member this.localDecl(ld: LocalDecl) =
             if ld.name.StartsWith('#') then
