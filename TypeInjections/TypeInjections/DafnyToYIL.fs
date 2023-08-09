@@ -697,19 +697,23 @@ module DafnyToYIL =
                     Y.ELet(List.concat vars, e.Exact, true, lhs, rhs, body)
                 | _ -> error "LetOrFailExpr must have an ITEExpr"
             | _ -> error "LetOrFailExpr always resolves to LetExpr"
-        // NameSegment is a subtype of ConcreteSyntaxExpression
-        | :? NameSegment as e ->
-            Y.EVar(e.Name)
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
             if e.ResolvedExpression = null then
-                match Seq.head e.Children with
-                | :? ConcreteSyntaxExpression as e_child ->
-                    if e_child.ResolvedExpression = null then
-                        Y.EUnimplemented
-                    else
-                        expr e_child.ResolvedExpression
-                | _ -> Y.EUnimplemented // a few expressions are not resolved by Dafny
+                if Seq.isEmpty e.Children then
+                    match e with
+                    | :? NameSegment as e ->
+                        // a label
+                        Y.EVar(e.Name)
+                    | _ -> Y.EUnimplemented
+                else
+                    match Seq.head e.Children with
+                    | :? ConcreteSyntaxExpression as e_child ->
+                        if e_child.ResolvedExpression = null then
+                            Y.EUnimplemented
+                        else
+                            expr e_child.ResolvedExpression
+                    | _ -> Y.EUnimplemented // a few expressions are not resolved by Dafny
             else
                 expr e.ResolvedExpression
         // identifiers/names
