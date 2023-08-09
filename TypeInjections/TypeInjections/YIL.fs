@@ -623,9 +623,11 @@ module YIL =
         | EMatch of on: Expr * tp: Type * cases: Case list * dflt: Expr option // Dafny never produces default cases, but we might
         (* *** declaration of a local mutable variable with optional initial value
            Multiple declarations appear at once because Dafny allows
-            var x1,...,xn := V1,...,Vn  and  var x1,...,xn = V (if V is call to a method with n outputs).
+            var x1,...,xn := V1,...,Vn  and  var x1,...,xn := V (if V is call to a method with n outputs).
            In the former case, x1 may not occur in V2.
            The latter is at most needed before ghosts are eliminated because we allow only one non-ghost output.
+           Note that ":=" can be replaced with ":-" or ":|" (see UpdateRHS).
+           In all cases, "vars" stores all local variables visible after this statement.
         *)
         | EDecls of vars: LocalDecl list * lhs: Expr list * rhs: UpdateRHS list
         (* assignment to mutable variables
@@ -637,11 +639,6 @@ module YIL =
            we do not need a special case for that.
         *)
         | EUpdate of name: Expr list * UpdateRHS
-        (* variable declaration with non-deterministic initial value
-           var x :| p(x)  for p:A->bool and resulting in x:A
-           We do not need that, but it occasionally occurs in specifications.
-        *)
-        | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
         | EAssert of expr: Expr * proof: Expr option
         | EExpect of Expr // dafny expect statement (non-ghost variant of assert statement)
@@ -828,7 +825,6 @@ module YIL =
     let exprDecl (e: Expr) : LocalDecl list =
         match e with
         | EDecls (d, _, _) -> d
-        | EDeclChoice (d, _) -> [ d ]
         | _ -> []
 
     // name of the tester method generator for constructor with name s
@@ -1472,8 +1468,7 @@ module YIL =
             | EExpect _
             | EDecls _
             | EAnonApply _
-            | EMethodApply _
-            | EDeclChoice _ as e -> (expr e) + ";"
+            | EMethodApply _ as e -> (expr e) + ";"
             | ECommented (c, e) -> "/* " + c + " */" + this.statement e pctx
             | EUnimplemented -> "/* UNIMPLEMENTED */"
             | b ->
@@ -1716,7 +1711,6 @@ module YIL =
 
                 listToString (lhsExprs, ",")
                 + (this.update u pctx)
-            | EDeclChoice (ld, e) -> "var " + (this.localDecl ld) + " :| " + (expr 0 e)
             | ETypeConversion (e, t) ->
                 (if 9 < precedence then "(" else "")
                 + (expr 9 e)

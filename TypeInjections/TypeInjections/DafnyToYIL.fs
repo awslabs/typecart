@@ -952,12 +952,10 @@ module DafnyToYIL =
 
                     Y.EDecls(vs, lhs, ds)
             | :? AssignSuchThatStmt as u ->
-                if vs.Length <> 1 then
-                    unsupported "Variable declaration with more than 1 LHS"
-
-                let v = vs.Head
                 let c = expr u.Expr
-                Y.EDeclChoice(v, c)
+                // see comment at the definition of UpdateRHS
+                let rhs: Y.UpdateRHS = { df = c; monadic = None; extraVisibleLds = Some vs; token = None }
+                Y.EDecls(vs, lhs, [ rhs ])
             | :? AssignOrReturnStmt as u ->
                 (* See the comment on the case for AssignOrReturnStmt in the method 'statement'
                   This is just the special case where a monadic value is used to initialize a variable *)

@@ -313,9 +313,6 @@ module Traverser =
             | EDecls (vars, lhs, rhs) ->
                 EDecls(this.localDeclList (ctx, vars), lhs, List.map (fun u -> this.updateRHS (ctx, u)) rhs)
             | EUpdate (es, rhs) -> EUpdate(rcEs es, this.updateRHS (ctx, rhs))
-            | EDeclChoice (ld, e) ->
-                let eT = this.expr (ctx.add [ ld ], e) // e is a predicate about n and thus can see it
-                EDeclChoice(this.localDecl (ctx, ld), eT)
             | ENull (t) -> ENull(rcT t)
             | EPrint es -> EPrint(rcEs es)
             | EAssert (e, p) -> EAssert(rcE e, rcEo p)
