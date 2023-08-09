@@ -336,8 +336,17 @@ module Traverser =
         abstract member updateRHS : Context * UpdateRHS -> UpdateRHS
 
         default this.updateRHS(ctx: Context, u: UpdateRHS) =
-            { df = this.expr (ctx, u.df)
-              monadic = this.tpO (ctx, u.monadic) }
+            match u.extraVisibleLds with
+            | None ->
+                { df = this.expr (ctx, u.df)
+                  monadic = this.tpO (ctx, u.monadic)
+                  extraVisibleLds = None
+                  token = u.token }
+            | Some s ->
+                { df = this.expr (ctx.add s, u.df) // df is a predicate about s and thus can see them
+                  monadic = this.tpO (ctx, u.monadic)
+                  extraVisibleLds = Some(this.localDeclList (ctx, s))
+                  token = u.token }
 
         // transforms input specifications
         abstract member inputSpec : Context * InputSpec -> InputSpec

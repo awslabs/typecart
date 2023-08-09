@@ -1024,12 +1024,12 @@ module DafnyToYIL =
                         | _ -> unsupported "Variable declaration with non-atomic LHS"
 
                     let ns = List.map doOne ls
-                    Y.EUpdate(ns, { df = rhs; monadic = None })
+                    Y.EUpdate(ns, Y.plainUpdate rhs)
         | :? AssignStmt as s ->
             let rhs = assignmentRhs (s.Rhs)
 
             match s.Lhs with
-            | :? IdentifierExpr as e -> Y.EUpdate([ expr e ], { df = rhs; monadic = None })
+            | :? IdentifierExpr as e -> Y.EUpdate([ expr e ], Y.plainUpdate rhs)
             | :? SeqSelectExpr as e ->
                 (* TODO check if this is true: We assume this case always means an array update.
                    We only support one-dimensional case a[i] := e for now
@@ -1038,11 +1038,16 @@ module DafnyToYIL =
                 match e.Seq.Resolved with
                 | :? IdentifierExpr as s -> Y.EArrayUpdate(Y.EVar(s.Name), [ expr e.E0 ], rhs)
                 | _ -> unsupported "Complex sequence update"
-            | :? MemberSelectExpr as e -> Y.EUpdate([ expr e ], { df = rhs; monadic = None })
+            | :? MemberSelectExpr as e -> Y.EUpdate([ expr e ], Y.plainUpdate rhs)
             | :? MultiSelectExpr as e ->
                 (* TODO use EArrayUpdate *)
-                Y.EUpdate([ Y.EMultiSelect(expr e.Array, expr @ e.Indices) ], { df = rhs; monadic = None })
+                Y.EUpdate([ Y.EMultiSelect(expr e.Array, expr @ e.Indices) ], Y.plainUpdate rhs)
             | _ -> unsupported "Non-atomic LHS of assignment"
+        | :? AssignSuchThatStmt as s ->
+            let lhss = expr @ s.Lhss
+            let rhs = expr s.Expr
+            // see comment at the definition of UpdateRHS
+            Y.EUpdate(lhss, { df = rhs; monadic = None; extraVisibleLds = Some []; token = None })
         | :? VarDeclPattern as s ->
             (* Because we do not cover constructor patterns anyway, we can simply use a Decl to represent a let statement.
                These statements (only?) occur when a match statement is rewritten during resolution
@@ -1051,7 +1056,7 @@ module DafnyToYIL =
             *)
             let v = s.LHS
             let vars, lhs = casePatternLocalVariable v
-            Y.EDecls(vars, [ lhs ], [ { df=expr s.RHS; monadic=None } ])
+            Y.EDecls(vars, [ lhs ], [ Y.plainUpdate (expr s.RHS) ])
         | :? ReturnStmt as s ->
             (* There may be more than one return value - see the comment on the translation of the method header.
                There may be no or multiple return values - see the comment on EReturn. *)
@@ -1263,5 +1268,5 @@ module DafnyToYIL =
 
             let d = ds.Head.df
             let t = (boundVar @ v.Locals).Head.tp
-            { df = d; monadic = Some(t) }
+            { df = d; monadic = Some(t); extraVisibleLds = None; token = None }
         | _ -> error "Unexpected resolution"

@@ -655,9 +655,12 @@ module YIL =
        This may seem awkward but is practical for specifications and proofs.
        We allow only the first output to be non-ghost.
      *)
-    (* updates to variables may be plain (x:=V where x:A and V:A) or monadic (x:-V where V:M<A> and x:A)
+    (* updates to variables may be:
+       - plain (x := V where x:A and V:A),
+       - monadic (x :- [ expect | assert | assume ] V where V:M<A> and x:A),
+       - or such-that (x :| [assume] E where E is an expression such that x satisfies).
 
-       The latter is a binding to a variable of a value of monadic type.
+       The monadic case is a binding to a variable of a value of monadic type.
        Dafny resolves x:-V based on 3 magic user-defined methods of datatype M into 3 statements:
           valueOrError : M<A> = V
           if valueOrError.isFailure() then return valueOrError.PropagateFailure()
@@ -668,8 +671,16 @@ module YIL =
        - monadic = None: plain update
        - monadic = Some t: monadic update and t=M<A>
        Dafny also allows :- V, which corresponds to a monadic return, but we do not allow that.
+       
+       In the such-that case, the expression may (and should) contain the variable in the LHS in an EDecls statement.
+       So we need to store the localdecl list here in extraVisibleLds.
+       If extraVisibleLds is Some [] (an empty list and not None), this is a such-that update
+       (instead of a such-that declaration).
     *)
-    and UpdateRHS = { df: Expr; monadic: Type option }
+    and UpdateRHS = { df: Expr
+                      monadic: Type option
+                      extraVisibleLds: LocalDecl list option
+                      token: string option }
     
     (* array initializers:
        Uninitialized: new int[5,6]
@@ -803,7 +814,7 @@ module YIL =
     let localDeclTerm (l: LocalDecl) = EVar(l.name)
 
     /// makes a plain update := e
-    let plainUpdate (e: Expr) = { df = e; monadic = None }
+    let plainUpdate (e: Expr) = { df = e; monadic = None; extraVisibleLds = None; token = None }
     /// makes pattern-match case c(x1,...,xn) => bd for a constructor c
     let plainCase (c: Path, lds: LocalDecl list, bd: Expr) : Case =
         // Use prefix to explicitly detect anonymous tuple constructors here.
@@ -1829,8 +1840,18 @@ module YIL =
         member this.localDecls(lds: LocalDecl list) = this.localDeclsBr (lds, lds.Length <> 1)
 
         member this.update (u: UpdateRHS) (pctx: Context) =
-            let op = if u.monadic.IsSome then ":-" else ":="
-            " " + op + " " + (this.expr u.df pctx)
+            let op =
+                if u.monadic.IsSome then
+                    ":-"
+                elif u.extraVisibleLds.IsSome then
+                    ":|"
+                else
+                    ":="
+            let pctxI =
+                match u.extraVisibleLds with
+                | None -> pctx
+                | Some lds -> pctx.add lds
+            " " + op + " " + (this.expr u.df pctxI)
 
         member this.updates (u: UpdateRHS list) (pctx: Context) =
             if u.Length = 0 then
