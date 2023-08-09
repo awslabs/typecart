@@ -315,7 +315,7 @@ module Traverser =
             | EUpdate (es, rhs) -> EUpdate(rcEs es, this.updateRHS (ctx, rhs))
             | ENull (t) -> ENull(rcT t)
             | EPrint es -> EPrint(rcEs es)
-            | EAssert (e, p) -> EAssert(rcE e, rcEo p)
+            | EAssert (e, p, l) -> EAssert(rcE e, rcEo p, l)
             | EAssume e -> EAssume(rcE e)
             | EReveal es -> EReveal(rcEs es)
             | EExpect e -> EExpect(rcE e)

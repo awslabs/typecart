@@ -1141,7 +1141,8 @@ module DafnyToYIL =
                     None
                 else
                     Some(statement s.Proof)
-            Y.EAssert(expr s.Expr, proof)
+            let label = if s.Label = null then None else Some(s.Label.Name)
+            Y.EAssert(expr s.Expr, proof, label)
         | :? AssumeStmt as s -> Y.EAssume(expr s.Expr)
         | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)

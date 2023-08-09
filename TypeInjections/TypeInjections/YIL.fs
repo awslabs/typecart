@@ -640,7 +640,7 @@ module YIL =
         *)
         | EUpdate of name: Expr list * UpdateRHS
         | EPrint of exprs: Expr list
-        | EAssert of expr: Expr * proof: Expr option
+        | EAssert of expr: Expr * proof: Expr option * label: string option
         | EExpect of Expr // dafny expect statement (non-ghost variant of assert statement)
         | EAssume of Expr // dafny implication introduction
         | EReveal of Expr list // dafny `reveal ... ;` proof directive
@@ -1307,7 +1307,7 @@ module YIL =
             + " "
             + (match snd c with
                | None -> ""
-               | Some label -> label + ":")
+               | Some label -> label + ": ")
             + (this.expr (fst c) pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) =
@@ -1386,8 +1386,9 @@ module YIL =
                 let alternativeCase (cond, body) =
                     "case "
                     + (expr cond)
-                    + " =>"
-                    + (expr body)
+                    + " => "
+                    + (this.statement body pctx)
+                    + " "
                 "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EMatch (e, t, cases, dfltO) ->
                 let defCase =
@@ -1456,8 +1457,11 @@ module YIL =
                 + (exprsNoBr d ", ")
                 + "; "
                 + (this.statement e pctx)
-            | EAssert (e, p) ->
+            | EAssert (e, p, l) ->
                 "assert "
+                + (match l with
+                   | None -> ""
+                   | Some label -> label + ": ")
                 + (expr e)
                 + (match p with
                    | None -> ";"
@@ -1722,8 +1726,11 @@ module YIL =
                 + (tp t)
                 + (if 9 < precedence then ")" else "")
             | EPrint es -> "print " + (String.concat ", " (List.map (expr 0) es))
-            | EAssert (e, p) ->
+            | EAssert (e, p, l) ->
                 "assert "
+                + (match l with
+                   | None -> ""
+                   | Some label -> label + ": ")
                 + (expr 0 e)
                 + (match p with
                    | None -> ""
