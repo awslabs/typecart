@@ -91,7 +91,7 @@ module YIL =
             | :? Meta -> true
             | _ -> false
         member this.addAttribute(k: string, v: string list) =
-            { this with attributes=this.attributes.Add(k, v) }
+            { this with attributes = this.attributes.Add(k, v) }
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
     and Position =
         { filename: String
@@ -1228,11 +1228,11 @@ module YIL =
                 + (this.tpvars false g tpvs)
                 + (this.localDeclsBr (ins.decls, true))
                 + (match methodType with
-                   | IsLemma
                    | IsPredicate
                    | IsLeastPredicate
                    | IsGreatestPredicate
                    | IsPredicateMethod -> ""
+                   | IsLemma -> if outs.decls.IsEmpty then "" else " returns " + outputsS // no need to print "returns ()"
                    | IsMethod -> " returns " + outputsS
                    | _ -> ": " + outputsS)
                 + (match modifies with

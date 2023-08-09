@@ -564,7 +564,7 @@ module Analysis =
         override this.decl(ctx: Context, d: Decl) =
             match d with
             | Method (IsLemma, a, b, c, d, e, f, g, _, h, i, j, k) ->
-                [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k) ]
+                [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k.addAttribute("axiom", [])) ]
             | d -> this.declDefault (ctx, d)
     
     /// we need to leave a qualified version of YIL for combined to resolve names
