@@ -1232,8 +1232,8 @@ module YIL =
                    | IsLeastPredicate
                    | IsGreatestPredicate
                    | IsPredicateMethod -> ""
-                   | IsLemma -> if outs.decls.IsEmpty then "" else " returns " + outputsS // no need to print "returns ()"
-                   | IsMethod -> " returns " + outputsS
+                   | IsLemma
+                   | IsMethod -> if outs.decls.IsEmpty then "" else " returns " + outputsS // no need to print "returns ()"
                    | _ -> ": " + outputsS)
                 + (match modifies with
                    | [] -> ""
