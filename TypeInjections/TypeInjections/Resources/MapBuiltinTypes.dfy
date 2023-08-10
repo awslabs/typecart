@@ -1,6 +1,4 @@
 module Translations.MapBuiltinTypes {
-  export reveals Seq, Set, Map
-
   function Seq<o,n>(t: o -> n, e: seq<o>) : (f : seq<n>)
     ensures |e| == |f|
     ensures forall i : int :: (0 <= i < |e| ==> f[i] == t(e[i]))
@@ -23,19 +21,6 @@ module Translations.MapBuiltinTypes {
   {
     var fKeys := set x: K_O | x in e.Keys && K2(K(x)) in e.Keys :: K(x);
     map a | a in fKeys :: V(e[K2(a)])
-  }
-  /* Set helper functions and lemmas -- for proving set size meets standard of set31 */
-  function setCreate2Generic<o,n>(P: o -> n, S: set<o>) : set<n>
-  { set x: o | x in S :: P(x) }
-  lemma setCreateSizeGeneric<o,n>(P: o -> n, S: set<o>)
-    ensures |setCreate2Generic(P,S)| <= |S|
-  {
-    if |S| == 0 {
-    } else {
-      var x: o :| x in S;
-      assert setCreate2Generic(P,S) == setCreate2Generic(P,S - {x}) + {P(x)};
-      setCreateSizeGeneric(P,S - {x});
-    }
   }
 }
 
