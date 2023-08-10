@@ -1161,11 +1161,11 @@ module YIL =
                 let consS =
                     List.map (fun x -> this.datatypeConstructor (x, pctx)) cons
 
-                "datatype "
+                (if consS.IsEmpty then "type " else "datatype ")
                 + (this.meta a)
                 + n
                 + (this.tpvars true false tpvs)
-                + " = "
+                + (if consS.IsEmpty then "" else " = ")
                 + listToString (consS, " | ")
                 + (decls ds)
             | Class (n, isTrait, tpvs, p, ds, a) ->

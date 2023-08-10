@@ -145,7 +145,7 @@ module DafnyToYIL =
                                   | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
                                   | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
                     Some(bv.name, expr d.Constraint, witness)
-
+            // TODO: newtype may have member functions
             [ Y.TypeDef(d.Name, [], tp d.BaseType, predO, true, namedMeta d) ]
         | :? IteratorDecl ->
             unsupported
@@ -158,13 +158,12 @@ module DafnyToYIL =
             let meta = namedMeta d
             let typeVars = typeParameter @ d.TypeArgs
             [ Y.Class(dName, isTrait d, typeVars, classType @ d.ParentTraits, List.concat (memberDecl @ d.Members), meta) ]
-        // removed in Dafny 4.2.0
-        (* | :? OpaqueTypeDecl as d ->
+        | :? AbstractTypeDecl as d ->
             let dName = d.Name
             let meta = namedMeta d
             // Misuse Datatype for now when translating opaque types
             let typeVars = typeParameter @ d.TypeArgs
-            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ] *)
+            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ]
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
