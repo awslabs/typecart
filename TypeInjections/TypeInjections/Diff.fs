@@ -79,6 +79,26 @@ module Diff =
                     | Delete y -> Some y
                     | _ -> None)
                 this.elements
+        /// the old elements
+        member this.getOld() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y
+                    | Delete y
+                    | Update (y, _, _) -> Some y
+                    | Add _ -> None)
+                this.elements
+        /// the new elements
+        member this.getNew() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y
+                    | Add y
+                    | Update (_, y, _) -> Some y
+                    | Delete _ -> None)
+                this.elements
 
     /// change in an element of a list of YIL.y with comparision type Diff.d
     and Elem<'y, 'd> =
@@ -101,6 +121,16 @@ module Diff =
     type Name =
         | SameName of string
         | Rename of string * string
+        member this.getOld =
+            match this with
+            | SameName o
+            | Rename (o, _) -> o
+
+        member this.getNew =
+            match this with
+            | SameName n
+            | Rename (_, n) -> n
+
 
     and Program =
         { name: Name
@@ -117,6 +147,17 @@ module Diff =
         | Import of importT: YIL.ImportType
         | Export of exportT: YIL.ExportType
         | DUnimplemented
+        member this.nameO =
+            match this with
+            | Module (n, _)
+            | Class (n, _, _, _)
+            | Datatype (n, _, _, _)
+            | ClassConstructor (n, _, _, _, _)
+            | TypeDef (n, _, _, _)
+            | Field (n, _, _)
+            | Method (n, _, _, _, _) -> Some n
+            | _ -> None
+
         member this.name =
             match this with
             | Module (n, _) -> n
@@ -177,6 +218,29 @@ module Diff =
         member this.decls =
             match this with
             | OutputSpec (lds, _) -> lds
+
+        member this.namedDecls =
+            this.decls.elements
+            |> List.choose
+                (fun ldD ->
+                    match ldD with
+                    | Same ld
+                    | Add ld
+                    | Delete ld ->
+                        if ld.isAnonymous () then
+                            None
+                        else
+                            Some(ldD)
+                    | Update (ldO, ldN, _) ->
+                        if ldO.isAnonymous () && ldN.isAnonymous () then
+                            None
+                        elif ldO.isAnonymous () then
+                            Some(Add(ldN))
+                        elif ldN.isAnonymous () then
+                            Some(Delete(ldO))
+                        else
+                            Some(ldD))
+            |> UpdateList
 
         member this.conditions =
             match this with

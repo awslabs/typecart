@@ -91,7 +91,7 @@ module YIL =
             | :? Meta -> true
             | _ -> false
         member this.addAttribute(k: string, v: string list) =
-            { this with attributes=this.attributes.Add(k, v) }
+            { this with attributes = this.attributes.Add(k, v) }
     // position in a source file, essentially the same as Microsoft.Boogie.IToken
     and Position =
         { filename: String
@@ -360,7 +360,7 @@ module YIL =
 
     and ImportType =
         | ImportDefault of opened: bool * dir: Path
-        | ImportEquals of opened: bool * lhsDir: Path * rhsDir: Path
+        | ImportEquals of opened: bool * lhsDir: string * rhsDir: Path
         override this.ToString() =
             match this with
             | ImportDefault (o, p) -> "import " + (if o then "opened " else "") + p.ToString()
@@ -485,8 +485,10 @@ module YIL =
         member this.isAnonymous() = this.name = anonymous
 
 
-    (* pre/postcondition of a method/lemma *)
-    and Condition = Expr
+    (* pre/postcondition of a method/lemma
+       A "requires" statement may have a label.
+     *)
+    and Condition = Expr * string option
 
     (* constructor of an inductive type
     *)
@@ -621,9 +623,11 @@ module YIL =
         | EMatch of on: Expr * tp: Type * cases: Case list * dflt: Expr option // Dafny never produces default cases, but we might
         (* *** declaration of a local mutable variable with optional initial value
            Multiple declarations appear at once because Dafny allows
-            var x1,...,xn := V1,...,Vn  and  var x1,...,xn = V (if V is call to a method with n outputs).
+            var x1,...,xn := V1,...,Vn  and  var x1,...,xn := V (if V is call to a method with n outputs).
            In the former case, x1 may not occur in V2.
            The latter is at most needed before ghosts are eliminated because we allow only one non-ghost output.
+           Note that ":=" can be replaced with ":-" or ":|" (see UpdateRHS).
+           In all cases, "vars" stores all local variables visible after this statement.
         *)
         | EDecls of vars: LocalDecl list * lhs: Expr list * rhs: UpdateRHS list
         (* assignment to mutable variables
@@ -635,13 +639,8 @@ module YIL =
            we do not need a special case for that.
         *)
         | EUpdate of name: Expr list * UpdateRHS
-        (* variable declaration with non-deterministic initial value
-           var x :| p(x)  for p:A->bool and resulting in x:A
-           We do not need that, but it occasionally occurs in specifications.
-        *)
-        | EDeclChoice of LocalDecl * pred: Expr
         | EPrint of exprs: Expr list
-        | EAssert of expr: Expr * proof: Expr option
+        | EAssert of expr: Expr * proof: Expr option * label: string option
         | EExpect of Expr // dafny expect statement (non-ghost variant of assert statement)
         | EAssume of Expr // dafny implication introduction
         | EReveal of Expr list // dafny `reveal ... ;` proof directive
@@ -653,9 +652,12 @@ module YIL =
        This may seem awkward but is practical for specifications and proofs.
        We allow only the first output to be non-ghost.
      *)
-    (* updates to variables may be plain (x:=V where x:A and V:A) or monadic (x:-V where V:M<A> and x:A)
+    (* updates to variables may be:
+       - plain (x := V where x:A and V:A),
+       - monadic (x :- [ expect | assert | assume ] V where V:M<A> and x:A),
+       - or such-that (x :| [assume] E where E is an expression such that x satisfies).
 
-       The latter is a binding to a variable of a value of monadic type.
+       The monadic case is a binding to a variable of a value of monadic type.
        Dafny resolves x:-V based on 3 magic user-defined methods of datatype M into 3 statements:
           valueOrError : M<A> = V
           if valueOrError.isFailure() then return valueOrError.PropagateFailure()
@@ -666,8 +668,16 @@ module YIL =
        - monadic = None: plain update
        - monadic = Some t: monadic update and t=M<A>
        Dafny also allows :- V, which corresponds to a monadic return, but we do not allow that.
+       
+       In the such-that case, the expression may (and should) contain the variable in the LHS in an EDecls statement.
+       So we need to store the localdecl list here in extraVisibleLds.
+       If extraVisibleLds is Some [] (an empty list and not None), this is a such-that update
+       (instead of a such-that declaration).
     *)
-    and UpdateRHS = { df: Expr; monadic: Type option }
+    and UpdateRHS = { df: Expr
+                      monadic: Type option
+                      extraVisibleLds: LocalDecl list option
+                      token: string option }
     
     (* array initializers:
        Uninitialized: new int[5,6]
@@ -801,7 +811,7 @@ module YIL =
     let localDeclTerm (l: LocalDecl) = EVar(l.name)
 
     /// makes a plain update := e
-    let plainUpdate (e: Expr) = { df = e; monadic = None }
+    let plainUpdate (e: Expr) = { df = e; monadic = None; extraVisibleLds = None; token = None }
     /// makes pattern-match case c(x1,...,xn) => bd for a constructor c
     let plainCase (c: Path, lds: LocalDecl list, bd: Expr) : Case =
         // Use prefix to explicitly detect anonymous tuple constructors here.
@@ -815,7 +825,6 @@ module YIL =
     let exprDecl (e: Expr) : LocalDecl list =
         match e with
         | EDecls (d, _, _) -> d
-        | EDeclChoice (d, _) -> [ d ]
         | _ -> []
 
     // name of the tester method generator for constructor with name s
@@ -931,6 +940,7 @@ module YIL =
         member this.tpvars = tpvars
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
+        member this.lookupByPath(p: Path) = lookupByPath (prog, p)
         member this.pos = pos
         
         member this.thisDecl = thisDecl
@@ -1035,6 +1045,8 @@ module YIL =
         // add and remove imports
         member this.addImport(importType: ImportType) =
             Context(prog, currentDecl, tpvars, vars, pos, importType :: importPaths, thisDecl)
+        member this.clearImport() =
+            Context(prog, currentDecl, tpvars, vars, pos, [], thisDecl)
 
     (* ***** printer for the language above
 
@@ -1149,11 +1161,11 @@ module YIL =
                 let consS =
                     List.map (fun x -> this.datatypeConstructor (x, pctx)) cons
 
-                "datatype "
+                (if consS.IsEmpty then "type " else "datatype ")
                 + (this.meta a)
                 + n
                 + (this.tpvars true false tpvs)
-                + " = "
+                + (if consS.IsEmpty then "" else " = ")
                 + listToString (consS, " | ")
                 + (decls ds)
             | Class (n, isTrait, tpvs, p, ds, a) ->
@@ -1216,12 +1228,12 @@ module YIL =
                 + (this.tpvars false g tpvs)
                 + (this.localDeclsBr (ins.decls, true))
                 + (match methodType with
-                   | IsLemma
                    | IsPredicate
                    | IsLeastPredicate
                    | IsGreatestPredicate
                    | IsPredicateMethod -> ""
-                   | IsMethod -> " returns " + outputsS
+                   | IsLemma
+                   | IsMethod -> if outs.decls.IsEmpty then "" else " returns " + outputsS // no need to print "returns ()"
                    | _ -> ": " + outputsS)
                 + (match modifies with
                    | [] -> ""
@@ -1291,7 +1303,12 @@ module YIL =
                 else
                     "ensures"
 
-            kw + " " + (this.expr c pctx)
+            kw
+            + " "
+            + (match snd c with
+               | None -> ""
+               | Some label -> label + ": ")
+            + (this.expr (fst c) pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) =
             c.name + (this.localDeclsBr (c.ins, true))
@@ -1344,17 +1361,15 @@ module YIL =
                 $"break %s{label};"
             (* CalcStmt *)
             (* ExpectStmt *)
-            | EQuant (Forall as q, lds, r, b) ->
-                "(forall"
-                + q.ToString()
+            | EQuant (q, lds, r, b) ->
+                q.ToString()
                 + " "
                 + this.localDeclsBr (lds, false)
-                + " :: "
                 + (match r with
-                   | Some e -> expr e + (if q = Forall then " ==> " else " && ")
+                   | Some e -> " | " + expr e
                    | None -> "")
-                + (expr b)
-                + ");"
+                + " "
+                + (this.statement b pctx)
             | EIf (c, t, e) ->
                 let elsePart =
                     match e with
@@ -1371,8 +1386,9 @@ module YIL =
                 let alternativeCase (cond, body) =
                     "case "
                     + (expr cond)
-                    + " =>"
-                    + (expr body)
+                    + " => "
+                    + (this.statement body pctx)
+                    + " "
                 "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EMatch (e, t, cases, dfltO) ->
                 let defCase =
@@ -1417,7 +1433,7 @@ module YIL =
                     | Some l -> sprintf "%s: " l
                     | None -> ""
 
-                sprintf "%s while (%s) %s" label (expr c) (this.statement e pctx)
+                sprintf "%swhile (%s) %s" label (expr c) (this.statement e pctx)
             | EFor (index, init, last, up, body) ->
                 let d = EDecls([index], [ EVar index.name ], [ plainUpdate init ])
 
@@ -1441,8 +1457,11 @@ module YIL =
                 + (exprsNoBr d ", ")
                 + "; "
                 + (this.statement e pctx)
-            | EAssert (e, p) ->
+            | EAssert (e, p, l) ->
                 "assert "
+                + (match l with
+                   | None -> ""
+                   | Some label -> label + ": ")
                 + (expr e)
                 + (match p with
                    | None -> ";"
@@ -1451,8 +1470,7 @@ module YIL =
             | EExpect _
             | EDecls _
             | EAnonApply _
-            | EMethodApply _
-            | EDeclChoice _ as e -> (expr e) + ";"
+            | EMethodApply _ as e -> (expr e) + ";"
             | ECommented (c, e) -> "/* " + c + " */" + this.statement e pctx
             | EUnimplemented -> "/* UNIMPLEMENTED */"
             | b ->
@@ -1695,7 +1713,6 @@ module YIL =
 
                 listToString (lhsExprs, ",")
                 + (this.update u pctx)
-            | EDeclChoice (ld, e) -> "var " + (this.localDecl ld) + " :| " + (expr 0 e)
             | ETypeConversion (e, t) ->
                 (if 9 < precedence then "(" else "")
                 + (expr 9 e)
@@ -1709,8 +1726,11 @@ module YIL =
                 + (tp t)
                 + (if 9 < precedence then ")" else "")
             | EPrint es -> "print " + (String.concat ", " (List.map (expr 0) es))
-            | EAssert (e, p) ->
+            | EAssert (e, p, l) ->
                 "assert "
+                + (match l with
+                   | None -> ""
+                   | Some label -> label + ": ")
                 + (expr 0 e)
                 + (match p with
                    | None -> ""
@@ -1819,8 +1839,22 @@ module YIL =
         member this.localDecls(lds: LocalDecl list) = this.localDeclsBr (lds, lds.Length <> 1)
 
         member this.update (u: UpdateRHS) (pctx: Context) =
-            let op = if u.monadic.IsSome then ":-" else ":="
-            " " + op + " " + (this.expr u.df pctx)
+            let op =
+                if u.monadic.IsSome then
+                    ":-"
+                elif u.extraVisibleLds.IsSome then
+                    ":|"
+                else
+                    ":="
+            let pctxI =
+                match u.extraVisibleLds with
+                | None -> pctx
+                | Some lds -> pctx.add lds
+            let token =
+                match u.token with
+                | None -> ""
+                | Some t -> " " + t
+            " " + op + token + " " + (this.expr u.df pctxI)
 
         member this.updates (u: UpdateRHS list) (pctx: Context) =
             if u.Length = 0 then
@@ -1832,11 +1866,25 @@ module YIL =
                               elif List.forall (fun (x: Type option) -> x.IsSome) monadicList then
                                   Some(TTuple (List.map (fun (x: Type option) -> x.Value) monadicList))
                               else
-                                  error "RHS must be either all monadic or all non-monadic"
-                let op = if monadic.IsSome then ":-" else ":="
+                                  failwith "RHS must be either all monadic or all non-monadic"
+                let op =
+                    if monadic.IsSome then
+                        ":-"
+                    elif u.Head.extraVisibleLds.IsSome then
+                        ":|"
+                    else
+                        ":="
+                
+                let pctxI =
+                    match u.Head.extraVisibleLds with
+                    | None -> pctx
+                    | Some lds ->
+                        if u.Length <> 1 then
+                            failwith "\":|\" used with more than one RHS"
+                        pctx.add lds
                 
                 let rhsExprs = List.map (fun (x: UpdateRHS) -> x.df) u
-                " " + op + " " + (this.exprsNoBr rhsExprs ", " pctx)
+                " " + op + " " + (this.exprsNoBr rhsExprs ", " pctxI)
 
         member this.localDecl(ld: LocalDecl) =
             if ld.name.StartsWith('#') then

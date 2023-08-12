@@ -3,7 +3,6 @@ namespace TypeInjections
 open System
 open TypeInjections.Diff
 open TypeInjections.YIL
-open YIL
 
 /// Wrappers for standard Dafny functions that we assume to exist; need to be written and added to yucca
 module DafnyFunctions =
@@ -47,7 +46,16 @@ module Translation =
     let unsupported s = "unsupported: " + s
 
     /// translates a program, encapsulates global data/state for use during translation
-    type Translator(ctxO: Context, ctxN: Context, declsD: Diff.DeclList, jointDecls: Path list) =
+    type Translator
+        (
+            ctxO: Context,
+            ctxN: Context,
+            declsD: Diff.DeclList,
+            jointDecls: Path list,
+            changedDecls: Set<Path>,
+            alwaysGenerateLemmas: bool,
+            useForallInFunctionArguments: bool
+        ) =
         /// old, new, and translations path for a path
         // This is the only place that uses the literal prefix strings.
         let rec path (p: Path) : Path * Path * Path =
@@ -60,6 +68,8 @@ module Translation =
                 (p.prefix "Old", p.prefix "New", p)
         and isJoint (p: Path) : bool =
             List.exists (fun (j: Path) -> j.isAncestorOf p) jointDecls
+        and changedInOld (p: Path) : bool =
+            alwaysGenerateLemmas || changedDecls.Contains(p)
         and name (s: string) =
             // old variable name, new variable name,
             // (forward translation function name, backward translation function name)
@@ -118,13 +128,41 @@ module Translation =
                         let nO, nN, _ = typearg (plainTypeArg n)
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
-        and backward_compatible (insT: (Expr * Expr) list) (insN: LocalDecl list) : Expr list =
-            List.map (fun ((f1, f2), inN: LocalDecl) -> EEqual(EVar(inN.name), f1)) (List.zip insT insN)
-        and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Expr =
+        and backward_compatible
+            (insT: (Condition * Condition) list)
+            (insO: LocalDecl list)
+            (insN: LocalDecl list)
+            : Condition list =
+            let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: LocalDecl) (inN: LocalDecl) =
+                if not useForallInFunctionArguments then
+                    // x_N == forward(x_O)
+                    EEqual(localDeclTerm inN, oldToNew)
+                else
+                    match newToOld with
+                    | EFun (vars, cond, _, body) ->
+                        // function f: A -> B
+                        // NewToOld is (a_O: A_O) => B_backward(f_N(A_forward(a_O)))
+                        // forall a_O: A_O :: B_backward(f_N(A_forward(a_O))) == f_O(A_O)
+                        EQuant(
+                            Forall,
+                            vars,
+                            Option.map fst cond,
+                            EEqual(body, EAnonApply(localDeclTerm inO, List.map localDeclTerm vars))
+                        )
+                    | _ ->
+                        // not a function
+                        // x_N == forward(x_O)
+                        EEqual(localDeclTerm inN, oldToNew)
+
+            List.map
+                (fun ((f1, f2), inO: LocalDecl, inN: LocalDecl) ->
+                    translationCondition (fst f1) (fst f2) inO inN, snd f1)
+                (List.zip3 insT insO insN)
+        and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
             // forall x1_O: U_O :: U_back(U(x1_O)) == x1_O
             let nO, _, _ = name "x"
             let ld = LocalDecl(nO, tO, true)
-            EQuant(Forall, [ ld ], None, EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO))
+            EQuant(Forall, [ ld ], None, EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
             List.collect (decl contextO contextN) dsD.elements
         and decl (contextO: Context) (contextN: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
@@ -340,7 +378,7 @@ module Translation =
                                  else
                                      pO.child ctrO.name),
                                 [],
-                                (if isForward then insT1 else insT2)
+                                fst (List.unzip (if isForward then insT1 else insT2))
                             )
                         )
                     | Diff.Update _ ->
@@ -355,7 +393,7 @@ module Translation =
                                  else
                                      pO.child ctrO.name),
                                 [],
-                                (if isForward then insT1 else insT2)
+                                fst (List.unzip (if isForward then insT1 else insT2))
                             )
                         )
 
@@ -462,7 +500,7 @@ module Translation =
 
                 translations @ memberLemmasWithPrefix
             // immutable fields with initializer yield a lemma, mutable fields yield nothing
-            | Diff.Field (_, tpD, dfD) ->
+            | Diff.Field (_, tpD, dfD) when changedInOld (ctxOI.currentDecl) ->
                 match declO with
                 | Field (_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
                 | Field (_, t, _, _, _, _, _) ->
@@ -485,7 +523,7 @@ module Translation =
                         sr parentO, sr parentN
 
                     let fieldsTranslation =
-                        EEqual(tT1 (EMemberRef(recO, pO, [])), EMemberRef(recN, pN, []))
+                        EEqual(tT1 (EMemberRef(recO, pO, [])), EMemberRef(recN, pN, [])), None
 
                     [ Method(
                           IsLemma,
@@ -503,8 +541,9 @@ module Translation =
                           emptyMeta
                       ) ]
                 | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
+            | Diff.Field _ -> [] // unchanged fields produce nothing
             // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-            | Diff.Method (_, tvsD, insD, outsD, bdD) ->
+            | Diff.Method (_, tvsD, insD, outsD, bdD) when changedInOld (ctxOI.currentDecl) ->
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
@@ -593,7 +632,7 @@ module Translation =
                     let _, insN, _ =
                         List.unzip3 (List.map localDecl ins_n.decls)
                     // translations from old inputs to new inputs
-                    let _, insN_translated, insT =
+                    let insO_translated, insN_translated, insT =
                         List.unzip3 (List.map localDecl2 (insD.decls.getSameOrUpdate ()))
 
                     // TODO: remove unused backward translation functions
@@ -612,7 +651,10 @@ module Translation =
 
                     let inputRequiresO, _ =
                         ins_o.conditions
-                        |> List.map (fun c -> expr oldCtx c)
+                        |> List.map
+                            (fun c ->
+                                let es = expr oldCtx (fst c)
+                                (fst es, snd c), (snd es, snd c))
                         |> List.unzip
 
                     // new requires clauses become ensures arguments
@@ -624,16 +666,22 @@ module Translation =
 
                     let _, inputEnsuresN =
                         ins_n.conditions
-                        |> List.map (fun c -> expr newCtx c)
+                        |> List.map
+                            (fun c ->
+                                let es = expr newCtx (fst c)
+                                (fst es, snd c), (snd es, snd c))
                         |> List.unzip
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
                     let inputsTranslations =
                         if isStatic then
-                            backward_compatible insT insN_translated
+                            backward_compatible insT insO_translated insN_translated
                         else
-                            backward_compatible (instancesTranslation :: insT) (newInstDecl :: insN_translated)
+                            backward_compatible
+                                (instancesTranslation :: insT)
+                                (oldInstDecl :: insO_translated)
+                                (newInstDecl :: insN_translated)
 
                     // lossless assumptions
                     let losslessAssumptions =
@@ -648,7 +696,8 @@ module Translation =
                     let inSpec =
                         InputSpec(
                             inputs,
-                            inputRequiresO @ inputsTranslations @ losslessAssumptions
+                            inputRequiresO
+                            @ inputsTranslations @ losslessAssumptions
                         )
 
                     // we don't need the ensures-conditions of the method
@@ -672,13 +721,14 @@ module Translation =
 
                     let outputsTranslation =
                         match outputTypeT with
-                        | Some ot -> EEqual(resultN, (fst ot) resultO)
-                        | None -> EBool true
+                        | Some ot -> EEqual(resultN, (fst ot) resultO), None
+                        | None -> EBool true, None
                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                     // but that is redundant due to our highly restricted treatment of classes
                     // New inputs' ensures becomes "output spec" here because "input spec" contains requires
                     // and "output spec" contains ensures.
-                    let outSpec = OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
+                    let outSpec =
+                        OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
                     // The body yields the proof of the lemma.
                     let proof =
@@ -722,6 +772,7 @@ module Translation =
                           emptyMeta
                       ) ]
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
+            | Diff.Method _ -> [] // unchanged methods produce nothing
         and typeDeclHeader (p: Path, dO: Decl, dN: Decl) =
             assert (dO.name = dN.name)
             typeDeclHeaderMain (p, dO.name, dO.tpvars, dN.tpvars)
@@ -773,11 +824,14 @@ module Translation =
             let nO, nN, _ = name ld.name
             let tO, tN, tT = tp (ld.tp, ld.tp)
             let g = ld.ghost
-            LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), ((fst tT) (EVar nO), (snd tT) (EVar nN))
+            LocalDecl(nO, tO, g), LocalDecl(nN, tN, g), (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
         and localDecl2 (ldO: LocalDecl, ldN: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
             let nO, nN, _ = name2 (ldO.name, ldN.name)
             let tO, tN, tT = tp (ldO.tp, ldN.tp)
-            LocalDecl(nO, tO, ldO.ghost), LocalDecl(nN, tN, ldN.ghost), ((fst tT) (EVar nO), (snd tT) (EVar nN))
+
+            LocalDecl(nO, tO, ldO.ghost),
+            LocalDecl(nN, tN, ldN.ghost),
+            (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
         and listOfFuncToFuncOfList (l: (Expr -> Expr) List) =
             (fun x -> List.map (fun (a, b) -> a b) (List.zip l x))
         and diag (x: Expr, y: Expr) = EEqual(x, y)
@@ -1051,7 +1105,7 @@ module Translation =
         and proof (oldCtx: Context) (e: Expr) (resultN: Expr) (resultOTranslation: Expr -> Expr) : Expr option =
             // generate proof for backward compatibility theorem
             let eO = NameTranslator(true).expr (oldCtx, e)
-            Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None) ])
+            Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
 
         /// entry point for running the translation
         member this.doTranslate() = decls ctxO ctxN declsD
@@ -1073,40 +1127,42 @@ module Translation =
     /// - generates the Translations part.
     /// A subsequent step is expected to copy the old and new program and prefix the names in all toplevel
     /// declarations with either "Joint." or "New.", resp. "Old.".
-    let translateModule (ctxO: Context, ctxN: Context, m: Decl, pD: Diff.Decl) =
-        let ctxOm = ctxO.enter (m.name) // enter decl of m
-        let ctxNm = ctxN.enter (m.name) // enter decl of m
+    let translateModule (ctxO: Context, ctxN: Context, pD: Diff.Decl) =
+        let ctxOm = ctxO.enter (pD.name.getOld) // enter decl of m
+        let ctxNm = ctxN.enter (pD.name.getNew) // enter decl of m
 
         let inputOk (nameO: string) (nameD: Diff.Name) =
             match nameD with
             | Diff.SameName s -> nameO = s
             | Diff.Rename (o, n) -> nameO = o
 
-        match m, pD with
-        | Module _ as m, Diff.Module (nameD, declD) when (inputOk m.name nameD) ->
-            let pathOf =
-                fun (decl: Decl) -> Path [ m.name; decl.name ]
+        match pD with
+        | Diff.Module (nameD, declD) ->
+            let pathOfOld =
+                fun (decl: Decl) -> Path [ nameD.getOld; decl.name ]
 
-            let childPaths = List.map pathOf m.children
-            let sameChildren = List.map pathOf (declD.getSame ())
+            let mO = ctxOm.lookupCurrent ()
+
+            let childPaths = List.map pathOfOld mO.children
+            let sameChildren = List.map pathOfOld (declD.getSame ())
 
             let changedChildren =
                 Utils.listDiff (childPaths, sameChildren)
 
             let changedClosed =
-                Analysis.dependencyClosure (ctxOm, m.children, changedChildren)
+                Analysis.dependencyClosure (ctxOm, mO.children, changedChildren)
 
             let jointPaths =
                 Utils.listDiff (childPaths, changedClosed)
 
-            Console.WriteLine($" ***** DEPENDENCY CLOSURE FOR {m.name} *****")
+            Console.WriteLine($" ***** DEPENDENCY CLOSURE FOR {mO.name} *****")
             List.iter (fun (Path x) -> Console.WriteLine(String.concat ", " x)) changedClosed
-            Console.WriteLine($" ***** JOINT PATHS FOR {m.name} *****")
+            Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} *****")
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
-            Console.WriteLine($" ***** JOINT PATHS FOR {m.name} END *****")
+            Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
             let tr =
-                Translator(ctxOm, ctxNm, declD, jointPaths)
+                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true, true)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -1138,8 +1194,28 @@ module Translation =
         printPaths ("dependency closure of changed", changedClosed)
         printPaths ("joint", jointPaths)
 
+        let changedInOld =
+            DiffAnalysis.changedInOld (Context(pO), Context(pN), pD)
+
+        printPaths ("changed in old", Set.toList changedInOld)
+
+        // If we want to generate lemmas even if the function/method is not affected by the change.
+        let alwaysGenerateLemmas = false
+
+        // If we want to expand all function arguments' requirements by one level from lambda expressions
+        // to forall expressions.
+        let useForallInFunctionArguments = true
+
         let tr =
-            Translator(Context(pO), Context(pN), pD.decls, jointPaths)
+            Translator(
+                Context(pO),
+                Context(pN),
+                pD.decls,
+                jointPaths,
+                changedInOld,
+                alwaysGenerateLemmas,
+                useForallInFunctionArguments
+            )
 
         let translations =
             { name = newName

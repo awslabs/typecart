@@ -116,7 +116,7 @@ module DafnyToYIL =
             if d.GetCompileName(dafnyOptions) = d.Signature.ModuleDef.DafnyName then
                 [ Y.Import(Y.ImportDefault(d.Opened, pathOfModule (d.Signature.ModuleDef))) ]
             else
-                [ Y.Import(Y.ImportEquals(d.Opened, Y.Path [ d.GetCompileName(dafnyOptions) ], pathOfModule (d.Signature.ModuleDef))) ]
+                [ Y.Import(Y.ImportEquals(d.Opened, d.GetCompileName(dafnyOptions), pathOfModule (d.Signature.ModuleDef))) ]
         | :? TypeSynonymDecl as d ->
             // type synonyms and HOL-style subtype definitions
             let tpvars = typeParameter @ d.TypeArgs
@@ -145,7 +145,7 @@ module DafnyToYIL =
                                   | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
                                   | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
                     Some(bv.name, expr d.Constraint, witness)
-
+            // TODO: newtype may have member functions
             [ Y.TypeDef(d.Name, [], tp d.BaseType, predO, true, namedMeta d) ]
         | :? IteratorDecl ->
             unsupported
@@ -158,13 +158,12 @@ module DafnyToYIL =
             let meta = namedMeta d
             let typeVars = typeParameter @ d.TypeArgs
             [ Y.Class(dName, isTrait d, typeVars, classType @ d.ParentTraits, List.concat (memberDecl @ d.Members), meta) ]
-        // removed in Dafny 4.2.0
-        (* | :? OpaqueTypeDecl as d ->
+        | :? AbstractTypeDecl as d ->
             let dName = d.Name
             let meta = namedMeta d
             // Misuse Datatype for now when translating opaque types
             let typeVars = typeParameter @ d.TypeArgs
-            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ] *)
+            [ Y.Datatype(dName, typeVars, [], List.concat (memberDecl @ d.Members), meta) ]
         | :? ModuleExportDecl as d ->
             let exportPath (expSig: ExportSignature) =
                 match expSig.Decl with
@@ -512,7 +511,9 @@ module DafnyToYIL =
 
         (t.Name, (v, e, h))
 
-    and condition (a: AttributedExpression) : Y.Condition = expr a.E
+    and condition (a: AttributedExpression) : Y.Condition =
+        let label = if a.Label = null then None else Some(a.Label.Name)
+        (expr a.E, label)
 
     and tp (t: Type) : Y.Type =
 
@@ -698,13 +699,20 @@ module DafnyToYIL =
         | :? ConcreteSyntaxExpression as e ->
             // cases that are eliminated during resolution
             if e.ResolvedExpression = null then
-                match Seq.head e.Children with
-                | :? ConcreteSyntaxExpression as e_child ->
-                    if e_child.ResolvedExpression = null then
-                        Y.EUnimplemented
-                    else
-                        expr e_child.ResolvedExpression
-                | _ -> Y.EUnimplemented // a few expressions are not resolved by Dafny
+                if Seq.isEmpty e.Children then
+                    match e with
+                    | :? NameSegment as e ->
+                        // a label
+                        Y.EVar(e.Name)
+                    | _ -> Y.EUnimplemented
+                else
+                    match Seq.head e.Children with
+                    | :? ConcreteSyntaxExpression as e_child ->
+                        if e_child.ResolvedExpression = null then
+                            Y.EUnimplemented
+                        else
+                            expr e_child.ResolvedExpression
+                    | _ -> Y.EUnimplemented // a few expressions are not resolved by Dafny
             else
                 expr e.ResolvedExpression
         // identifiers/names
@@ -762,7 +770,7 @@ module DafnyToYIL =
             | _ -> unsupported $"Literal value {e.ToString()}"
         | :? LambdaExpr as e ->
             let vars = boundVar @ e.BoundVars
-            let cond = if e.Range = null then None else Some(expr e.Range)
+            let cond = if e.Range = null then None else Some(expr e.Range, None)
             Y.EFun(vars, cond, tp e.Body.Type, expr e.Body)
         | :? SeqSelectExpr as e -> Y.ESeqSelect(expr e.Seq, tp e.Seq.Resolved.Type, e.SelectOne, exprO e.E0, exprO e.E1)
         | :? MultiSelectExpr as e ->
@@ -947,12 +955,15 @@ module DafnyToYIL =
 
                     Y.EDecls(vs, lhs, ds)
             | :? AssignSuchThatStmt as u ->
-                if vs.Length <> 1 then
-                    unsupported "Variable declaration with more than 1 LHS"
-
-                let v = vs.Head
                 let c = expr u.Expr
-                Y.EDeclChoice(v, c)
+                let token =
+                    if u.AssumeToken = null then
+                        None
+                    else
+                        Some u.AssumeToken.Token.``val``
+                // see comment at the definition of UpdateRHS
+                let rhs: Y.UpdateRHS = { df = c; monadic = None; extraVisibleLds = Some vs; token = token }
+                Y.EDecls(vs, lhs, [ rhs ])
             | :? AssignOrReturnStmt as u ->
                 (* See the comment on the case for AssignOrReturnStmt in the method 'statement'
                   This is just the special case where a monadic value is used to initialize a variable *)
@@ -1019,12 +1030,12 @@ module DafnyToYIL =
                         | _ -> unsupported "Variable declaration with non-atomic LHS"
 
                     let ns = List.map doOne ls
-                    Y.EUpdate(ns, { df = rhs; monadic = None })
+                    Y.EUpdate(ns, Y.plainUpdate rhs)
         | :? AssignStmt as s ->
             let rhs = assignmentRhs (s.Rhs)
 
             match s.Lhs with
-            | :? IdentifierExpr as e -> Y.EUpdate([ expr e ], { df = rhs; monadic = None })
+            | :? IdentifierExpr as e -> Y.EUpdate([ expr e ], Y.plainUpdate rhs)
             | :? SeqSelectExpr as e ->
                 (* TODO check if this is true: We assume this case always means an array update.
                    We only support one-dimensional case a[i] := e for now
@@ -1033,11 +1044,21 @@ module DafnyToYIL =
                 match e.Seq.Resolved with
                 | :? IdentifierExpr as s -> Y.EArrayUpdate(Y.EVar(s.Name), [ expr e.E0 ], rhs)
                 | _ -> unsupported "Complex sequence update"
-            | :? MemberSelectExpr as e -> Y.EUpdate([ expr e ], { df = rhs; monadic = None })
+            | :? MemberSelectExpr as e -> Y.EUpdate([ expr e ], Y.plainUpdate rhs)
             | :? MultiSelectExpr as e ->
                 (* TODO use EArrayUpdate *)
-                Y.EUpdate([ Y.EMultiSelect(expr e.Array, expr @ e.Indices) ], { df = rhs; monadic = None })
+                Y.EUpdate([ Y.EMultiSelect(expr e.Array, expr @ e.Indices) ], Y.plainUpdate rhs)
             | _ -> unsupported "Non-atomic LHS of assignment"
+        | :? AssignSuchThatStmt as s ->
+            let lhss = expr @ s.Lhss
+            let rhs = expr s.Expr
+            let token =
+                if s.AssumeToken = null then
+                    None
+                else
+                    Some s.AssumeToken.Token.``val``
+            // see comment at the definition of UpdateRHS
+            Y.EUpdate(lhss, { df = rhs; monadic = None; extraVisibleLds = Some []; token = token })
         | :? VarDeclPattern as s ->
             (* Because we do not cover constructor patterns anyway, we can simply use a Decl to represent a let statement.
                These statements (only?) occur when a match statement is rewritten during resolution
@@ -1046,7 +1067,7 @@ module DafnyToYIL =
             *)
             let v = s.LHS
             let vars, lhs = casePatternLocalVariable v
-            Y.EDecls(vars, [ lhs ], [ { df=expr s.RHS; monadic=None } ])
+            Y.EDecls(vars, [ lhs ], [ Y.plainUpdate (expr s.RHS) ])
         | :? ReturnStmt as s ->
             (* There may be more than one return value - see the comment on the translation of the method header.
                There may be no or multiple return values - see the comment on EReturn. *)
@@ -1119,7 +1140,8 @@ module DafnyToYIL =
                     None
                 else
                     Some(statement s.Proof)
-            Y.EAssert(expr s.Expr, proof)
+            let label = if s.Label = null then None else Some(s.Label.Name)
+            Y.EAssert(expr s.Expr, proof, label)
         | :? AssumeStmt as s -> Y.EAssume(expr s.Expr)
         | :? ExpectStmt as s -> Y.EExpect(expr s.Expr)
         | :? CalcStmt -> Y.ECommented("calculational proof omitted", Y.ESKip)
@@ -1247,10 +1269,17 @@ module DafnyToYIL =
        the first of which contains a variable declaration, whose update statement has the needed RHS *)
     and rhsOfMonadicUpdate (ar: AssignOrReturnStmt) : Y.UpdateRHS =
         let res = fromIList ar.ResolvedStatements
-
+        let token =
+            if ar.KeywordToken = null then
+                None
+            else
+                Some ar.KeywordToken.Token.``val``
+        (* token: IfStmt=None, AssertStmt="assert", AssumeStmt="assume", ExpectStmt="expect"*)
         match res with
         | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? IfStmt; :? UpdateStmt ]
-        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssertStmt; :? UpdateStmt ] ->
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssertStmt; :? UpdateStmt ]
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssumeStmt; :? UpdateStmt ]
+        | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? ExpectStmt; :? UpdateStmt ] ->
             let ds = rhsOfUpdate (u)
 
             if ds.Length <> 1 then
@@ -1258,5 +1287,5 @@ module DafnyToYIL =
 
             let d = ds.Head.df
             let t = (boundVar @ v.Locals).Head.tp
-            { df = d; monadic = Some(t) }
+            { df = d; monadic = Some(t); extraVisibleLds = None; token = token }
         | _ -> error "Unexpected resolution"

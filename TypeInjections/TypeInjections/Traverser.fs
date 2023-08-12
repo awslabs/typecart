@@ -41,6 +41,10 @@ module Traverser =
         member this.exprO(ctx: Context, eO: Expr option) =
             Option.map (fun t -> this.expr (ctx, t)) eO
 
+        /// translates an optional condition
+        member this.conditionO(ctx: Context, eO: Condition option) =
+            Option.map (fun t -> this.condition (ctx, t)) eO
+
         /// translates a list of types
         member this.tpList(ctx: Context, ts: Type list) = List.map (fun t -> this.tp (ctx, t)) ts
         /// translates an optional type
@@ -65,9 +69,10 @@ module Traverser =
               meta = p.meta }
 
         member this.importType(ctx: Context, e: ImportType) =
+            // lhs in ImportEquals is just a name.
             match e with
             | ImportDefault (o, p) -> ImportDefault(o, this.path (ctx, p))
-            | ImportEquals (o, lhs, rhs) -> ImportEquals(o, this.path (ctx, lhs), this.path (ctx, rhs))
+            | ImportEquals (o, lhs, rhs) -> ImportEquals(o, lhs, this.path (ctx, rhs))
 
         member this.exportType(ctx: Context, e: ExportType) =
             let path p = this.path (ctx, p)
@@ -89,7 +94,7 @@ module Traverser =
                         ds
 
                 let moduleCtx =
-                    List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter (n)) imports
+                    List.fold (fun (ctx: Context) -> ctx.addImport) (ctx.enter(n).clearImport ()) imports
 
                 let membersT =
                     List.collect (fun (d: Decl) -> this.decl (moduleCtx, d)) ds
@@ -263,7 +268,7 @@ module Traverser =
             | EFun (ins, cond, out, bd) ->
                 EFun(
                     this.localDeclList (ctx, ins),
-                    this.exprO (ctx.add ins, cond),
+                    this.conditionO (ctx.add ins, cond),
                     rcT out,
                     this.expr (ctx.add ins, bd)
                 )
@@ -308,12 +313,9 @@ module Traverser =
             | EDecls (vars, lhs, rhs) ->
                 EDecls(this.localDeclList (ctx, vars), lhs, List.map (fun u -> this.updateRHS (ctx, u)) rhs)
             | EUpdate (es, rhs) -> EUpdate(rcEs es, this.updateRHS (ctx, rhs))
-            | EDeclChoice (ld, e) ->
-                let eT = this.expr (ctx.add [ ld ], e) // e is a predicate about n and thus can see it
-                EDeclChoice(this.localDecl (ctx, ld), eT)
             | ENull (t) -> ENull(rcT t)
             | EPrint es -> EPrint(rcEs es)
-            | EAssert (e, p) -> EAssert(rcE e, rcEo p)
+            | EAssert (e, p, l) -> EAssert(rcE e, rcEo p, l)
             | EAssume e -> EAssume(rcE e)
             | EReveal es -> EReveal(rcEs es)
             | EExpect e -> EExpect(rcE e)
@@ -331,8 +333,17 @@ module Traverser =
         abstract member updateRHS : Context * UpdateRHS -> UpdateRHS
 
         default this.updateRHS(ctx: Context, u: UpdateRHS) =
-            { df = this.expr (ctx, u.df)
-              monadic = this.tpO (ctx, u.monadic) }
+            match u.extraVisibleLds with
+            | None ->
+                { df = this.expr (ctx, u.df)
+                  monadic = this.tpO (ctx, u.monadic)
+                  extraVisibleLds = None
+                  token = u.token }
+            | Some s ->
+                { df = this.expr (ctx.add s, u.df) // df is a predicate about s and thus can see them
+                  monadic = this.tpO (ctx, u.monadic)
+                  extraVisibleLds = Some(this.localDeclList (ctx, s))
+                  token = u.token }
 
         // transforms input specifications
         abstract member inputSpec : Context * InputSpec -> InputSpec
@@ -353,7 +364,7 @@ module Traverser =
 
         /// transforms a condition
         abstract member condition : Context * Condition -> Condition
-        default this.condition(ctx, c) = this.expr (ctx, c)
+        default this.condition(ctx, c) = this.expr (ctx, fst c), snd c
 
         /// convenience method for the common case of lists of declarations
         abstract member conditionList : Context * Condition list -> Condition list

@@ -125,7 +125,7 @@ module Typecart =
 
         // turn dafny AST representation of directory into a YIL AST
         member this.toYILProgram(projectName: string, reporter) =
-            DafnyToYIL.program(this.toDafnyAST(projectName, reporter), reporter.Options)
+            DafnyToYIL.program (this.toDafnyAST (projectName, reporter), reporter.Options)
 
     // API entry
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =
@@ -139,6 +139,7 @@ module Typecart =
                 "Joint"
               )
               Analysis.LemmasToAxioms()
+              Analysis.LeaveQualifiedYILForCombined()
               Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(oldOrNewPrefix (old))
               Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
@@ -151,6 +152,7 @@ module Typecart =
                 "(no prefix)"
               )
               Analysis.LemmasToAxioms()
+              Analysis.LeaveQualifiedYILForCombined()
               Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(jointPrefix)
               Analysis.DeduplicateImportsIncludes()
@@ -199,30 +201,43 @@ module Typecart =
             this.logger "************ emitting output"
             this.logger "***** joint"
 
-            Analysis
-                .Pipeline(jointPipeline jointPaths)
-                .apply newYIL
-            |> outputWriter.processJoint
+            let jointYILresult, jointYILpreserved =
+                Analysis
+                    .Pipeline(jointPipeline jointPaths)
+                    .apply (newYIL, [])
+
+            outputWriter.processJoint (jointYILresult)
 
             this.logger "***** old"
 
-            Analysis
-                .Pipeline(oldOrNewPipeline (jointPaths, true))
-                .apply oldYIL
-            |> outputWriter.processOld
+            let oldYILresult, oldYILpreserved =
+                Analysis
+                    .Pipeline(oldOrNewPipeline (jointPaths, true))
+                    .apply (oldYIL, [])
+
+            outputWriter.processOld (oldYILresult)
 
             this.logger "***** new"
 
-            Analysis
-                .Pipeline(oldOrNewPipeline (jointPaths, false))
-                .apply newYIL
-            |> outputWriter.processNew
+            let newYILresult, newYILpreserved =
+                Analysis
+                    .Pipeline(oldOrNewPipeline (jointPaths, false))
+                    .apply (newYIL, [])
+
+            outputWriter.processNew (newYILresult)
 
             this.logger "***** combine"
 
-            Analysis
-                .Pipeline(combinePipeline)
-                .apply combineYIL
-            |> outputWriter.processCombine
+            let combineYILresult, _ =
+                Analysis
+                    .Pipeline(combinePipeline)
+                    .apply (
+                        combineYIL,
+                        [ jointYILpreserved
+                          oldYILpreserved
+                          newYILpreserved ]
+                    )
+
+            outputWriter.processCombine (combineYILresult)
 
     let typecart (oldYIL: Program, newYIL: Program, logger: string -> unit) = Typecart(oldYIL, newYIL, logger)
