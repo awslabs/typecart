@@ -889,6 +889,19 @@ module YIL =
     *)
     let lookupByPath (prog: Program, path: Path) : Decl = lookupAncestorsByPath(prog, path).Head
 
+    (* as above, but do not fail when the path does not exist *)
+    let rec lookupByPathOption (prog: Program, path: Path) : Decl option =
+        if path.isRoot then
+            Some(Module(prog.name, prog.decls, emptyMeta))
+        else
+            lookupByPathOption (prog, path.parent)
+            |> Option.bind (fun parentDecl ->
+                let children = parentDecl.children
+                List.tryFind (fun (x: Decl) -> x.name = path.name) children
+                |> Option.orElseWith (fun () -> 
+                    let implChildren = (implicitChildren parentDecl)
+                    List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren))
+
     (* as above, but returns a constructor *)
     let lookupConstructor (prog: Program, path: Path) : DatatypeConstructor =
         match lookupByPath (prog, path.parent) with
@@ -941,6 +954,7 @@ module YIL =
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.lookupByPath(p: Path) = lookupByPath (prog, p)
+        member this.lookupByPathOption(p: Path) = lookupByPathOption (prog, p)
         member this.pos = pos
         
         member this.thisDecl = thisDecl
@@ -1326,6 +1340,9 @@ module YIL =
         member this.exprsNoBr (es: Expr list) (sep: string) (pctx: Context) =
             listToString (List.map (fun e -> this.expr e pctx) es, sep)
 
+        member this.exprsNoBrWithPrecedence (es: Expr list) (precedence: int) (sep: string) (pctx: Context) =
+            listToString (List.map (fun e -> this.exprWithPrecedence e precedence pctx) es, sep)
+
         member this.exprs (es: Expr list) (pctx: Context) =
             "(" + (this.exprsNoBr es ", " pctx) + ")"
 
@@ -1492,6 +1509,8 @@ module YIL =
             let exprs es = this.exprs es pctx
             let exprO e sep = this.exprO (e, sep, pctx)
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
+            // we need to add parentheses in var a := (b; c);
+            let exprsNoBrExceptForSemicolon es sep = this.exprsNoBrWithPrecedence es 1 sep pctx
 
             let dims ds = this.dims (ds, pctx)
             let receiver r = match r with
@@ -1624,16 +1643,21 @@ module YIL =
                     let sts = List.map (fun x -> this.statement x pctx) esNonEmpty[..esNonEmpty.Length - 2]
                     let esS = String.concat "\n" (sts @ [ expr 0 (esNonEmpty.Item(esNonEmpty.Length - 1)) ])
                     // no braces - Dafny parses them as sets
-                    "\n" + esS
+                    // In rare cases we may encounter precedence problems with blocks...
+                    // so we need to add "(" and ")" here.
+                    "\n"
+                    + (if 0 < precedence then "(" else "")
+                    + esS
+                    + (if 0 < precedence then ")" else "")
             | ELet (v, x, orfail, lhs, d, e) ->
                 "var "
-                + (exprsNoBr lhs ", ")
+                + (exprsNoBrExceptForSemicolon lhs ", ")
                 + (match (x, orfail) with
                    | true, false -> " := "
                    | true, true -> " :- "
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
-                + (exprsNoBr d ", ")
+                + (exprsNoBrExceptForSemicolon d ", ")
                 + "; "
                 + (expr 0 e)
             | EIf (c, t, e) ->
@@ -1674,7 +1698,7 @@ module YIL =
                     | None -> ""
 
                 sprintf "%swhile (%s)%s" label (expr 0 c) (expr 0 e)
-            | EReturn (es) -> (exprsNoBr es ", ")
+            | EReturn (es) -> (exprsNoBrExceptForSemicolon es ", ")
             | EBreak l ->
                 let label =
                     match l with
@@ -1706,7 +1730,7 @@ module YIL =
                         "var "
                 
                 varQual
-                + (exprsNoBr lhs ", ")
+                + (exprsNoBrExceptForSemicolon lhs ", ")
                 + (this.updates rhs pctx)
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map (expr 0) ns
@@ -1910,7 +1934,7 @@ module YIL =
 
             match rcv with
             | StaticReceiver (ct) -> this.classType (ct) |> dot // ClassType --> path, tpargs
-            | ObjectReceiver (e) -> this.expr e pctx |> dot
+            | ObjectReceiver (e) -> this.exprWithPrecedence e 11 pctx |> dot // e should be a primary expression
 
         member this.caseStatement (case: Case) (pctx: Context) =
             // Remove the extra braces
