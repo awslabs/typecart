@@ -138,20 +138,6 @@ module Translation =
                         else
                             EThis
                     | _ -> this.exprDefault (ctx, e) }
-        and GetTypeArgsFromReceiver =
-            { new Traverser.Identity() with
-                override this.receiver(ctx: Context, rcv: Receiver) =
-                    match rcv with
-                    | StaticReceiver ct -> StaticReceiver(this.classType (ctx, ct))
-                    | ObjectReceiver e -> ObjectReceiver(this.expr (ctx, e))
-                override this.expr(ctx: Context, e: Expr) =
-                    match e with
-                    | EThis ->
-                        if ctx.thisDecl.IsSome then
-                            EVar(ctx.thisDecl.Value.name)
-                        else
-                            EThis
-                    | _ -> this.exprDefault (ctx, e) }
         and PrependLemmaCalls (newCtx: Context) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -220,43 +206,13 @@ module Translation =
                             match methodDeclO.Value, methodDeclN.Value with
                             | Method(methodType = IsLemma), _
                             | Method(methodType = IsMethod), _ -> eDefault
-                            | Method (_,
-                                      _,
-                                      tvs_o,
-                                      ins_o,
-                                      outs_o,
-                                      modifiesO,
-                                      readsO,
-                                      decreasesO,
-                                      bodyO,
-                                      _,
-                                      isStatic,
-                                      _,
-                                      _),
-                              Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, _, _) ->
+                            | Method (_, _, _, _, _, _, _, _, _, _, isStatic, _, _), Method _ ->
                                 // prepend a lemma call to this method application
                                 let parentDeclO = ctx.lookupByPath (method.parent)
                                 let parentDeclN = newCtx.lookupByPath (method.parent)
                                 // the following are only needed if the method is not static, but it's easier to compute them in any case
-                                let receiverDecl =
-                                    if isStatic then
-                                        None
-                                    else
-                                        match receiver with
-                                        | StaticReceiver _ -> failwith "unexpected static receiver"
-                                        | ObjectReceiver r -> None // Some(ctx.lookupByPath(r))
                                 let parentTvs_o = parentDeclO.tpvars
                                 let parentTvs_n = parentDeclN.tpvars
-                                let parentO, parentN, parentT = path (method.parent)
-
-                                let parentTvsO, parentTvsN, parentTvsT =
-                                    List.unzip3 (List.map typearg2 (List.zip parentTvs_o parentTvs_n))
-
-                                let parentTsT =
-                                    if isStatic then
-                                        []
-                                    else
-                                        List.collect (fun (t1, t2) -> [ localDeclTerm t1; localDeclTerm t2 ]) parentTvsT
 
                                 let oldInstDecl, newInstDecl, instancesTranslation =
                                     let tO =
@@ -270,20 +226,17 @@ module Translation =
                                         LocalDecl(varname parentDeclN.name, tN, false)
                                     )
 
-                                let oldInst, newInst =
-                                    localDeclTerm oldInstDecl, localDeclTerm newInstDecl
-
-                                let oldCtx =
+                                let oldExprCtx =
                                     if isStatic then
                                         ctx
                                     else
                                         ctx.setThisDecl (oldInstDecl)
 
-                                let newCtx =
+                                let newExprCtx =
                                     if isStatic then
-                                        ctx
+                                        newCtx
                                     else
-                                        ctx.setThisDecl (newInstDecl)
+                                        newCtx.setThisDecl (newInstDecl)
 
                                 let instanceInputs =
                                     if isStatic then
@@ -291,43 +244,24 @@ module Translation =
                                     else
                                         match receiver with
                                         | StaticReceiver _ -> failwith "unexpected static receiver"
-                                        | ObjectReceiver r ->
-                                            [ exprOld oldCtx r
-                                              exprNew newCtx r ]
+                                        | ObjectReceiver (r, _) ->
+                                            [ exprOld oldExprCtx r
+                                              exprNew newExprCtx r ]
 
-                                let typeArgsOf (ins: Expr) =
-                                    match ins with
-                                    | EMemberRef(_, _, tpargs) -> tpargs
-                                    | EVar _ -> []
-                                    | ESeqSelect _ -> [] // TODO
-                                    | EMethodApply(_, _, tpargs, _, _) -> tpargs // TODO
-                                    | _ -> failwith (unsupported "instance type")
-                                       
+                                let instanceTypeArgs =
+                                    match receiver with
+                                    | StaticReceiver ct -> ct.tpargs
+                                    | ObjectReceiver (_, tp) ->
+                                        match tp with
+                                        | TApply (_, args) -> args
+                                        | _ -> []
+
                                 let instanceTypeArgTranslationInputs =
-                                    if isStatic then
-                                        []
-                                    else
-                                        let instances =
-                                            match receiver with
-                                            | StaticReceiver _ -> failwith "unexpected static receiver"
-                                            | ObjectReceiver r ->
-                                                [ ThisSubstitutor.expr(oldCtx, r)
-                                                  ThisSubstitutor.expr(newCtx, r) ]
-                                        let tpargs = List.zip (typeArgsOf instances[0]) (typeArgsOf instances[1])
-                                        tpargs |> List.collect (fun (tO: Type, tN: Type) ->
-                                            let _, _, (tT1, tT2) = tpAbstracted("x", tO, tN)
-                                            [tT1; tT2])
-                                
-                                let receiverO, receiverN =
-                                    if isStatic then
-                                        // ignores the instances above
-                                        let sr p =
-                                            StaticReceiver({ path = p; tpargs = [] })
-
-                                        sr parentO, sr parentN
-                                    else
-                                        let objRec ld = ObjectReceiver(localDeclTerm ld)
-                                        objRec oldInstDecl, objRec newInstDecl
+                                    instanceTypeArgs
+                                    |> List.collect
+                                        (fun (t: Type) ->
+                                            let _, _, (tT1, tT2) = tpAbstracted ("x", t, t)
+                                            [ tT1; tT2 ])
 
                                 // the type arguments (of type Type, not TypeArg)
                                 let tsO, tsN = tpargs, tpargs
@@ -335,31 +269,33 @@ module Translation =
                                 let tsT =
                                     List.collect
                                         (fun (t: Type) ->
-                                            let _, _, (tForward, tBackward) = tp (t, t)
+                                            let _, _, (tForward, tBackward) = tpAbstracted ("x", t, t)
 
-                                            [ abstractRel ("x", t, t, tForward)
-                                              abstractRel ("x", t, t, tBackward) ])
+                                            [ tForward; tBackward ])
                                         tpargs
 
                                 let typeParams = Utils.listInterleave (tsO, tsN)
 
                                 // the old inputs and new inputs
-                                let insO = List.map (exprOld oldCtx) exprs
-                                let insN = List.map (exprNew newCtx) exprs
+                                let insO = List.map (exprOld oldExprCtx) exprs
+                                let insN = List.map (exprNew newExprCtx) exprs
 
                                 let inputs =
-                                    instanceInputs @ instanceTypeArgTranslationInputs @ tsT @ insO @ insN
+                                    instanceInputs
+                                    @ instanceTypeArgTranslationInputs
+                                      @ tsT @ insO @ insN
 
                                 let lemmaReceiver, lemmaName =
-                                    match receiver with
-                                    | StaticReceiver _ -> receiver, method.parent.child (method.name + "_bc")
-                                    | ObjectReceiver _ ->
+                                    match parentDeclO with
+                                    | Datatype _ ->
                                         let ct =
                                             { path = method.parent.parent
                                               tpargs = [] }
 
                                         StaticReceiver(ct),
                                         method.parent.child (method.parent.name + "_" + method.name + "_bc")
+                                    | Module _ -> receiver, method.parent.child (method.name + "_bc")
+                                    | _ -> failwith (unsupported $"parent declaration {parentDeclO}")
 
                                 let lemmaCall =
                                     EMethodApply(lemmaReceiver, lemmaName, typeParams, inputs, true)
@@ -419,10 +355,16 @@ module Translation =
             (resultOTranslation: Expr -> Expr)
             : Expr option =
             // generate proof for backward compatibility theorem
-            let eO = PrependLemmaCalls(newCtx).expr (oldCtx.translateLocalDeclNames(
-                fun n ->
-                    let nO, _, _ = name n
-                    nO), e)
+            let eO =
+                PrependLemmaCalls(newCtx)
+                    .expr (
+                        oldCtx.translateLocalDeclNames
+                            (fun n ->
+                                let nO, _, _ = name n
+                                nO),
+                        e
+                    )
+            // without lemma calls: let eO = exprOld oldCtx e
 
             Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
@@ -490,6 +432,7 @@ module Translation =
                         (fun (ctx: Context) -> ctx.addImport)
                         (contextN.enter(name.getNew).clearImport ())
                         (imports (msD.getNew ()))
+
                 [ Module(n, decls ctxOm ctxNm msD, contextO.currentMeta ()) ]
             | Diff.TypeDef (_, tvsD, superD, exprD) ->
                 match declO with
@@ -565,10 +508,14 @@ module Translation =
                 // generate translation functions
 
                 let ctxOb =
-                    contextO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
+                    contextO
+                        .enter(nameD.getOld)
+                        .addTpvars (tvsD.getOld ())
 
                 let ctxNb =
-                    contextN.enter(nameD.getNew).addTpvars (tvsD.getNew ())
+                    contextN
+                        .enter(nameD.getNew)
+                        .addTpvars (tvsD.getNew ())
 
                 if not tvsD.isSameOrUpdated then
                     failwith (
@@ -838,11 +785,16 @@ module Translation =
                             unsupported "addition or deletion in type parameters: "
                             + p.ToString()
                         )
+
                     let ctxOh =
-                        contextO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
+                        contextO
+                            .enter(nameD.getOld)
+                            .addTpvars (tvsD.getOld ())
 
                     let ctxNh =
-                        contextN.enter(nameD.getNew).addTpvars (tvsD.getNew ())
+                        contextN
+                            .enter(nameD.getNew)
+                            .addTpvars (tvsD.getNew ())
 
                     let ctxOi = ctxOh.add (insD.decls.getOld ())
                     let ctxNi = ctxNh.add (insD.decls.getNew ())
@@ -914,7 +866,8 @@ module Translation =
 
                             sr parentO, sr parentN
                         else
-                            let objRec ld = ObjectReceiver(localDeclTerm ld)
+                            let objRec ld = ObjectReceiver(localDeclTerm ld, ld.tp)
+
                             objRec oldInstDecl, objRec newInstDecl
                     // the input types and arguments and the translations for the arguments
                     // parent type parameters and instanceInputs are empty if static
@@ -1035,8 +988,8 @@ module Translation =
                         if isStatic then
                             ctxNb
                         else
-                            ctxNb.setThisDecl (oldInstDecl)
-                    
+                            ctxNb.setThisDecl (newInstDecl)
+
                     // The body yields the proof of the lemma.
                     let proof =
                         match bdD with
@@ -1152,8 +1105,8 @@ module Translation =
 
             reduce abs // reduce eta-contracts
         and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
-            let realToInt eReal tInt =
-                EMemberRef(ObjectReceiver(eReal), Path [ "Floor" ], [])
+            let realToInt eReal tReal tInt =
+                EMemberRef(ObjectReceiver(eReal, tReal), Path [ "Floor" ], [])
 
             match tO, tN with
             | TUnit, TUnit
@@ -1165,8 +1118,8 @@ module Translation =
             | TReal _, TReal _
             | TBitVector _, TBitVector _
             | TObject, TObject -> tO, tN, (id, id)
-            | TInt _, TReal _ -> tO, tN, ((fun e -> ETypeConversion(e, tN)), (fun e -> realToInt e tO))
-            | TReal _, TInt _ -> tO, tN, ((fun e -> realToInt e tN), (fun e -> ETypeConversion(e, tO)))
+            | TInt _, TReal _ -> tO, tN, ((fun e -> ETypeConversion(e, tN)), (fun e -> realToInt e tN tO))
+            | TReal _, TInt _ -> tO, tN, ((fun e -> realToInt e tO tN), (fun e -> ETypeConversion(e, tO)))
             | _ ->
                 failwith (
                     unsupported "trying to translate "
@@ -1406,15 +1359,23 @@ module Translation =
             let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
         and exprOld (exprCtx: Context) (e: Expr) : Expr =
-            NameTranslator(true).expr (exprCtx.translateLocalDeclNames(
-                fun n ->
-                    let nO, _, _ = name n
-                    nO), e)
+            NameTranslator(true)
+                .expr (
+                    exprCtx.translateLocalDeclNames
+                        (fun n ->
+                            let nO, _, _ = name n
+                            nO),
+                    e
+                )
         and exprNew (exprCtx: Context) (e: Expr) : Expr =
-            NameTranslator(false).expr (exprCtx.translateLocalDeclNames(
-                fun n ->
-                    let _, nN, _ = name n
-                    nN), e)
+            NameTranslator(false)
+                .expr (
+                    exprCtx.translateLocalDeclNames
+                        (fun n ->
+                            let _, nN, _ = name n
+                            nN),
+                    e
+                )
 
         /// entry point for running the translation
         member this.doTranslate() = decls ctxO ctxN declsD

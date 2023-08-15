@@ -695,7 +695,7 @@ module YIL =
         // reference to a static child in a class/module
         | StaticReceiver of ClassType
         // reference to a dynamic child in an object of a class/datatype
-        | ObjectReceiver of Expr
+        | ObjectReceiver of Expr * Type
 
     and Quantifier =
         | Forall
@@ -1937,7 +1937,7 @@ module YIL =
 
             match rcv with
             | StaticReceiver (ct) -> this.classType (ct) |> dot // ClassType --> path, tpargs
-            | ObjectReceiver (e) -> this.exprWithPrecedence e 11 pctx |> dot // e should be a primary expression
+            | ObjectReceiver (e, _) -> this.exprWithPrecedence e 11 pctx |> dot // e should be a primary expression
 
         member this.caseStatement (case: Case) (pctx: Context) =
             // Remove the extra braces

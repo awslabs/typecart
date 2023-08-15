@@ -385,7 +385,7 @@ module Traverser =
         default this.receiver(ctx, rcv) =
             match rcv with
             | StaticReceiver ct -> StaticReceiver(this.classType (ctx, ct))
-            | ObjectReceiver e -> ObjectReceiver(this.expr (ctx, e))
+            | ObjectReceiver (e, tp) -> ObjectReceiver(this.expr (ctx, e), this.tp (ctx, tp))
 
         /// transforms a constructor in a datatype
         abstract member constructor : Context * cons: DatatypeConstructor -> DatatypeConstructor
