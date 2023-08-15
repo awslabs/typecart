@@ -159,36 +159,6 @@ module Translation =
                             EVar(ctx.thisDecl.Value.name)
                         else
                             EThis
-                    (* | EDecls _ ->
-                        // lemma calls are not allowed inside, so we need to move them out.
-                        match eDefault with
-                        | EDecls(vars, lhs, rhs) ->
-                            let lemmass, rhss =
-                                List.unzip (List.map (fun (upd: UpdateRHS) ->
-                                    match upd.df with
-                                    | EBlock b when not b.IsEmpty ->
-                                        let lemmaCalls = b[..b.Length - 1]
-                                        let updWithoutLemmaCall = { upd with df = b[b.Length - 1] }
-                                        (lemmaCalls, updWithoutLemmaCall)
-                                    | _ -> ([], upd)
-                                    ) rhs)
-                            let lemmas = List.concat lemmass
-                            if lemmas.IsEmpty then
-                                eDefault
-                            else
-                                EBlock(lemmas @ [ EDecls(vars, lhs, rhss) ])
-                        | _ -> failwith "impossible"
-                    | ELet _ ->
-                        // lemma calls are not allowed inside, so we need to move them out.
-                        match eDefault with
-                        | ELet(localDecls, exact, orfail, exprs, df, body) ->
-                            match body with
-                            | EBlock b when not b.IsEmpty ->
-                                let lemmaCalls = b[..b.Length - 1]
-                                let eLetWithoutLemmaCall = ELet(localDecls, exact, orfail, exprs, df, b[b.Length - 1])
-                                EBlock(lemmaCalls @ [ eLetWithoutLemmaCall ])
-                            | _ -> eDefault
-                        | _ -> failwith "impossible" *)
                     | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
                         let methodDeclO = ctx.lookupByPathOption (method)
                         let methodDeclN = newCtx.lookupByPathOption (method)
@@ -207,7 +177,8 @@ module Translation =
                             | Method(methodType = IsLemma), _
                             | Method(methodType = IsMethod), _ -> eDefault
                             | Method (_, _, _, _, _, _, _, _, _, _, isStatic, _, _), Method _ ->
-                                // prepend a lemma call to this method application
+                                // Prepend a lemma call to this method application.
+                                // See also the translation for Diff.Method below in declSameOrUpdate.
                                 let parentDeclO = ctx.lookupByPath (method.parent)
                                 let parentDeclN = newCtx.lookupByPath (method.parent)
                                 // the following are only needed if the method is not static, but it's easier to compute them in any case
@@ -226,17 +197,16 @@ module Translation =
                                         LocalDecl(varname parentDeclN.name, tN, false)
                                     )
 
-                                let oldExprCtx =
-                                    if isStatic then
-                                        ctx
-                                    else
-                                        ctx.setThisDecl (oldInstDecl)
-
-                                let newExprCtx =
-                                    if isStatic then
-                                        newCtx
-                                    else
-                                        newCtx.setThisDecl (newInstDecl)
+                                // Do not set thisDecl again because "this" is the current method
+                                // instead of the method begin called.
+                                // Do not use exprOld and exprNew because they add the old/new suffix again.
+                                //
+                                // Warning: newCtx did not keep track of the local variables, so we add all
+                                // local variables from ctx to newNameCtx. This also adds variables with "old" suffixes
+                                // to the new context, so we assume that there are no name collisions here, i.e.,
+                                // users will not write variables with names "..._O" or "..._N".
+                                let oldNameCtx = ctx
+                                let newNameCtx = newCtx.add (ctx.vars)
 
                                 let instanceInputs =
                                     if isStatic then
@@ -245,8 +215,8 @@ module Translation =
                                         match receiver with
                                         | StaticReceiver _ -> failwith "unexpected static receiver"
                                         | ObjectReceiver (r, _) ->
-                                            [ exprOld oldExprCtx r
-                                              exprNew newExprCtx r ]
+                                            [ NameTranslator(true).expr (oldNameCtx, r)
+                                              NameTranslator(false).expr (newNameCtx, r) ]
 
                                 let instanceTypeArgs =
                                     match receiver with
@@ -277,8 +247,11 @@ module Translation =
                                 let typeParams = Utils.listInterleave (tsO, tsN)
 
                                 // the old inputs and new inputs
-                                let insO = List.map (exprOld oldExprCtx) exprs
-                                let insN = List.map (exprNew newExprCtx) exprs
+                                let insO =
+                                    List.map (fun e -> NameTranslator(true).expr (oldNameCtx, e)) exprs
+
+                                let insN =
+                                    List.map (fun e -> NameTranslator(false).expr (newNameCtx, e)) exprs
 
                                 let inputs =
                                     instanceInputs
@@ -293,7 +266,7 @@ module Translation =
                                               tpargs = [] }
 
                                         StaticReceiver(ct),
-                                        method.parent.child (method.parent.name + "_" + method.name + "_bc")
+                                        method.parent.parent.child (method.parent.name + "_" + method.name + "_bc")
                                     | Module _ -> receiver, method.parent.child (method.name + "_bc")
                                     | _ -> failwith (unsupported $"parent declaration {parentDeclO}")
 
@@ -356,7 +329,12 @@ module Translation =
             : Expr option =
             // generate proof for backward compatibility theorem
             let eO =
-                PrependLemmaCalls(newCtx)
+                PrependLemmaCalls(
+                    newCtx.translateLocalDeclNames
+                        (fun n ->
+                            let _, nN, _ = name n
+                            nN)
+                )
                     .expr (
                         oldCtx.translateLocalDeclNames
                             (fun n ->

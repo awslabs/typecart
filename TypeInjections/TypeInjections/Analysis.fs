@@ -473,7 +473,7 @@ module Analysis =
             let rcEs (es: Expr list) = List.map rcE es
             let tryRemovingReceiver (r: Receiver) (m: Path) (result: Expr) =
                 match r with
-                | StaticReceiver ct ->
+                | StaticReceiver _ ->
                     if this.path(ctx, m).names.Length = 1 then
                         result  // remove the receiver completely
                     else
