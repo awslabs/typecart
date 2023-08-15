@@ -386,16 +386,16 @@ module Translation =
                     // x_N == forward(x_O)
                     EEqual(localDeclTerm inN, oldToNew)
                 else
-                    match newToOld with
+                    match oldToNew with
                     | EFun (vars, cond, _, body) ->
                         // function f: A -> B
-                        // NewToOld is (a_O: A_O) => B_backward(f_N(A_forward(a_O)))
-                        // forall a_O: A_O :: B_backward(f_N(A_forward(a_O))) == f_O(A_O)
+                        // oldToNew is (a_N: A_N) => B_forward(f_O(A_backward(a_N)))
+                        // forall a_N: A_N :: f_N(A_N) == B_forward(f_O(A_backward(a_O)))
                         EQuant(
                             Forall,
                             vars,
                             Option.map fst cond,
-                            EEqual(body, EAnonApply(localDeclTerm inO, List.map localDeclTerm vars))
+                            EEqual(EAnonApply(localDeclTerm inN, List.map localDeclTerm vars), body)
                         )
                     | _ ->
                         // not a function
