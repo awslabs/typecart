@@ -1040,6 +1040,9 @@ module YIL =
             Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths, thisDecl)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
+        // add old or new suffix to all LocalDecls
+        member this.translateLocalDeclNames(f: string -> string) : Context =
+            Context(prog, currentDecl, tpvars, List.map (fun (ld: LocalDecl) -> LocalDecl(f ld.name, ld.tp, ld.ghost)) vars, pos, importPaths, thisDecl)
         
         // set the LocalDecl for "this"
         member this.setThisDecl(d: LocalDecl) : Context =

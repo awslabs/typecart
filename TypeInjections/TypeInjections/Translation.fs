@@ -292,8 +292,8 @@ module Translation =
                                         match receiver with
                                         | StaticReceiver _ -> failwith "unexpected static receiver"
                                         | ObjectReceiver r ->
-                                            [ fst (expr oldCtx r)
-                                              snd (expr newCtx r) ]
+                                            [ exprOld oldCtx r
+                                              exprNew newCtx r ]
 
                                 let typeArgsOf (ins: Expr) =
                                     match ins with
@@ -344,8 +344,8 @@ module Translation =
                                 let typeParams = Utils.listInterleave (tsO, tsN)
 
                                 // the old inputs and new inputs
-                                let insO, insN =
-                                    List.unzip (List.map (expr oldCtx) exprs)
+                                let insO = List.map (exprOld oldCtx) exprs
+                                let insN = List.map (exprNew newCtx) exprs
 
                                 let inputs =
                                     instanceInputs @ instanceTypeArgTranslationInputs @ tsT @ insO @ insN
@@ -419,8 +419,10 @@ module Translation =
             (resultOTranslation: Expr -> Expr)
             : Expr option =
             // generate proof for backward compatibility theorem
-            let eO =
-                PrependLemmaCalls(newCtx).expr (oldCtx, e)
+            let eO = PrependLemmaCalls(newCtx).expr (oldCtx.translateLocalDeclNames(
+                fun n ->
+                    let nO, _, _ = name n
+                    nO), e)
 
             Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
@@ -944,13 +946,12 @@ module Translation =
                         else
                             ctxOh.setThisDecl (oldInstDecl)
 
-                    let inputRequiresO, _ =
+                    let inputRequiresO =
                         ins_o.conditions
                         |> List.map
                             (fun c ->
-                                let es = expr oldHeaderCtx (fst c)
-                                (fst es, snd c), (snd es, snd c))
-                        |> List.unzip
+                                let es = exprOld oldHeaderCtx (fst c)
+                                (es, snd c))
 
                     // new requires clauses become ensures arguments
                     let newInputCtx =
@@ -959,13 +960,12 @@ module Translation =
                         else
                             ctxNi.setThisDecl (newInstDecl)
 
-                    let _, inputEnsuresN =
+                    let inputEnsuresN =
                         ins_n.conditions
                         |> List.map
                             (fun c ->
-                                let es = expr newInputCtx (fst c)
-                                (fst es, snd c), (snd es, snd c))
-                        |> List.unzip
+                                let es = exprNew newInputCtx (fst c)
+                                (es, snd c))
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
@@ -1405,10 +1405,16 @@ module Translation =
         and tpAbstracted (x: string, t_o: Type, t_n: Type) =
             let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
-        and expr (exprCtx: Context) (e: Expr) : Expr * Expr =
-            let eO = NameTranslator(true).expr (exprCtx, e)
-            let eN = NameTranslator(false).expr (exprCtx, e)
-            eO, eN
+        and exprOld (exprCtx: Context) (e: Expr) : Expr =
+            NameTranslator(true).expr (exprCtx.translateLocalDeclNames(
+                fun n ->
+                    let nO, _, _ = name n
+                    nO), e)
+        and exprNew (exprCtx: Context) (e: Expr) : Expr =
+            NameTranslator(false).expr (exprCtx.translateLocalDeclNames(
+                fun n ->
+                    let _, nN, _ = name n
+                    nN), e)
 
         /// entry point for running the translation
         member this.doTranslate() = decls ctxO ctxN declsD
