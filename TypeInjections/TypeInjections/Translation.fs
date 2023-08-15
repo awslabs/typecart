@@ -128,6 +128,30 @@ module Translation =
                         let nO, nN, _ = typearg (plainTypeArg n)
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
+        and ThisSubstitutor =
+            { new Traverser.Identity() with
+                override this.expr(ctx: Context, e: Expr) =
+                    match e with
+                    | EThis ->
+                        if ctx.thisDecl.IsSome then
+                            EVar(ctx.thisDecl.Value.name)
+                        else
+                            EThis
+                    | _ -> this.exprDefault (ctx, e) }
+        and GetTypeArgsFromReceiver =
+            { new Traverser.Identity() with
+                override this.receiver(ctx: Context, rcv: Receiver) =
+                    match rcv with
+                    | StaticReceiver ct -> StaticReceiver(this.classType (ctx, ct))
+                    | ObjectReceiver e -> ObjectReceiver(this.expr (ctx, e))
+                override this.expr(ctx: Context, e: Expr) =
+                    match e with
+                    | EThis ->
+                        if ctx.thisDecl.IsSome then
+                            EVar(ctx.thisDecl.Value.name)
+                        else
+                            EThis
+                    | _ -> this.exprDefault (ctx, e) }
         and PrependLemmaCalls (newCtx: Context) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -214,6 +238,13 @@ module Translation =
                                 let parentDeclO = ctx.lookupByPath (method.parent)
                                 let parentDeclN = newCtx.lookupByPath (method.parent)
                                 // the following are only needed if the method is not static, but it's easier to compute them in any case
+                                let receiverDecl =
+                                    if isStatic then
+                                        None
+                                    else
+                                        match receiver with
+                                        | StaticReceiver _ -> failwith "unexpected static receiver"
+                                        | ObjectReceiver r -> None // Some(ctx.lookupByPath(r))
                                 let parentTvs_o = parentDeclO.tpvars
                                 let parentTvs_n = parentDeclN.tpvars
                                 let parentO, parentN, parentT = path (method.parent)
@@ -264,6 +295,29 @@ module Translation =
                                             [ fst (expr oldCtx r)
                                               snd (expr newCtx r) ]
 
+                                let typeArgsOf (ins: Expr) =
+                                    match ins with
+                                    | EMemberRef(_, _, tpargs) -> tpargs
+                                    | EVar _ -> []
+                                    | ESeqSelect _ -> [] // TODO
+                                    | EMethodApply(_, _, tpargs, _, _) -> tpargs // TODO
+                                    | _ -> failwith (unsupported "instance type")
+                                       
+                                let instanceTypeArgTranslationInputs =
+                                    if isStatic then
+                                        []
+                                    else
+                                        let instances =
+                                            match receiver with
+                                            | StaticReceiver _ -> failwith "unexpected static receiver"
+                                            | ObjectReceiver r ->
+                                                [ ThisSubstitutor.expr(oldCtx, r)
+                                                  ThisSubstitutor.expr(newCtx, r) ]
+                                        let tpargs = List.zip (typeArgsOf instances[0]) (typeArgsOf instances[1])
+                                        tpargs |> List.collect (fun (tO: Type, tN: Type) ->
+                                            let _, _, (tT1, tT2) = tpAbstracted("x", tO, tN)
+                                            [tT1; tT2])
+                                
                                 let receiverO, receiverN =
                                     if isStatic then
                                         // ignores the instances above
@@ -293,9 +347,8 @@ module Translation =
                                 let insO, insN =
                                     List.unzip (List.map (expr oldCtx) exprs)
 
-                                // TODO: wrong parentTsT
                                 let inputs =
-                                    instanceInputs @ parentTsT @ tsT @ insO @ insN
+                                    instanceInputs @ instanceTypeArgTranslationInputs @ tsT @ insO @ insN
 
                                 let lemmaReceiver, lemmaName =
                                     match receiver with
@@ -391,8 +444,6 @@ module Translation =
 
             let p = contextO.currentDecl.child (n)
             let pO, pN, pT = path p
-            let ctxOI = contextO.enter (n)
-            let ctxNI = contextN.enter (n)
 
             match dif with
             | Diff.Class (_, _, _, msD) ->
@@ -419,7 +470,25 @@ module Translation =
             | Diff.Import _ -> [ declO ] // Preserve all import statements
             | Diff.Export _ -> [] // Remove all export statements
             | Diff.DUnimplemented -> [ declO ]
-            | Diff.Module (_, msD) -> [ Module(n, decls ctxOI ctxNI msD, contextO.currentMeta ()) ]
+            | Diff.Module (name, msD) ->
+                let imports =
+                    List.choose
+                        (function
+                        | Import it -> Some it
+                        | _ -> None)
+
+                let ctxOm =
+                    List.fold
+                        (fun (ctx: Context) -> ctx.addImport)
+                        (contextO.enter(name.getOld).clearImport ())
+                        (imports (msD.getOld ()))
+
+                let ctxNm =
+                    List.fold
+                        (fun (ctx: Context) -> ctx.addImport)
+                        (contextN.enter(name.getNew).clearImport ())
+                        (imports (msD.getNew ()))
+                [ Module(n, decls ctxOm ctxNm msD, contextO.currentMeta ()) ]
             | Diff.TypeDef (_, tvsD, superD, exprD) ->
                 match declO with
                 | TypeDef (_, _, super, _, isNew, _) ->
@@ -492,6 +561,12 @@ module Translation =
 
             | Diff.Datatype (nameD, tvsD, ctrsD, msD) ->
                 // generate translation functions
+
+                let ctxOb =
+                    contextO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
+
+                let ctxNb =
+                    contextN.enter(nameD.getNew).addTpvars (tvsD.getNew ())
 
                 if not tvsD.isSameOrUpdated then
                     failwith (
@@ -661,7 +736,7 @@ module Translation =
                           emptyMeta
                       ) ]
 
-                let memberLemmas = decls ctxOI ctxNI msD
+                let memberLemmas = decls ctxOb ctxNb msD
                 // All paths to a lemma generated by a datatype function must insert "_bc" (already inserted elsewhere).
                 // We cannot wrap all declarations generated by members into a module because
                 // child modules cannot access anything in parent modules in Dafny.
@@ -707,7 +782,7 @@ module Translation =
 
                 translations @ memberLemmasWithPrefix
             // immutable fields with initializer yield a lemma, mutable fields yield nothing
-            | Diff.Field (_, tpD, dfD) when generateLemmaFor (ctxOI.currentDecl) ->
+            | Diff.Field (_, tpD, dfD) when generateLemmaFor (p) ->
                 match declO with
                 | Field (_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
                 | Field (_, t, _, _, _, _, _) ->
@@ -750,7 +825,7 @@ module Translation =
                 | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
             | Diff.Field _ -> [] // unchanged fields produce nothing
             // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-            | Diff.Method (_, tvsD, insD, outsD, bdD) when generateLemmaFor (ctxOI.currentDecl) ->
+            | Diff.Method (nameD, tvsD, insD, outsD, bdD) when generateLemmaFor (p) ->
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
@@ -761,6 +836,20 @@ module Translation =
                             unsupported "addition or deletion in type parameters: "
                             + p.ToString()
                         )
+                    let ctxOh =
+                        contextO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
+
+                    let ctxNh =
+                        contextN.enter(nameD.getNew).addTpvars (tvsD.getNew ())
+
+                    let ctxOi = ctxOh.add (insD.decls.getOld ())
+                    let ctxNi = ctxNh.add (insD.decls.getNew ())
+
+                    let ctxOb =
+                        ctxOi.add(outsD.namedDecls.getOld ()).enterBody ()
+
+                    let ctxNb =
+                        ctxNi.add(outsD.namedDecls.getNew ()).enterBody ()
                     // we ignore changes in in/output conditions here and only compare declarations
                     // in fact, ensures clauses (no matter if changed) are ignored entirely
                     (*if not (insD.decls.getUpdate().IsEmpty) then
@@ -849,32 +938,32 @@ module Translation =
                             @ insO @ insN
 
                     // old requires clauses applied to old arguments
-                    let oldCtx =
+                    let oldHeaderCtx =
                         if isStatic then
-                            ctxO
+                            ctxOh
                         else
-                            ctxO.setThisDecl (oldInstDecl)
+                            ctxOh.setThisDecl (oldInstDecl)
 
                     let inputRequiresO, _ =
                         ins_o.conditions
                         |> List.map
                             (fun c ->
-                                let es = expr oldCtx (fst c)
+                                let es = expr oldHeaderCtx (fst c)
                                 (fst es, snd c), (snd es, snd c))
                         |> List.unzip
 
                     // new requires clauses become ensures arguments
-                    let newCtx =
+                    let newInputCtx =
                         if isStatic then
-                            ctxN
+                            ctxNi
                         else
-                            ctxN.setThisDecl (newInstDecl)
+                            ctxNi.setThisDecl (newInstDecl)
 
                     let _, inputEnsuresN =
                         ins_n.conditions
                         |> List.map
                             (fun c ->
-                                let es = expr newCtx (fst c)
+                                let es = expr newInputCtx (fst c)
                                 (fst es, snd c), (snd es, snd c))
                         |> List.unzip
 
@@ -936,6 +1025,18 @@ module Translation =
                     let outSpec =
                         OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
+                    let oldBodyCtx =
+                        if isStatic then
+                            ctxOb
+                        else
+                            ctxOb.setThisDecl (oldInstDecl)
+
+                    let newBodyCtx =
+                        if isStatic then
+                            ctxNb
+                        else
+                            ctxNb.setThisDecl (oldInstDecl)
+                    
                     // The body yields the proof of the lemma.
                     let proof =
                         match bdD with
@@ -948,7 +1049,7 @@ module Translation =
                             match outputTypeT with
                             | Some ot ->
                                 bdO
-                                |> Option.bind (fun b -> proof oldCtx newCtx b resultN (fst ot))
+                                |> Option.bind (fun b -> proof oldBodyCtx newBodyCtx b resultN (fst ot))
                             | None -> Some(EBlock [])
                         | _ ->
                             // updated body: try to generate proof sketch
@@ -956,7 +1057,7 @@ module Translation =
                             match bodyO with
                             | Some bd ->
                                 match outputTypeT with
-                                | Some ot -> proof oldCtx newCtx bd resultN (fst ot)
+                                | Some ot -> proof oldBodyCtx newBodyCtx bd resultN (fst ot)
                                 | None -> Some(EBlock [])
                             | None ->
                                 // other cases: generate empty proof
