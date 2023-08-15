@@ -1556,8 +1556,25 @@ module YIL =
                 + (match r with
                    // ==> is 2
                    // && is 3
-                   | Some e -> (if q = Forall then expr 3 e + " ==> " + expr 3 b else expr 4 e + " && " + expr 4 b)
-                   | None -> expr 0 b)
+                   | Some e -> (if q = Forall then
+                                    expr 3 e + " ==> " +
+                                    (let body = expr 3 b
+                                     if body.Contains("\n") then
+                                         indented(body, false)
+                                     else
+                                         body)
+                                else
+                                    let remaining = expr 4 e + " && " + expr 4 b
+                                    if remaining.Contains("\n") then
+                                        indented(remaining, false)
+                                    else
+                                        remaining)
+                   | None ->
+                       let body = expr 0 b
+                       if body.Contains("\n") then
+                           indented(body, false)
+                       else
+                           body)
                 + (if 0 < precedence then ")" else "")
             | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
@@ -1648,8 +1665,7 @@ module YIL =
                     // no braces - Dafny parses them as sets
                     // In rare cases we may encounter precedence problems with blocks...
                     // so we need to add "(" and ")" here.
-                    "\n"
-                    + (if 0 < precedence then "(" else "")
+                    (if 0 < precedence then "(" else "")
                     + esS
                     + (if 0 < precedence then ")" else "")
             | ELet (v, x, orfail, lhs, d, e) ->
@@ -1661,7 +1677,7 @@ module YIL =
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
                 + (exprsNoBrExceptForSemicolon d ", ")
-                + "; "
+                + ";\n"
                 + (expr 0 e)
             | EIf (c, t, e) ->
                 let elsePart =
@@ -1669,8 +1685,20 @@ module YIL =
                     | None -> "" // avoid using exprO which prints out ";".
                     | Some e -> " else " + expr 0 e
 
+                let cStr = expr 0 c
+                let tStr = expr 0 t
                 let s =
-                    "if " + (expr 0 c) + " then " + (expr 0 t) + elsePart
+                    if cStr.Contains("\n") || tStr.Contains("\n") || elsePart.Contains("\n") then
+                        // a complicated if expression
+                        "if "
+                        + cStr
+                        + " then"
+                        + indented(tStr, false)
+                        + "\nelse"
+                        + indented(elsePart[6..], false)  // remove " else "
+                    else
+                        // a 1-line if expression
+                        "if " + (expr 0 c) + " then " + (expr 0 t) + elsePart
 
                 (if 0 < precedence then "(" else "")
                 + s
@@ -1722,7 +1750,7 @@ module YIL =
                     List.map (fun (c: Case) -> case c) (cases @ defCase)
 
                 "match "
-                + (expr 0 e)
+                + (expr 1 e)
                 + " "
                 + indentedBraced (listToString (csS, "\n"))
             | EDecls (vars, lhs, rhs) ->

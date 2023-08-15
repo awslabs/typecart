@@ -128,17 +128,43 @@ module Translation =
                         let nO, nN, _ = typearg (plainTypeArg n)
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
-        and ThisSubstitutor =
+        and ForwardLocalDeclTranslator (lds: LocalDecl list) =
             { new Traverser.Identity() with
+                // translate non-local variables a -> a_N
+                // translate local variables (a:A) -> A_forward(a)
+                override this.path(ctx: Context, p: Path) =
+                    let _, pN, _ = path p
+                    pN
+
                 override this.expr(ctx: Context, e: Expr) =
                     match e with
+                    | EVar n ->
+                        if ctx.lookupLocalDeclO(n).IsSome then
+                            e // locally bound variables in the new context are not translated
+                        elif List.exists (fun (x: LocalDecl) -> x.name = n) lds then
+                            // generate forward translation
+                            let ld =
+                                List.findBack (fun (x: LocalDecl) -> x.name = n) lds
+
+                            let _, _, (tT1, _) = tp (ld.tp, ld.tp)
+                            tT1 e
+                        else
+                            let _, nN, _ = name n
+                            EVar(nN)
                     | EThis ->
                         if ctx.thisDecl.IsSome then
                             EVar(ctx.thisDecl.Value.name)
                         else
                             EThis
-                    | _ -> this.exprDefault (ctx, e) }
-        and PrependLemmaCalls (newCtx: Context) =
+                    | _ -> this.exprDefault (ctx, e)
+
+                override this.tp(ctx: Context, t: Type) =
+                    match t with
+                    | TVar n ->
+                        let _, nN, _ = typearg (plainTypeArg n)
+                        TVar(fst nN)
+                    | _ -> this.tpDefault (ctx, t) }
+        and PrependLemmaCalls (oldCtx: Context, newCtx: Context) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
                     let pO, _, _ = path p
@@ -163,16 +189,9 @@ module Translation =
                         let methodDeclO = ctx.lookupByPathOption (method)
                         let methodDeclN = newCtx.lookupByPathOption (method)
 
-                        let ldsUsedInArguments =
-                            List.collect (fun expr -> Analysis.GatherLocalDecls().gather (ctx, expr)) exprs
-                        // We do not have the "new" equivalent for the "old" local variables.
-                        // So we would just not generate the lemma call if the old implementation involves
-                        // local variables.
-
                         if generateLemmaFor method
                            && methodDeclO.IsSome
-                           && methodDeclN.IsSome
-                           && ldsUsedInArguments.IsEmpty then
+                           && methodDeclN.IsSome then
                             match methodDeclO.Value, methodDeclN.Value with
                             | Method(methodType = IsLemma), _
                             | Method(methodType = IsMethod), _ -> eDefault
@@ -180,33 +199,14 @@ module Translation =
                                 // Prepend a lemma call to this method application.
                                 // See also the translation for Diff.Method below in declSameOrUpdate.
                                 let parentDeclO = ctx.lookupByPath (method.parent)
-                                let parentDeclN = newCtx.lookupByPath (method.parent)
-                                // the following are only needed if the method is not static, but it's easier to compute them in any case
-                                let parentTvs_o = parentDeclO.tpvars
-                                let parentTvs_n = parentDeclN.tpvars
-
-                                let oldInstDecl, newInstDecl, instancesTranslation =
-                                    let tO =
-                                        TApply(method, typeargsToTVars parentTvs_o)
-
-                                    let tN =
-                                        TApply(method, typeargsToTVars parentTvs_n)
-
-                                    localDecl2 (
-                                        LocalDecl(varname parentDeclO.name, tO, false),
-                                        LocalDecl(varname parentDeclN.name, tN, false)
-                                    )
-
                                 // Do not set thisDecl again because "this" is the current method
                                 // instead of the method begin called.
                                 // Do not use exprOld and exprNew because they add the old/new suffix again.
-                                //
-                                // Warning: newCtx did not keep track of the local variables, so we add all
-                                // local variables from ctx to newNameCtx. This also adds variables with "old" suffixes
-                                // to the new context, so we assume that there are no name collisions here, i.e.,
-                                // users will not write variables with names "..._O" or "..._N".
+
+                                let newLocalDecls =
+                                    List.filter (fun ld -> not (List.contains ld oldCtx.vars)) ctx.vars
+
                                 let oldNameCtx = ctx
-                                let newNameCtx = newCtx.add (ctx.vars)
 
                                 let instanceInputs =
                                     if isStatic then
@@ -216,7 +216,8 @@ module Translation =
                                         | StaticReceiver _ -> failwith "unexpected static receiver"
                                         | ObjectReceiver (r, _) ->
                                             [ NameTranslator(true).expr (oldNameCtx, r)
-                                              NameTranslator(false).expr (newNameCtx, r) ]
+                                              ForwardLocalDeclTranslator(newLocalDecls)
+                                                  .expr (newCtx, r) ]
 
                                 let instanceTypeArgs =
                                     match receiver with
@@ -251,7 +252,11 @@ module Translation =
                                     List.map (fun e -> NameTranslator(true).expr (oldNameCtx, e)) exprs
 
                                 let insN =
-                                    List.map (fun e -> NameTranslator(false).expr (newNameCtx, e)) exprs
+                                    List.map
+                                        (fun e ->
+                                            ForwardLocalDeclTranslator(newLocalDecls)
+                                                .expr (newCtx, e))
+                                        exprs
 
                                 let inputs =
                                     instanceInputs
@@ -327,22 +332,24 @@ module Translation =
             (resultN: Expr)
             (resultOTranslation: Expr -> Expr)
             : Expr option =
-            // generate proof for backward compatibility theorem
-            let eO =
-                PrependLemmaCalls(
-                    newCtx.translateLocalDeclNames
-                        (fun n ->
-                            let _, nN, _ = name n
-                            nN)
-                )
-                    .expr (
-                        oldCtx.translateLocalDeclNames
-                            (fun n ->
-                                let nO, _, _ = name n
-                                nO),
-                        e
-                    )
             // without lemma calls: let eO = exprOld oldCtx e
+            //
+            // generate proof for backward compatibility theorem
+            let oldCtxWithSuffix =
+                oldCtx.translateLocalDeclNames
+                    (fun n ->
+                        let nO, _, _ = name n
+                        nO)
+
+            let newCtxWithSuffix =
+                newCtx.translateLocalDeclNames
+                    (fun n ->
+                        let _, nN, _ = name n
+                        nN)
+
+            let eO =
+                PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix)
+                    .expr (oldCtxWithSuffix, e)
 
             Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
