@@ -306,8 +306,9 @@ module Analysis =
                 match d with
                 | Import it ->
                     match it with
-                    | ImportDefault _ ->
-                        this.declDefault(ctx, d)
+                    | ImportDefault (_, l) ->
+                        this.addPath(ctx.currentDecl, l.name, l)
+                        [ d ]
                     | ImportEquals(_, l, r) ->
                         // Special case: we want the LHS name to map to the actual path.
                         // We do not want to call this.declDefault() which calls this.path().
