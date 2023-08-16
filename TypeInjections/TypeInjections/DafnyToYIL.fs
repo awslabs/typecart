@@ -724,7 +724,7 @@ module DafnyToYIL =
             if p.names.Item(0) = DafnySystem then
                 let e =
                     match r with
-                    | Y.ObjectReceiver (e) -> e
+                    | Y.ObjectReceiver (e, _) -> e
                     | Y.StaticReceiver _ -> error "Unknown receiver"
 
                 if p.names.Item(1).StartsWith(DafnyTuple) then
@@ -1207,7 +1207,7 @@ module DafnyToYIL =
         | :? StaticReceiverExpr as r ->
             let ct = classType (r.Type)
             Y.StaticReceiver(ct)
-        | _ -> Y.ObjectReceiver(expr r)
+        | _ -> Y.ObjectReceiver(expr r, tp r.Type)
 
     and unqualifyReceiver (recv: Y.Receiver) : Y.Receiver =
         match recv with

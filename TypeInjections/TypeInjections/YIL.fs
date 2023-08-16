@@ -695,7 +695,7 @@ module YIL =
         // reference to a static child in a class/module
         | StaticReceiver of ClassType
         // reference to a dynamic child in an object of a class/datatype
-        | ObjectReceiver of Expr
+        | ObjectReceiver of Expr * Type
 
     and Quantifier =
         | Forall
@@ -889,6 +889,19 @@ module YIL =
     *)
     let lookupByPath (prog: Program, path: Path) : Decl = lookupAncestorsByPath(prog, path).Head
 
+    (* as above, but do not fail when the path does not exist *)
+    let rec lookupByPathOption (prog: Program, path: Path) : Decl option =
+        if path.isRoot then
+            Some(Module(prog.name, prog.decls, emptyMeta))
+        else
+            lookupByPathOption (prog, path.parent)
+            |> Option.bind (fun parentDecl ->
+                let children = parentDecl.children
+                List.tryFind (fun (x: Decl) -> x.name = path.name) children
+                |> Option.orElseWith (fun () -> 
+                    let implChildren = (implicitChildren parentDecl)
+                    List.tryFind (fun (x: Decl) -> x.name = path.name) implChildren))
+
     (* as above, but returns a constructor *)
     let lookupConstructor (prog: Program, path: Path) : DatatypeConstructor =
         match lookupByPath (prog, path.parent) with
@@ -941,6 +954,7 @@ module YIL =
         member this.vars = vars
         member this.lookupCurrent() = lookupByPath (prog, currentDecl)
         member this.lookupByPath(p: Path) = lookupByPath (prog, p)
+        member this.lookupByPathOption(p: Path) = lookupByPathOption (prog, p)
         member this.pos = pos
         
         member this.thisDecl = thisDecl
@@ -1026,6 +1040,9 @@ module YIL =
             Context(prog, currentDecl, tpvars, List.append vars ds, pos, importPaths, thisDecl)
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
+        // add old or new suffix to all LocalDecls
+        member this.translateLocalDeclNames(f: string -> string) : Context =
+            Context(prog, currentDecl, tpvars, List.map (fun (ld: LocalDecl) -> LocalDecl(f ld.name, ld.tp, ld.ghost)) vars, pos, importPaths, thisDecl)
         
         // set the LocalDecl for "this"
         member this.setThisDecl(d: LocalDecl) : Context =
@@ -1326,6 +1343,9 @@ module YIL =
         member this.exprsNoBr (es: Expr list) (sep: string) (pctx: Context) =
             listToString (List.map (fun e -> this.expr e pctx) es, sep)
 
+        member this.exprsNoBrWithPrecedence (es: Expr list) (precedence: int) (sep: string) (pctx: Context) =
+            listToString (List.map (fun e -> this.exprWithPrecedence e precedence pctx) es, sep)
+
         member this.exprs (es: Expr list) (pctx: Context) =
             "(" + (this.exprsNoBr es ", " pctx) + ")"
 
@@ -1492,6 +1512,8 @@ module YIL =
             let exprs es = this.exprs es pctx
             let exprO e sep = this.exprO (e, sep, pctx)
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
+            // we need to add parentheses in var a := (b; c);
+            let exprsNoBrExceptForSemicolon es sep = this.exprsNoBrWithPrecedence es 1 sep pctx
 
             let dims ds = this.dims (ds, pctx)
             let receiver r = match r with
@@ -1534,8 +1556,25 @@ module YIL =
                 + (match r with
                    // ==> is 2
                    // && is 3
-                   | Some e -> (if q = Forall then expr 3 e + " ==> " + expr 3 b else expr 4 e + " && " + expr 4 b)
-                   | None -> expr 0 b)
+                   | Some e -> (if q = Forall then
+                                    expr 3 e + " ==> " +
+                                    (let body = expr 3 b
+                                     if body.Contains("\n") then
+                                         indented(body, false)
+                                     else
+                                         body)
+                                else
+                                    let remaining = expr 4 e + " && " + expr 4 b
+                                    if remaining.Contains("\n") then
+                                        indented(remaining, false)
+                                    else
+                                        remaining)
+                   | None ->
+                       let body = expr 0 b
+                       if body.Contains("\n") then
+                           indented(body, false)
+                       else
+                           body)
                 + (if 0 < precedence then ")" else "")
             | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
@@ -1624,17 +1663,21 @@ module YIL =
                     let sts = List.map (fun x -> this.statement x pctx) esNonEmpty[..esNonEmpty.Length - 2]
                     let esS = String.concat "\n" (sts @ [ expr 0 (esNonEmpty.Item(esNonEmpty.Length - 1)) ])
                     // no braces - Dafny parses them as sets
-                    "\n" + esS
+                    // In rare cases we may encounter precedence problems with blocks...
+                    // so we need to add "(" and ")" here.
+                    (if 0 < precedence then "(" else "")
+                    + esS
+                    + (if 0 < precedence then ")" else "")
             | ELet (v, x, orfail, lhs, d, e) ->
                 "var "
-                + (exprsNoBr lhs ", ")
+                + (exprsNoBrExceptForSemicolon lhs ", ")
                 + (match (x, orfail) with
                    | true, false -> " := "
                    | true, true -> " :- "
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
-                + (exprsNoBr d ", ")
-                + "; "
+                + (exprsNoBrExceptForSemicolon d ", ")
+                + ";\n"
                 + (expr 0 e)
             | EIf (c, t, e) ->
                 let elsePart =
@@ -1642,8 +1685,20 @@ module YIL =
                     | None -> "" // avoid using exprO which prints out ";".
                     | Some e -> " else " + expr 0 e
 
+                let cStr = expr 0 c
+                let tStr = expr 0 t
                 let s =
-                    "if " + (expr 0 c) + " then " + (expr 0 t) + elsePart
+                    if cStr.Contains("\n") || tStr.Contains("\n") || elsePart.Contains("\n") then
+                        // a complicated if expression
+                        "if "
+                        + cStr
+                        + " then"
+                        + indented(tStr, false)
+                        + "\nelse"
+                        + indented(elsePart[6..], false)  // remove " else "
+                    else
+                        // a 1-line if expression
+                        "if " + (expr 0 c) + " then " + (expr 0 t) + elsePart
 
                 (if 0 < precedence then "(" else "")
                 + s
@@ -1674,7 +1729,7 @@ module YIL =
                     | None -> ""
 
                 sprintf "%swhile (%s)%s" label (expr 0 c) (expr 0 e)
-            | EReturn (es) -> (exprsNoBr es ", ")
+            | EReturn (es) -> (exprsNoBrExceptForSemicolon es ", ")
             | EBreak l ->
                 let label =
                     match l with
@@ -1695,7 +1750,7 @@ module YIL =
                     List.map (fun (c: Case) -> case c) (cases @ defCase)
 
                 "match "
-                + (expr 0 e)
+                + (expr 1 e)
                 + " "
                 + indentedBraced (listToString (csS, "\n"))
             | EDecls (vars, lhs, rhs) ->
@@ -1706,7 +1761,7 @@ module YIL =
                         "var "
                 
                 varQual
-                + (exprsNoBr lhs ", ")
+                + (exprsNoBrExceptForSemicolon lhs ", ")
                 + (this.updates rhs pctx)
             | EUpdate (ns, u) ->
                 let lhsExprs = List.map (expr 0) ns
@@ -1910,7 +1965,7 @@ module YIL =
 
             match rcv with
             | StaticReceiver (ct) -> this.classType (ct) |> dot // ClassType --> path, tpargs
-            | ObjectReceiver (e) -> this.expr e pctx |> dot
+            | ObjectReceiver (e, _) -> this.exprWithPrecedence e 11 pctx |> dot // e should be a primary expression
 
         member this.caseStatement (case: Case) (pctx: Context) =
             // Remove the extra braces
