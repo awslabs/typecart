@@ -599,7 +599,18 @@ module Analysis =
             
             // We need to gather the paths at the beginning before filtering joint/old/new.
             let allPathsInProg = GatherAllPaths().gather(prog)
-            let allPaths = List.foldBack (Map.foldBack Map.add) (List.map (GatherAllPaths().gather) otherProgs) allPathsInProg
+            let addPaths (m: Path) (ps: Map<string, Path>) (result: Map<Path, Map<string, Path>>): Map<Path, Map<string, Path>> =
+                let pathMapOpt = result.TryFind(m)
+                let pathMap = defaultArg pathMapOpt Map.empty
+                let addPath (s: string) (p: Path) (pm: Map<string, Path>) =
+                    // We should not be updating paths here because the new one has a lower priority.
+                    if pm.ContainsKey(s) then
+                        pm
+                    else
+                        pm.Add(s, p)
+                let newPathMap = Map.foldBack addPath ps pathMap
+                result.Add(m, newPathMap)
+            let allPaths = List.foldBack (Map.foldBack addPaths) (List.map (GatherAllPaths().gather) otherProgs) allPathsInProg
             let visiblePaths = GatherVisiblePaths().gather(prog, allPaths)
 
             passes
