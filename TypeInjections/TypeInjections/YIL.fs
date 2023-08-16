@@ -1548,33 +1548,33 @@ module YIL =
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToDecimalString()
             | EQuant (q, lds, r, b) ->
+                let forallCondition =
+                    match q, r with
+                    | Forall, Some e ->
+                        // ==> is 2
+                        let cond = expr 3 e
+                        if cond.Contains("\n") then
+                            indented(cond, false) + " ==>"
+                        else
+                            " " + cond + " ==>"
+                    | _ -> ""
+                let body =
+                    match q, r with
+                    | Forall, Some _ ->
+                        expr 3 b // ==> is 2
+                    | Exists, Some e ->
+                        expr 4 e + " && " + expr 4 b // && is 3
+                    | _ -> expr 1 b // ; is 0
                 (if 0 < precedence then "(" else "")
                 + q.ToString()
                 + " "
                 + this.localDeclsBr (lds, false)
-                + " :: "
-                + (match r with
-                   // ==> is 2
-                   // && is 3
-                   | Some e -> (if q = Forall then
-                                    expr 3 e + " ==> " +
-                                    (let body = expr 3 b
-                                     if body.Contains("\n") then
-                                         indented(body, false)
-                                     else
-                                         body)
-                                else
-                                    let remaining = expr 4 e + " && " + expr 4 b
-                                    if remaining.Contains("\n") then
-                                        indented(remaining, false)
-                                    else
-                                        remaining)
-                   | None ->
-                       let body = expr 0 b
-                       if body.Contains("\n") then
-                           indented(body, false)
-                       else
-                           body)
+                + " ::"
+                + forallCondition
+                + (if body.Contains("\n") then
+                       indented(body, false)
+                   else
+                       " " + body)
                 + (if 0 < precedence then ")" else "")
             | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
