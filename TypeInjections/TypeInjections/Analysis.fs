@@ -156,25 +156,6 @@ module Analysis =
         member this.gather(prog: Program) =
             this.progDefault(prog) |> ignore
             result
-    
-    /// Returns a list of LocalDecls that an Expr uses.
-    type GatherLocalDecls() =
-        inherit Traverser.Identity()
-        
-        let mutable result: LocalDecl list = []
-        
-        override this.expr(ctx: Context, e: Expr) =
-            match e with
-            | EVar n ->
-                let ldO = ctx.lookupLocalDeclO(n)
-                if ldO.IsSome then
-                    result <- ldO.Value :: result
-            | _ -> ()
-            this.exprDefault(ctx, e)
-        
-        member this.gather(ctx: Context, e: Expr): LocalDecl list =
-            this.expr(ctx, e) |> ignore
-            result
 
     /// filters declarations by applying a predicate to their path;
     /// prefix imports to removed declarations
