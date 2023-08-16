@@ -233,9 +233,15 @@ module Typecart =
                     .Pipeline(combinePipeline)
                     .apply (
                         combineYIL,
-                        [ jointYILpreserved
-                          oldYILpreserved
-                          newYILpreserved ]
+                        [ Analysis
+                            .WrapTopDecls(jointPrefix)
+                              .prog jointYILpreserved
+                          Analysis
+                              .WrapTopDecls(oldOrNewPrefix (true))
+                              .prog oldYILpreserved
+                          Analysis
+                              .WrapTopDecls(oldOrNewPrefix (false))
+                              .prog newYILpreserved ]
                     )
 
             outputWriter.processCombine (combineYILresult)
