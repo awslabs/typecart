@@ -123,7 +123,7 @@ module Differ =
         | Method (lO, nO, tsO, iO, oO, modO, readO, decrO, bO, gO, sO, qO, _),
           Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, qN, _) ->
             nO = nN
-            && lO = lN
+            && methodTypeSimilar (lO, lN)
             && gO = gN
             && sO = sN
             && qO = qN
@@ -134,6 +134,13 @@ module Differ =
         | Datatype (nO, tsO, csO, msO, _), TypeDef (nN, tsN, spN, prN, isNN, _) -> nO = nN
         | TypeDef (nO, tsO, spO, prO, isNO, _), Datatype (nN, tsN, csN, msN, _) -> nO = nN
         | _ -> false
+
+    and methodTypeSimilar (old: MethodType, nw: MethodType) =
+        let functionOrPredicate : Set<MethodType> = Set.ofList [ IsFunction; IsPredicate ]
+
+        old = nw
+        || functionOrPredicate.Contains(old)
+           && functionOrPredicate.Contains(nw)
 
     /// diffs two similar declarations
     /// return None if not similar
@@ -161,7 +168,7 @@ module Differ =
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
         | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, qO, _),
           Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, qN, _) when
-            lO = lN && gO = gN && sO = sN && qO = qN ->
+            methodTypeSimilar(lO, lN) && gO = gN && sO = sN && qO = qN ->
             Some(
                 Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec (iO, iN), outputSpec (oO, oN), exprO (bO, bN))
             )

@@ -1557,6 +1557,16 @@ module YIL =
                             indented(cond, false) + " ==>"
                         else
                             " " + cond + " ==>"
+                    | Forall, None ->
+                        // we may want to split "==>" out.
+                        match b with
+                        | EBinOpApply(op, arg1, arg2) when this.binaryOperatorResolve(op) = "==>" ->
+                            let cond = expr 3 arg1
+                            if cond.Contains("\n") then
+                                indented(cond, false) + " ==>"
+                            else
+                                " " + cond + " ==>"
+                        | _ -> ""
                     | _ -> ""
                 let body =
                     match q, r with
@@ -1564,7 +1574,13 @@ module YIL =
                         expr 3 b // ==> is 2
                     | Exists, Some e ->
                         expr 4 e + " && " + expr 4 b // && is 3
-                    | _ -> expr 1 b // ; is 0
+                    | Forall, None ->
+                        // we may want to split "==>" out.
+                        match b with
+                        | EBinOpApply(op, arg1, arg2) when this.binaryOperatorResolve(op) = "==>" ->
+                            expr 3 arg2 // ==> is 2
+                        | _ -> expr 1 b // ; is 0
+                    | Exists, None -> expr 1 b // ; is 0
                 (if 0 < precedence then "(" else "")
                 + q.ToString()
                 + " "
