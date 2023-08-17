@@ -1482,7 +1482,7 @@ module YIL =
                 + (match l with
                    | None -> ""
                    | Some label -> label + ": ")
-                + (expr e)
+                + (this.exprWithPrecedence e 1 pctx)
                 + (match p with
                    | None -> ";"
                    | Some proof -> " by " + (this.statement proof pctx))
@@ -1786,7 +1786,7 @@ module YIL =
                 + (match l with
                    | None -> ""
                    | Some label -> label + ": ")
-                + (expr 0 e)
+                + (expr 1 e)
                 + (match p with
                    | None -> ""
                    | Some proof -> " by " + (this.statement proof pctx))
