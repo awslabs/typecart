@@ -332,8 +332,6 @@ module Translation =
             (resultN: Expr)
             (resultOTranslation: Expr -> Expr)
             : Expr option =
-            // without lemma calls: let eO = exprOld oldCtx e
-            //
             // generate proof for backward compatibility theorem
             let oldCtxWithSuffix =
                 oldCtx.translateLocalDeclNames
@@ -347,11 +345,21 @@ module Translation =
                         let _, nN, _ = name n
                         nN)
 
-            let eO =
-                PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix)
-                    .expr (oldCtxWithSuffix, e)
+            let generateLemmaCalls = true
 
-            Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
+            let eO =
+                if generateLemmaCalls then
+                    PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix)
+                        .expr (oldCtxWithSuffix, e)
+                else
+                    exprOld oldCtx e
+
+            let generateProof = true
+
+            if generateProof then
+                Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
+            else
+                Some(EBlock [])
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
             List.collect (decl contextO contextN) dsD.elements
         and decl (contextO: Context) (contextN: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
