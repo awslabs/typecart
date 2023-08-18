@@ -1655,12 +1655,12 @@ module YIL =
                 let leftPart =
                     match e1 with
                     | EBinOpApply (opL, _, _) when opL = op && List.contains resolvedOp [ "&&"; "||"; "&"; "|"; "^"; "<==" ] ->
-                        (expr 1 e1) // avoid excessive parentheses when we have an && or || chain
+                        (expr 0 e1) // avoid excessive parentheses when we have an && or || chain
                     | _ -> (expr (this.binaryOperatorPrecedenceLeft resolvedOp) e1)
                 let rightPart =
                     match e2 with
                     | EBinOpApply (opR, _, _) when opR = op && List.contains resolvedOp [ "==>" ] ->
-                        (expr 1 e2) // avoid excessive parentheses when we have an ==> chain
+                        (expr 0 e2) // avoid excessive parentheses when we have an ==> chain
                     | _ -> (expr (this.binaryOperatorPrecedenceRight resolvedOp) e2)
                 this.binaryOperator resolvedOp precedence leftPart rightPart
             | EAnonApply (f, es) -> (expr 11 f) + (exprs es)
