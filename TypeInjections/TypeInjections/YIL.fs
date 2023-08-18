@@ -1652,7 +1652,12 @@ module YIL =
             | EUnOpApply (op, e) -> this.unaryOperator op precedence (expr (this.unaryOperatorPrecedence op) e)
             | EBinOpApply (op, e1, e2) ->
                 let resolvedOp = this.binaryOperatorResolve op
-                this.binaryOperator resolvedOp precedence (expr (this.binaryOperatorPrecedenceLeft resolvedOp) e1)
+                let leftPart =
+                    match e1 with
+                    | EBinOpApply (opL, _, _) when opL = op ->
+                        (expr 1 e1) // avoid excessive parentheses when we have an && or || chain
+                    | _ -> (expr (this.binaryOperatorPrecedenceLeft resolvedOp) e1)
+                this.binaryOperator resolvedOp precedence leftPart
                     (expr (this.binaryOperatorPrecedenceRight resolvedOp) e2)
             | EAnonApply (f, es) -> (expr 11 f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) -> (receiver r) + m.name + (exprs es)
