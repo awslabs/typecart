@@ -1654,11 +1654,15 @@ module YIL =
                 let resolvedOp = this.binaryOperatorResolve op
                 let leftPart =
                     match e1 with
-                    | EBinOpApply (opL, _, _) when opL = op ->
+                    | EBinOpApply (opL, _, _) when opL = op && List.contains resolvedOp [ "&&"; "||"; "&"; "|"; "^"; "<==" ] ->
                         (expr 1 e1) // avoid excessive parentheses when we have an && or || chain
                     | _ -> (expr (this.binaryOperatorPrecedenceLeft resolvedOp) e1)
-                this.binaryOperator resolvedOp precedence leftPart
-                    (expr (this.binaryOperatorPrecedenceRight resolvedOp) e2)
+                let rightPart =
+                    match e2 with
+                    | EBinOpApply (opR, _, _) when opR = op && List.contains resolvedOp [ "==>" ] ->
+                        (expr 1 e2) // avoid excessive parentheses when we have an ==> chain
+                    | _ -> (expr (this.binaryOperatorPrecedenceRight resolvedOp) e2)
+                this.binaryOperator resolvedOp precedence leftPart rightPart
             | EAnonApply (f, es) -> (expr 11 f) + (exprs es)
             | EMethodApply (r, m, ts, es, _) -> (receiver r) + m.name + (exprs es)
             | EConstructorApply (c, ts, es) ->
