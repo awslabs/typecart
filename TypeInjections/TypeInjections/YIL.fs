@@ -1161,8 +1161,8 @@ module YIL =
                 + ">"
 
         member this.declsGeneral(ds: Decl list, pctx: Context, braced: Boolean) =
-            (if braced then " " else "")
-            + indented (listToString (List.map (fun d -> this.decl (d, pctx)) ds, "\n\n"), braced)
+            let result = listToString (List.map (fun d -> this.decl (d, pctx)) ds, "\n\n")
+            if braced then " " + indentedBraced(result) else result
 
         member this.decls(ds: Decl list, pctx: Context) = this.declsGeneral (ds, pctx, true)
         // array dimensions/indices
