@@ -125,7 +125,8 @@ module Traverser =
 
                 [ Class(n, isT, tpvs, psT, membersT, m) ]
             | TypeDef (n, tpvs, sp, predO, isN, m) ->
-                let ctxE = ctx.addTpvars tpvs
+                // Enter a new scope in typedef.
+                let ctxE = ctx.enter(n).addTpvars tpvs
                 let spT = this.tp (ctxE, sp)
 
                 let predT =
