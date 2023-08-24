@@ -66,14 +66,16 @@ module Analysis =
         List.iter add start
         closure
 
-    /// Returns a set of all decls (in Set<Path>) that uses anything in start
+    /// Returns a set of all non-module decls (in Set<Path>) that uses anything in "start".
+    /// If "start" contains a module, however, it will also return that module.
     type GatherDeclsUsingPaths(start: Set<Path>) =
         inherit Traverser.Identity()
         
         let mutable result: Set<Path> = Set.empty
         
         override this.path(ctx: Context, p: Path): Path =
-            if start.Contains(p) then
+            // Do not include modules because they do not "use" anything
+            if start.Contains(p) && (not (ctx.lookupCurrent().isModule())) then
                 result <- result.Add(ctx.currentDecl)
             p
 
@@ -89,6 +91,7 @@ module Analysis =
               meta = cons.meta }
         
         override this.decl(ctx: Context, d: Decl) : Decl list =
+            // Include the decls themselves.
             match d with
             | Module (n, _, _)
             | Datatype (n, _, _, _, _)

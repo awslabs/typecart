@@ -3,7 +3,7 @@ namespace TypeInjections
 open TypeInjections.YIL
 
 module DiffAnalysis =
-    /// Returns the set of decls (in Set<Path>) that are directly changed or deleted from the old program
+    /// Returns the set of non-module decls (in Set<Path>) that are directly changed or deleted from the old program
     type GatherChangedOrDeleted() =
         inherit DiffTraverser.Identity()
 
