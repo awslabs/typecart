@@ -613,6 +613,16 @@ module YIL =
         | ETypeTest of Expr * Type
         // *** control flow etc.
         | EBlock of exprs: Expr list
+        (* let expressions
+           var x1,...,xn := V1,...,Vn; body
+           var x1,...,xn := V; body (if V is call to a method with n outputs)
+           Note that ":=" can be replaced with ":-" (when orfail is true) or ":|" (when exact is false)
+           Similar to EDecls. Consider also using UpdateRHS here?
+           Each x on the LHS can be a case pattern.
+           In LHS, "(x, y)" is one case pattern (ETuple) expecting a function call on RHS
+           but "x, y" are two variables (EVar, EVar) expecting two values on RHS.
+           In all cases, "vars" stores all local variables visible in the body.
+        *)
         | ELet of vars: LocalDecl list * exact: bool * orfail: bool * lhs: Expr list * df: Expr list * body: Expr // not exact = non-deterministic
         | EIf of cond: Expr * thn: Expr * els: Expr option // cond must not have side-effects; els non-optional if this is an expression; see also flattenIf
         | EAlternative of conds: Expr list * bodies: Expr list // if case cond1 => body1 case cond2 => body2
@@ -627,6 +637,9 @@ module YIL =
            In the former case, x1 may not occur in V2.
            The latter is at most needed before ghosts are eliminated because we allow only one non-ghost output.
            Note that ":=" can be replaced with ":-" or ":|" (see UpdateRHS).
+           Each x on the LHS can be a case pattern.
+           In LHS, "(x, y)" is one case pattern (ETuple) expecting a function call on RHS
+           but "x, y" are two variables (EVar, EVar) expecting two values on RHS.
            In all cases, "vars" stores all local variables visible after this statement.
         *)
         | EDecls of vars: LocalDecl list * lhs: Expr list * rhs: UpdateRHS list
@@ -637,6 +650,10 @@ module YIL =
            Dafny allows an omitted lhs, in which case this is just an expression;
            in particular, lemma calls are represented that way; because we merge statements and expressions,
            we do not need a special case for that.
+           Each x on the LHS can be a case pattern.
+           In LHS, "(x, y)" is one case pattern (ETuple) expecting a function call on RHS
+           but "x, y" are two variables (EVar, EVar) expecting two values on RHS.
+           In all cases, "vars" stores all local variables visible after this statement.
         *)
         | EUpdate of name: Expr list * UpdateRHS
         | EPrint of exprs: Expr list
@@ -1507,6 +1524,7 @@ module YIL =
             // but we need to add parentheses if we encounter "<" (with precedence 4).
             //
             // expr 0 e: no need to add parentheses
+            // expr 1 e: add parentheses to lemma call expressions (lemma_call(); expr)
             // expr 11 e: add parentheses unless it's a primary expression, e.g., EVar
             let expr p e = this.exprWithPrecedence e p pctx
             let exprs es = this.exprs es pctx
@@ -1525,7 +1543,6 @@ module YIL =
                                 | ObjectReceiver _ -> this.receiver (r, pctx)
             let case c = this.case c pctx
             let tp = this.tp
-            let tps = this.tps
 
             match e with
             | EVar n ->
@@ -1548,7 +1565,12 @@ module YIL =
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToDecimalString()
             | EQuant (q, lds, r, b) ->
+                // Dafny complains about unusual indentation if we do not indent when there is a new line
+                // inside the condition or the body.
                 let forallCondition =
+                    // single line: ... :: cond ==>
+                    // multiple lines: ... ::
+                    //   cond ==>
                     match q, r with
                     | Forall, Some e ->
                         // ==> is 2
@@ -1569,6 +1591,15 @@ module YIL =
                         | _ -> ""
                     | _ -> ""
                 let body =
+                    // single line: ... :: cond ==> body
+                    // or ... ::
+                    //   cond ==> body
+                    //
+                    // multiple lines: ... :: cond ==>
+                    //   body
+                    // or ... ::
+                    //   cond ==>
+                    //   body
                     match q, r with
                     | Forall, Some _ ->
                         expr 3 b // ==> is 2

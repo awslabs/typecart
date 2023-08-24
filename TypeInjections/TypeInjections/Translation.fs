@@ -321,7 +321,7 @@ module Translation =
                     translationCondition (fst f1) (fst f2) inO inN, snd f1)
                 (List.zip3 insT insO insN)
         and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
-            // forall x1_O: U_O :: U_back(U(x1_O)) == x1_O
+            // forall x1_O: U_O :: U_backward(U_forward(x1_O)) == x1_O
             let nO, _, _ = name "x"
             let ld = LocalDecl(nO, tO, true)
             EQuant(Forall, [ ld ], None, EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
@@ -799,29 +799,37 @@ module Translation =
                         ctxNi.add(outsD.namedDecls.getNew ()).enterBody ()
                     // we ignore changes in in/output conditions here and only compare declarations
                     // in fact, ensures clauses (no matter if changed) are ignored entirely
-                    (*if not (insD.decls.getUpdate().IsEmpty) then
-                        failwith (
-                            unsupported "update to individual inputs: "
-                            + p.ToString()
-                        )
-
-                    if not outsD.decls.isSame then
-                        failwith (unsupported "change in outputs: " + p.ToString())*)
-                    // if modifies, reads, decreases clauses change, throw an error
-                    // TODO here
+                    // we ignore changes in modifies, reads, decreases clauses
+                    //
                     // as "methods", we only consider pure functions here
                     // a more general approach might also generate two-state lemmas for method invocations on class instances
                     // (i.e., calling corresponding methods with related arguments on related objects yields related values and
                     //   leaves the (possibly changed) objects related)
                     //
                     // For a static method without specification:
-                    // method p<u,v>(x:a,y:u,z:u->v):B = {_} --->
-                    // lemma p<uO,uN,vO,vN>(uT:uO->uN, uT_back:uN->uO, vT:vO->vN, xO:aO, xN:aN, yO:uO, yN:uN, zO:uO->vO, zN:uN->vN))
-                    //     requires xN==aT(xO)
-                    //     requires yN==uT(yO)
-                    //     requires ((x1_N:uN) => vT(zO(uT_back(x1_N)))) == zN
-                    //     ensures pN(xN,uN)==BT(pO(xO,uO))
+                    // method p<u,v>(x:a,y:u,z:u->v):B
+                    //   requires some_property(x)
+                    //   { ... }
+                    // --->
+                    // lemma p_bc<uO,uN,vO,vN>(u_forward:uO->uN, u_backward:uN->uO, v_forward:vO->vN, v_backward: vN->vO,
+                    //   xO:aO, xN:aN, yO:uO, yN:uN, zO:uO->vO, zN:uN->vN)
+                    //     requires some_property(xO)
+                    //     requires xN == a_forward(xO)
+                    //     requires yN == u_forward(yO)
+                    //     (either)  requires forall x1_N: uN :: zN(x1_N) == v_forward(zO(u_backward(x1_N))
+                    //     (or)      requires zN == ((x1_N:uN) => v_forward(zO(u_backward(x1_N))))
+                    //     ensures some_property(xN)
+                    //     ensures New.p(xN,uN)==B_forward(Old.p(xO,uO))
                     // and accordingly for the general case. If not static, the lemma additionally quantifies over the receivers.
+                    //
+                    // We change "requires some_property(xN)" to "ensures some_property(xN)" because
+                    // we can easily prove false if we have "requires some_property(xO)", "requires some_property(xN)",
+                    // "requires xN == a_forward(xO)", and a "slightly incorrect" function "a_forward".
+                    // The function "a_forward" should be enough for proving "ensures some_property(xN)" from
+                    // the precondition "requires some_property(xN)".
+                    // The reason why we want to explicitly state this postcondition is we need to prove it when calling
+                    // New.p(xN,uN) anyway, and Dafny sometimes cannot prove the precondition of New.p(xN,uN) if we
+                    // did not state the postcondition explicitly.
                     let parentDeclO = contextO.lookupCurrent ()
 
                     let parentDeclN = contextN.lookupCurrent ()

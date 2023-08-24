@@ -25,6 +25,11 @@ module Translations.MapBuiltinTypes {
 }
 
 module Translations.Utils {
+  /* We requires false here because Dafny 4 does not allow non-determinism like ":|" in functions.
+   * This function is to convert name resolution errors in stubs generated in translation functions
+   * to verification errors (cannot prove false), so Dafny will not stop verifying the entire program
+   * when it sees "???".
+   */
   function ???<X(0)>(): X 
     requires false
   {
