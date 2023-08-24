@@ -282,9 +282,10 @@ module YIL =
             | TypeDef (a, b, c, d, e, _) -> TypeDef(a, b, c, d, e, meta)
             | _ -> this
     
+    // Witness clauses. TODO: support other types of witnesses
     and Witness =
-        | CompiledZero
-        | OptOut
+        | CompiledZero // no witness needed -- Dafny can prove
+        | OptOut // "witness *" -- allow the type to be empty
 
     // ""/+/-/*/! for non/co/contra/co/non-variant ("" and + are strict); true for equality required; true for non-heap based
     and TypeArg = string * (string * bool * bool)
@@ -686,10 +687,14 @@ module YIL =
        - monadic = Some t: monadic update and t=M<A>
        Dafny also allows :- V, which corresponds to a monadic return, but we do not allow that.
        
+       See https://dafny.org/dafny/DafnyRef/DafnyRef#sec-failure-return-keyword for the token
+       "expect"/"assert"/"assume" in the monadic case.
+       
        In the such-that case, the expression may (and should) contain the variable in the LHS in an EDecls statement.
        So we need to store the localdecl list here in extraVisibleLds.
        If extraVisibleLds is Some [] (an empty list and not None), this is a such-that update
        (instead of a such-that declaration).
+       If the token is "assume" in the such-that case, Dafny assumes without proof that an appropriate value exists.
     *)
     and UpdateRHS = { df: Expr
                       monadic: Type option

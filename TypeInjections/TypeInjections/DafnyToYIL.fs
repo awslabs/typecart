@@ -1274,7 +1274,9 @@ module DafnyToYIL =
                 None
             else
                 Some ar.KeywordToken.Token.``val``
-        (* token: IfStmt=None, AssertStmt="assert", AssumeStmt="assume", ExpectStmt="expect"*)
+        (* token: IfStmt=None, AssertStmt="assert", AssumeStmt="assume", ExpectStmt="expect".
+           See also https://dafny.org/dafny/DafnyRef/DafnyRef#sec-failure-return-keyword
+        *)
         match res with
         | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? IfStmt; :? UpdateStmt ]
         | [ :? VarDeclStmt as v; :? UpdateStmt as u; :? AssertStmt; :? UpdateStmt ]
