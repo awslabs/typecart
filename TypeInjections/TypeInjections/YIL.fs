@@ -286,6 +286,7 @@ module YIL =
     and Witness =
         | CompiledZero // no witness needed -- Dafny can prove
         | OptOut // "witness *" -- allow the type to be empty
+        | Compiled of Expr // "witness expr" -- an expression as the witness
 
     // ""/+/-/*/! for non/co/contra/co/non-variant ("" and + are strict); true for equality required; true for non-heap based
     and TypeArg = string * (string * bool * bool)
@@ -1232,7 +1233,9 @@ module YIL =
                        + (this.expr p pctx)
                        + (match w with
                           | CompiledZero -> ""
-                          | OptOut -> "\n" + indentString + "witness *")
+                          | OptOut -> "\n" + indentString + "witness *"
+                          | Compiled e -> "\n" + indentString + "witness " + (this.expr e pctx)
+                          )
                    | None -> this.tp sup)
             | Field (n, t, eO, g, s, _, a) ->
                 this.stat (s, pctx)

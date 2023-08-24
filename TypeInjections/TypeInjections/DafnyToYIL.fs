@@ -128,6 +128,7 @@ module DafnyToYIL =
                     let witness = match d.WitnessKind with
                                   | SubsetTypeDecl.WKind.CompiledZero -> Y.Witness.CompiledZero
                                   | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
+                                  | SubsetTypeDecl.WKind.Compiled -> Y.Witness.Compiled(expr d.Witness)
                                   | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
                     bv.tp, Some(bv.name, expr d.Constraint, witness)
                 | _ -> tp d.Rhs, None
@@ -143,6 +144,7 @@ module DafnyToYIL =
                     let witness = match d.WitnessKind with
                                   | SubsetTypeDecl.WKind.CompiledZero -> Y.Witness.CompiledZero
                                   | SubsetTypeDecl.WKind.OptOut -> Y.Witness.OptOut
+                                  | SubsetTypeDecl.WKind.Compiled -> Y.Witness.Compiled(expr d.Witness)
                                   | _ -> unsupported $"witness kind %s{d.WitnessKind.ToString()}"
                     Some(bv.name, expr d.Constraint, witness)
             // TODO: newtype may have member functions

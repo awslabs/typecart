@@ -131,7 +131,7 @@ module Traverser =
                 let predT =
                     match predO with
                     | None -> None
-                    | Some (x, p, w) -> Some(x, this.expr (ctxE, p), w)
+                    | Some (x, p, w) -> Some(x, this.expr (ctxE, p), this.witness (ctxE, w))
 
                 [ TypeDef(n, tpvs, spT, predT, isN, m) ]
             | Field (n, t, e, isG, isS, isM, m) -> [ Field(n, this.tp (ctx, t), this.exprO (ctx, e), isG, isS, isM, m) ]
@@ -386,6 +386,15 @@ module Traverser =
             match rcv with
             | StaticReceiver ct -> StaticReceiver(this.classType (ctx, ct))
             | ObjectReceiver (e, tp) -> ObjectReceiver(this.expr (ctx, e), this.tp (ctx, tp))
+
+        /// transforms a witness
+        abstract member witness : Context * Witness -> Witness
+
+        default this.witness(ctx, w) =
+            match w with
+            | CompiledZero -> CompiledZero
+            | OptOut -> OptOut
+            | Compiled e -> Compiled(this.expr (ctx, e))
 
         /// transforms a constructor in a datatype
         abstract member constructor : Context * cons: DatatypeConstructor -> DatatypeConstructor
