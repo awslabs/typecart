@@ -25,7 +25,7 @@ typeCart builds on [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet
 
 ## Run
 
-typeCart takes as input two Dafny files, and generates the analysis results into a folder.
+typeCart takes as input two Dafny files or folders, and generates the analysis results into a folder.
 Following is the command to run the `complex` example and output the result into the `tmp` folder:
 
 ```shell

@@ -2,25 +2,42 @@
 
 Here are some common verification errors by Dafny and corresponding possible solutions.
 
-#### `Error: a postcondition could not be proved on this return path`
+#### Error: assertion might not hold
 
-Dafny sometimes cannot automatically reason about old/new function parameters. Example (`sequences`):
-
-```dafny
-lemma seqmap<A_O, A_N>(A_forward: A_O->A_N, A_backward: A_N->A_O, f_O: int->A_O, s_O: seq<int>, f_N: real->A_N, s_N: seq<real>)
-  requires (f_N == ((x1_N: real) => A_forward(f_O(x1_N.Floor))))
-  requires (s_N == Translations.MapBuiltinTypes.Seq(((sq_O: int) => sq_O as real), s_O))
-  requires (forall x_O: A_O :: (A_backward(A_forward(x_O)) == x_O))
-  ensures (Translations.MapBuiltinTypes.Seq(A_forward, Old.Seq.seqmap(f_O, s_O)) == New.Seq.seqmap(f_N, s_N))
-{}
-```
-
-We need to manually remove the "new" parameters and replace them with translations of "old" parameters:
+Dafny often cannot verify the proof sketch automatically. Example (`complex`):
 
 ```dafny
-lemma bc_map<A_O, A_N>(A_forward: A_O->A_N, f: int -> A_O, s: seq<int>)
-  ensures Translations.MapBuiltinTypes.Seq(A_forward, Old.Seq.seqmap(f, s)) == New.Seq.seqmap(((x1_N: real) => A_forward(f(x1_N.Floor))), Translations.MapBuiltinTypes.Seq(((sq_O: int) => sq_O as real), s))
-{}
+lemma mult_bc(x_O: Old.Complex.complex, y_O: Old.Complex.complex, x_N: New.Complex.complex, y_N: New.Complex.complex)
+  requires x_N == complex_forward(x_O)
+  requires y_N == complex_forward(y_O)
+  ensures New.Complex.mult(x_N, y_N) == complex_forward(Old.Complex.mult(x_O, y_O))
+{
+  assert New.Complex.mult(x_N, y_N) == complex_forward((x_O.0 * y_O.0 - x_O.1 * y_O.1, x_O.0 * y_O.1 + x_O.1 * y_O.0));
+}
 ```
 
-then replace the empty body of `seqmap` with `{ bc_map(A_forward, f_O, s_O); }`.
+In this specific case, an equivalent calc statement works:
+
+```dafny
+lemma mult_bc(x_O: Old.Complex.complex, y_O: Old.Complex.complex, x_N: New.Complex.complex, y_N: New.Complex.complex)
+  requires x_N == complex_forward(x_O)
+  requires y_N == complex_forward(y_O)
+  ensures New.Complex.mult(x_N, y_N) == complex_forward(Old.Complex.mult(x_O, y_O))
+{
+  calc {
+    New.Complex.mult(x_N, y_N);
+      ==
+    complex_forward((x_O.0 * y_O.0 - x_O.1 * y_O.1, x_O.0 * y_O.1 + x_O.1 * y_O.0));
+  }
+}
+```
+
+#### Error: cannot prove termination; try supplying a decreases clause
+
+See "parent trick" at https://leino.science/papers/krml283.html.
+
+#### Error: a precondition for this call could not be proved
+
+For backward compatibility lemma calls generated in proof sketches, we can try commenting out the lemma call first to see
+if Dafny can figure it out on its own. When Dafny cannot figure it out, it is recommended for the user to think how
+to prove the precondition.
