@@ -954,12 +954,14 @@ module Translation =
                     // but we might add them if that helps
 
                     // the outputs and the translation function
-                    let outputTypeT =
+                    let outputTypeT, canTranslateOutput =
                         match outs_o, outs_n with
-                        | OutputSpec ([], _), OutputSpec ([], _) -> None
+                        | OutputSpec ([], _), OutputSpec ([], _) -> None, true
                         | OutputSpec ([ hdO ], _), OutputSpec ([ hdN ], _) ->
-                            let _, _, ot = tp (hdO.tp, hdN.tp)
-                            Some ot
+                            try
+                                let _, _, ot = tp (hdO.tp, hdN.tp)
+                                Some ot, true
+                            with _ -> None, false
                         | _ -> failwith (unsupported "multiple output declarations")
 
                     let resultO =
@@ -969,9 +971,10 @@ module Translation =
                         EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
 
                     let outputsTranslation =
-                        match outputTypeT with
-                        | Some ot -> EEqual(resultN, (fst ot) resultO), None
-                        | None -> EBool true, None
+                        match outputTypeT, canTranslateOutput with
+                        | Some ot, true -> EEqual(resultN, (fst ot) resultO), None
+                        | None, true -> EBool true, None
+                        | _, false -> ECommented("cannot translate output type", EBool false), None
                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                     // but that is redundant due to our highly restricted treatment of classes
                     // New inputs' ensures becomes "output spec" here because "input spec" contains requires
