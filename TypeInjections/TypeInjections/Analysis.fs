@@ -245,30 +245,31 @@ module Analysis =
         
         // Datatype constructors have lower priorities than local names.
         //
-        // Phase 0: Add datatype constructor names to the modules. We can use C directly in A if A.B.C is a datatype
+        // Phase 0: Add datatype constructor names to the modules with priority 1.
+        // We can use C directly in A if A.B.C is a datatype
         // constructor (B is a datatype and A is a module) iff C is unambiguous and A.C does not exist.
         //
-        // Phase 1: Add everything else.
+        // Phase 1: Add everything else with priority 2.
         let mutable phase: int = 0
-        // <(name: string), (p: Path)>: we get the path p if we refer to the name.
+        // <(name: string), (p: Path) * (priority: int)>: we get the path p if we refer to the name.
         // If the name is ambiguous, p is replaced with an empty path.
-        let mutable result: Map<Path, Map<string, Path>> = Map.empty
+        let mutable result: Map<Path, Map<string, Path * int>> = Map.empty
         
         member this.addPathLowPriority(m: Path, pname: string, p: Path) =
             let pathMapOpt = result.TryFind(m)
             let pathMap = defaultArg pathMapOpt Map.empty
             if pathMap.ContainsKey(pname) then
                 // ambiguous name
-                let newPathMap = pathMap.Add(pname, Path [])
+                let newPathMap = pathMap.Add(pname, (Path [], 1))
                 result <- result.Add(m, newPathMap)
             else
-                let newPathMap = pathMap.Add(pname, p)
+                let newPathMap = pathMap.Add(pname, (p, 1))
                 result <- result.Add(m, newPathMap)
 
         member this.addPath(m: Path, pname: string, p: Path) =
             let pathMapOpt = result.TryFind(m)
             let pathMap = defaultArg pathMapOpt Map.empty
-            let newPathMap = pathMap.Add(pname, p)
+            let newPathMap = pathMap.Add(pname, (p, 2))
             result <- result.Add(m, newPathMap)
 
         override this.path(ctx: Context, p: Path) =
@@ -330,14 +331,15 @@ module Analysis =
     type GatherExportPaths() =
         inherit Traverser.Identity()
         
-        // <(name: string), (p: Path)>: we get the path p if we refer to the name.
+        // <(name: string), (p: Path) * (priority: int)>: we get the path p if we refer to the name.
         // If the name is ambiguous, p is replaced with an empty path.
-        let mutable result: Map<Path, Map<string, Path>> = Map.empty
+        // All exported paths have priority 1.
+        let mutable result: Map<Path, Map<string, Path * int>> = Map.empty
         
         member this.addPaths(m: Path, p: Path list) =
             let pathMapOpt = result.TryFind(m)
             let pathMap = defaultArg pathMapOpt Map.empty
-            let newPathMap = List.foldBack ((fun x (y, z) -> x y z) Map.add) (List.map (fun (x: Path) -> (x.name, x)) p) pathMap
+            let newPathMap = List.foldBack ((fun x (y, z) -> x y z) Map.add) (List.map (fun (x: Path) -> (x.name, (x, 1))) p) pathMap
             result <- result.Add(m, newPathMap)
 
         override this.decl(ctx: Context, d: Decl) : Decl list =
@@ -347,36 +349,40 @@ module Analysis =
             | _ -> ()
             this.declDefault(ctx, d)
         
-        member this.gather(prog: Program, allPaths: Map<Path, Map<string, Path>>) =
+        member this.gather(prog: Program, allPaths: Map<Path, Map<string, Path * int>>) =
             this.progDefault(prog) |> ignore
             // By default, export all paths
-            Map.iter (fun m p -> if not (result.ContainsKey(m)) then result <- result.Add(m, p)) allPaths
+            Map.iter (fun m p -> if not (result.ContainsKey(m)) then result <- result.Add(m, (Map.map (fun n pr -> (fst pr, 1)) p))) allPaths
             result
 
     /// Returns a map from each module to its visible paths
     type GatherVisiblePaths() =
         inherit Traverser.Identity()
         
-        // Imported names have lower priorities than native names.
-        let mutable exportPaths: Map<Path, Map<string, Path>> = Map.empty
+        // Imported names have lower priorities than native names...
+        // Except for datatype constructors where they have the same priorities.
+        let mutable exportPaths: Map<Path, Map<string, Path * int>> = Map.empty
         // <(name: string), (p: Path)>: we get the path p if we refer to the name.
         // If the name is ambiguous, p is replaced with an empty path.
-        let mutable result: Map<Path, Map<string, Path>> = Map.empty
+        let mutable result: Map<Path, Map<string, Path * int>> = Map.empty
         
-        member this.addPathsLowPriority(m: Path, ps: Map<string, Path>) =
+        member this.addPathsLowPriority(m: Path, ps: Map<string, Path * int>) =
             // If both sets contain a name, make it (name, Path []).
             // if exactly one of the set contains a name, make it (name, p).
+            // Priority is not used here (assume to be 1).
             let pathMapOpt = result.TryFind(m)
             let pathMap = defaultArg pathMapOpt Map.empty
             let ambiguousMap, pathMap1 = Map.partition (fun name p -> ps.ContainsKey(name)) pathMap
-            let pathMap2 = Map.foldBack Map.add (Map.map (fun name p -> Path []) ambiguousMap) pathMap1
+            let pathMap2 = Map.foldBack Map.add (Map.map (fun name p -> (Path [], snd p)) ambiguousMap) pathMap1
             let pathMap3 = Map.foldBack Map.add (Map.filter (fun name p -> not (pathMap2.ContainsKey(name))) ps) pathMap2
             result <- result.Add(m, pathMap3)
 
-        member this.addPaths(m: Path, ps: Map<string, Path>) =
+        member this.addPaths(m: Path, ps: Map<string, Path * int>) =
+            let ps1, ps2 = Map.partition (fun name p -> (snd p) = 1) ps
+            this.addPathsLowPriority(m, ps1)
             let pathMapOpt = result.TryFind(m)
             let pathMap = defaultArg pathMapOpt Map.empty
-            let newPathMap = Map.foldBack Map.add ps pathMap
+            let newPathMap = Map.foldBack Map.add ps2 pathMap
             result <- result.Add(m, newPathMap)
 
         override this.decl(ctx: Context, d: Decl) : Decl list =
@@ -387,13 +393,14 @@ module Analysis =
             | _ -> ()
             this.declDefault(ctx, d)
         
-        member this.gather(prog: Program, allPaths: Map<Path, Map<string, Path>>) =
+        member this.gather(prog: Program, allPaths: Map<Path, Map<string, Path * int>>) =
             exportPaths <- GatherExportPaths().gather(prog, allPaths)
             // Deal with imported paths first.
             this.progDefault(prog) |> ignore
             // Add all native paths.
             allPaths |> Map.iter (fun m ps -> this.addPaths(m, ps))
-            result
+            // Remove the priority information.
+            result |> Map.map (fun m ps -> Map.map (fun n p -> fst p) ps)
 
     /// makes path unqualified if they are relative to the current method or an opened module
     /// (Dafny complains when we print out fully qualified names in some cases)
@@ -424,13 +431,13 @@ module Analysis =
             // we cannot return D.foo because D is ambiguous even if D.foo is not ambiguous.
             let currentMethodVisiblePaths = visiblePaths[currentMethodPath]
             let currentModuleVisiblePaths = visiblePaths[currentModulePath]
-            let firstAmbiguousIndex = Seq.tryFindIndexBack (fun i ->
+            let firstUnAmbiguousIndex = Seq.tryFindIndexBack (fun i ->
                                           let currentName = pInCurrentMethod.names[i]
                                           let currentMethodPathOpt = currentMethodVisiblePaths.TryFind(currentName)
                                           let currentPathOpt = Option.orElse (currentModuleVisiblePaths.TryFind(currentName)) currentMethodPathOpt
                                           currentPathOpt |> Option.exists (fun (currentPath: Path) -> currentPath = (Path p.names[..i + p.names.Length - pInCurrentMethod.names.Length]))
                                           ) (seq {0 .. pInCurrentMethod.names.Length - 1})
-            let result = match firstAmbiguousIndex with
+            let result = match firstUnAmbiguousIndex with
                          | Some len -> Path pInCurrentMethod.names[len..]
                          | None -> pInCurrentMethod
             result
@@ -583,15 +590,18 @@ module Analysis =
             
             // We need to gather the paths at the beginning before filtering joint/old/new.
             let allPathsInProg = GatherAllPaths().gather(prog)
-            let addPaths (m: Path) (ps: Map<string, Path>) (result: Map<Path, Map<string, Path>>): Map<Path, Map<string, Path>> =
+            let addPaths (m: Path) (ps: Map<string, Path * int>) (result: Map<Path, Map<string, Path * int>>): Map<Path, Map<string, Path * int>> =
                 let pathMapOpt = result.TryFind(m)
                 let pathMap = defaultArg pathMapOpt Map.empty
-                let addPath (s: string) (p: Path) (pm: Map<string, Path>) =
-                    // We should not be updating paths here because the new one has a lower priority.
+                let addPath (s: string) (p: Path * int) (pm: Map<string, Path * int>) =
                     if pm.ContainsKey(s) then
-                        pm
+                        if (snd (pm[s])) > 1 then
+                            // We should not be updating paths here because the new one has a lower priority.
+                            pm
+                        else
+                            pm.Add(s, (Path [], 1))
                     else
-                        pm.Add(s, p)
+                        pm.Add(s, (fst p, 1))  // imported paths have priority 1
                 let newPathMap = Map.foldBack addPath ps pathMap
                 result.Add(m, newPathMap)
             let allPaths = List.foldBack (Map.foldBack addPaths) (List.map (GatherAllPaths().gather) otherProgs) allPathsInProg
