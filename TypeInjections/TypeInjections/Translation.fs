@@ -1157,7 +1157,9 @@ module Translation =
             | TApply (p_o, ts_o) ->
                 let p_n, ts_n =
                     match tN with
-                    | TApply (p_n, ts_n) -> p_n, ts_n
+                    | TApply (p_n, ts_n) when
+                        ts_o.Length = ts_n.Length
+                        || ts_o.Length + ts_n.Length = 1 -> p_n, ts_n
                     | _ ->
                         failwith (
                             unsupported "trying to translate "
@@ -1178,7 +1180,13 @@ module Translation =
                 let rN =
                     StaticReceiver({ path = parN; tpargs = [] })
 
-                let tsONT = List.map tp (List.zip ts_o ts_n)
+                let tsONT =
+                    if ts_o.Length = 0 && ts_n.Length = 1 then
+                        [ tp (tO, List.head ts_n) ] // assume the new type is a wrapper of the old type
+                    else if ts_o.Length = 1 && ts_n.Length = 0 then
+                        [ tp (List.head ts_o, tN) ] // same
+                    else
+                        List.map tp (List.zip ts_o ts_n)
 
                 let tsT =
                     List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", n, o, t2))) tsONT
