@@ -63,6 +63,24 @@ module Diff =
                     | Update (yo, yn, _) -> Some(yo, yn)
                     | _ -> None)
                 this.elements
+        member this.getSameOrUpdateForOld() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y -> Some(Some(y, y))
+                    | Update (yo, yn, _) -> Some(Some(yo, yn))
+                    | Delete _ -> Some(None)
+                    | _ -> None)
+                this.elements
+        member this.getSameOrUpdateForNew() =
+            List.choose
+                (fun e ->
+                    match e with
+                    | Same y -> Some(Some(y, y))
+                    | Update (yo, yn, _) -> Some(Some(yo, yn))
+                    | Add _ -> Some(None)
+                    | _ -> None)
+                this.elements
         /// the added elements
         member this.getAdd() =
             List.choose

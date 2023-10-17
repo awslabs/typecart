@@ -156,6 +156,29 @@ module Translation =
                             EVar(ctx.thisDecl.Value.name)
                         else
                             EThis
+                    | EConstructorApply (cons, tpargs, args) ->
+                        let datatypeDecl = ctx.lookupByPath (cons.parent)
+
+                        match datatypeDecl with
+                        | Datatype (name, tpvars, datatypeConstructors, members, meta) ->
+                            let constructorDecl =
+                                List.find (fun (c: DatatypeConstructor) -> c.name = cons.name) datatypeConstructors
+
+                            if constructorDecl.ins.Length <> args.Length then
+                                failwith "datatype constructor called with different number of arguments"
+                            else
+                                this.exprDefault (ctx, e)
+                        | _ -> failwith "EConstructorApply called without a datatype"
+                    | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
+                        let methodDecl = ctx.lookupByPath (method)
+
+                        match methodDecl with
+                        | Method (_, _, _, inputSpec, _, _, _, _, _, _, _, _, _) ->
+                            if inputSpec.decls.Length <> exprs.Length then
+                                failwith "method called with different number of arguments"
+                            else
+                                this.exprDefault (ctx, e)
+                        | _ -> failwith "EMethodApply called without a method"
                     | _ -> this.exprDefault (ctx, e)
 
                 override this.tp(ctx: Context, t: Type) =
@@ -195,90 +218,97 @@ module Translation =
                             match methodDeclO.Value, methodDeclN.Value with
                             | Method(methodType = IsLemma), _
                             | Method(methodType = IsMethod), _ -> eDefault
-                            | Method (_, _, _, _, _, _, _, _, _, _, isStatic, _, _), Method _ ->
-                                // Prepend a lemma call to this method application.
-                                // See also the translation for Diff.Method below in declSameOrUpdate.
-                                let parentDeclO = ctx.lookupByPath (method.parent)
-                                // Do not set thisDecl again because "this" is the current method
-                                // instead of the method begin called.
-                                // Do not use exprOld and exprNew because they add the old/new suffix again.
+                            | Method (_, _, _, insO, _, _, _, _, _, _, isStatic, _, _),
+                              Method (_, _, _, insN, _, _, _, _, _, _, _, _, _) when
+                                insO.decls.Length = insN.decls.Length ->
+                                try
+                                    // Prepend a lemma call to this method application.
+                                    // Only prepend the lemma call if the old method and the new method have the same
+                                    // number of inputs.
+                                    // See also the translation for Diff.Method below in declSameOrUpdate.
+                                    let parentDeclO = ctx.lookupByPath (method.parent)
+                                    // Do not set thisDecl again because "this" is the current method
+                                    // instead of the method begin called.
+                                    // Do not use exprOld and exprNew because they add the old/new suffix again.
 
-                                let newLocalDecls =
-                                    List.filter (fun ld -> not (List.contains ld oldCtx.vars)) ctx.vars
+                                    let newLocalDecls =
+                                        List.filter (fun ld -> not (List.contains ld oldCtx.vars)) ctx.vars
 
-                                let oldNameCtx = ctx
+                                    let oldNameCtx = ctx
 
-                                let instanceInputs =
-                                    if isStatic then
-                                        []
-                                    else
+                                    let instanceInputs =
+                                        if isStatic then
+                                            []
+                                        else
+                                            match receiver with
+                                            | StaticReceiver _ -> failwith "unexpected static receiver"
+                                            | ObjectReceiver (r, _) ->
+                                                [ NameTranslator(true).expr (oldNameCtx, r)
+                                                  ForwardLocalDeclTranslator(newLocalDecls)
+                                                      .expr (newCtx, r) ]
+
+                                    let instanceTypeArgs =
                                         match receiver with
-                                        | StaticReceiver _ -> failwith "unexpected static receiver"
-                                        | ObjectReceiver (r, _) ->
-                                            [ NameTranslator(true).expr (oldNameCtx, r)
-                                              ForwardLocalDeclTranslator(newLocalDecls)
-                                                  .expr (newCtx, r) ]
+                                        | StaticReceiver ct -> ct.tpargs
+                                        | ObjectReceiver (_, tp) ->
+                                            match tp with
+                                            | TApply (_, args) -> args
+                                            | _ -> []
 
-                                let instanceTypeArgs =
-                                    match receiver with
-                                    | StaticReceiver ct -> ct.tpargs
-                                    | ObjectReceiver (_, tp) ->
-                                        match tp with
-                                        | TApply (_, args) -> args
-                                        | _ -> []
+                                    let instanceTypeArgTranslationInputs =
+                                        instanceTypeArgs
+                                        |> List.collect
+                                            (fun (t: Type) ->
+                                                let _, _, (tT1, tT2) = tpAbstracted ("x", t, t)
+                                                [ tT1; tT2 ])
 
-                                let instanceTypeArgTranslationInputs =
-                                    instanceTypeArgs
-                                    |> List.collect
-                                        (fun (t: Type) ->
-                                            let _, _, (tT1, tT2) = tpAbstracted ("x", t, t)
-                                            [ tT1; tT2 ])
+                                    // the type arguments (of type Type, not TypeArg)
+                                    let tsO, tsN = tpargs, tpargs
 
-                                // the type arguments (of type Type, not TypeArg)
-                                let tsO, tsN = tpargs, tpargs
+                                    let tsT =
+                                        List.collect
+                                            (fun (t: Type) ->
+                                                let _, _, (tForward, tBackward) = tpAbstracted ("x", t, t)
 
-                                let tsT =
-                                    List.collect
-                                        (fun (t: Type) ->
-                                            let _, _, (tForward, tBackward) = tpAbstracted ("x", t, t)
+                                                [ tForward; tBackward ])
+                                            tpargs
 
-                                            [ tForward; tBackward ])
-                                        tpargs
+                                    let typeParams = Utils.listInterleave (tsO, tsN)
 
-                                let typeParams = Utils.listInterleave (tsO, tsN)
+                                    // the old inputs and new inputs
+                                    let insO =
+                                        List.map (fun e -> NameTranslator(true).expr (oldNameCtx, e)) exprs
 
-                                // the old inputs and new inputs
-                                let insO =
-                                    List.map (fun e -> NameTranslator(true).expr (oldNameCtx, e)) exprs
+                                    let insN =
+                                        List.map
+                                            (fun e ->
+                                                ForwardLocalDeclTranslator(newLocalDecls)
+                                                    .expr (newCtx, e))
+                                            exprs
 
-                                let insN =
-                                    List.map
-                                        (fun e ->
-                                            ForwardLocalDeclTranslator(newLocalDecls)
-                                                .expr (newCtx, e))
-                                        exprs
+                                    let inputs =
+                                        instanceInputs
+                                        @ instanceTypeArgTranslationInputs
+                                          @ tsT @ insO @ insN
 
-                                let inputs =
-                                    instanceInputs
-                                    @ instanceTypeArgTranslationInputs
-                                      @ tsT @ insO @ insN
+                                    let lemmaReceiver, lemmaName =
+                                        match parentDeclO with
+                                        | Datatype _ ->
+                                            let ct =
+                                                { path = method.parent.parent
+                                                  tpargs = [] }
 
-                                let lemmaReceiver, lemmaName =
-                                    match parentDeclO with
-                                    | Datatype _ ->
-                                        let ct =
-                                            { path = method.parent.parent
-                                              tpargs = [] }
+                                            StaticReceiver(ct),
+                                            method.parent.parent.child (method.parent.name + "_" + method.name + "_bc")
+                                        | Module _ -> receiver, method.parent.child (method.name + "_bc")
+                                        | _ -> failwith (unsupported $"parent declaration {parentDeclO}")
 
-                                        StaticReceiver(ct),
-                                        method.parent.parent.child (method.parent.name + "_" + method.name + "_bc")
-                                    | Module _ -> receiver, method.parent.child (method.name + "_bc")
-                                    | _ -> failwith (unsupported $"parent declaration {parentDeclO}")
+                                    let lemmaCall =
+                                        EMethodApply(lemmaReceiver, lemmaName, typeParams, inputs, true)
 
-                                let lemmaCall =
-                                    EMethodApply(lemmaReceiver, lemmaName, typeParams, inputs, true)
-
-                                EBlock([ lemmaCall; eDefault ])
+                                    EBlock([ lemmaCall; eDefault ])
+                                with _ -> eDefault // fall back to default if there is anything wrong prepending the lemma
+                            | Method _, Method _ -> eDefault
                             | _ -> failwith "EMethodApply called without a method"
                         else
                             eDefault
@@ -555,10 +585,22 @@ module Translation =
                     let _, insN, _ =
                         List.unzip3 (List.map localDecl ctrN.ins)
 
-                    let _, _, insT =
-                        List.unzip3 (List.map localDecl2 (ctrD.ins().getSameOrUpdate ()))
+                    let insT1 =
+                        List.map
+                            (fun x ->
+                                match x with
+                                | Some (a, b, (c, d)) -> c
+                                | None -> (missingTerm, None))
+                            (List.map (Option.map localDecl2) (ctrD.ins().getSameOrUpdateForNew ()))
 
-                    let insT1, insT2 = List.unzip insT
+                    let insT2 =
+                        List.map
+                            (fun x ->
+                                match x with
+                                | Some (a, b, (c, d)) -> d
+                                | None -> (missingTerm, None))
+                            (List.map (Option.map localDecl2) (ctrD.ins().getSameOrUpdateForOld ()))
+
                     let argsO = List.map localDeclTerm insO
                     let argsN = List.map localDeclTerm insN
 
@@ -1160,9 +1202,10 @@ module Translation =
             | TApply (p_o, ts_o) ->
                 let p_n, ts_n =
                     match tN with
-                    | TApply (p_n, ts_n) when
-                        ts_o.Length = ts_n.Length
-                        || ts_o.Length + ts_n.Length = 1 -> p_n, ts_n
+                    | TApply (p_n, ts_n) when ts_o.Length = ts_n.Length -> p_n, ts_n
+                    // || ts_o.Length + ts_n.Length = 1 -> p_n, ts_n
+                    // TODO: prepend proper type translation functions for the case ts_o.Length + ts_n.Length = 1
+                    // where one type is a simple wrapper of the other
                     | _ ->
                         failwith (
                             unsupported "trying to translate "
