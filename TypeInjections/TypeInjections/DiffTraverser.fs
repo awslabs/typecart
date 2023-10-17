@@ -35,6 +35,12 @@ module DiffTraverser =
             | Diff.Delete _ -> dD
             | Diff.Update (d, n, df) -> Diff.Update(d, n, td (ctxO, ctxN, df))
 
+        /// specialization for decl list
+        abstract member declList : Context * Context * Diff.List<Decl, Diff.Decl> -> Diff.List<Decl, Diff.Decl>
+
+        default this.declList(ctxO: Context, ctxN: Context, dsD: Diff.List<Decl, Diff.Decl>) =
+            Diff.UpdateList(List.map (fun dD -> this.elem (ctxO, ctxN, dD, this.decl)) dsD.elements)
+
         abstract member name : Context * Context * Diff.Name -> Diff.Name
         default this.name(ctxO: Context, ctxN: Context, name: Diff.Name) = name
 
@@ -87,14 +93,14 @@ module DiffTraverser =
 
         member this.progDefault(ctxO: Context, ctxN: Context, prog: Diff.Program) =
             { name = prog.name
-              decls = this.list (ctxO, ctxN, prog.decls, this.decl) }
+              decls = this.declList (ctxO, ctxN, prog.decls) }
 
         abstract member decl : Context * Context * Diff.Decl -> Diff.Decl
 
         member this.declDefault(ctxO: Context, ctxN: Context, d: Diff.Decl) =
             let name n = this.name (ctxO, ctxN, n)
 
-            let decls ctxOb ctxNb ds = this.list (ctxOb, ctxNb, ds, this.decl)
+            let decls ctxOb ctxNb ds = this.declList (ctxOb, ctxNb, ds)
 
             let typeargs ctxOb ctxNb ts =
                 this.list (ctxOb, ctxNb, ts, this.typearg)
@@ -171,10 +177,17 @@ module DiffTraverser =
                     this.exprO (ctxOb, ctxNb, e)
                 )
             | Diff.TypeDef (n, ts, t, e) ->
-                let ctxOe = ctxO.addTpvars (ts.getOld ())
-                let ctxNe = ctxN.addTpvars (ts.getNew ())
+                let ctxOe =
+                    ctxO.enter(n.getOld).addTpvars (ts.getOld ())
+
+                let ctxNe =
+                    ctxN.enter(n.getNew).addTpvars (ts.getNew ())
+
                 Diff.TypeDef(name n, typeargs ctxOe ctxNe ts, this.tp (ctxOe, ctxNe, t), this.exprO (ctxOe, ctxNe, e))
-            | Diff.Field (n, t, e) -> Diff.Field(name n, this.tp (ctxO, ctxN, t), this.exprO (ctxO, ctxN, e))
+            | Diff.Field (n, t, e) ->
+                let ctxOe = ctxO.enter (n.getOld)
+                let ctxNe = ctxN.enter (n.getNew)
+                Diff.Field(name n, this.tp (ctxOe, ctxNe, t), this.exprO (ctxOe, ctxNe, e))
             | Diff.Method (n, ts, ins, outs, e) ->
                 let ctxOh =
                     ctxO.enter(n.getOld).addTpvars (ts.getOld ())

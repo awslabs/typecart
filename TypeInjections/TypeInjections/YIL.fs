@@ -271,6 +271,11 @@ module YIL =
             | Module _ -> true
             | _ -> false
         
+        member this.isLemma() =
+            match this with
+            | Method(methodType, _, _, _, _, _, _, _, _, _, _, _, _) -> methodType.isLemma()
+            | _ -> false
+        
         member this.updateMeta(meta: Meta) =
             match this with
             | Module (a, b, _) -> Module(a, b, meta)
@@ -315,6 +320,13 @@ module YIL =
             | IsGreatestLemma
             | IsLeastPredicate
             | IsGreatestPredicate -> true
+        
+        member this.isLemma() =
+            match this with
+            | IsLemma
+            | IsLeastLemma
+            | IsGreatestLemma -> true
+            | _ -> false
 
         override this.ToString() =
             match this with

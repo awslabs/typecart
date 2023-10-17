@@ -1,5 +1,6 @@
 namespace TypeInjections
 
+open TypeInjections.Diff
 open TypeInjections.YIL
 
 module DiffAnalysis =
@@ -16,6 +17,29 @@ module DiffAnalysis =
             else
                 result <- result.Add(p)
 
+        override this.name(ctxO: Context, ctxN: Context, name: Diff.Name) =
+            match name with
+            | Rename _ -> this.addPath (ctxO, ctxO.currentDecl)
+            | SameName _ -> ()
+
+            name
+
+        override this.tp(ctxO: Context, ctxN: Context, t: Diff.Type) =
+            match t with
+            | UpdateType _ -> this.addPath (ctxO, ctxO.currentDecl)
+            | SameType _ -> ()
+
+            t
+
+        override this.exprO(ctxO: Context, ctxN: Context, e: Diff.ExprO) =
+            match e with
+            | SameExprO _ -> ()
+            | AddExpr _ // adding an expr is a change (not addition) to the parent decl
+            | DeleteExpr _
+            | UpdateExpr _ -> this.addPath (ctxO, ctxO.currentDecl)
+
+            e
+
         override this.elem(ctxO: Context, ctxN: Context, dD: Diff.Elem<'y, 'd>, td: Context * Context * 'd -> 'd) =
             match dD with
             | Diff.Same _
@@ -27,11 +51,19 @@ module DiffAnalysis =
                 this.addPath (ctxO, ctxO.currentDecl)
                 Diff.Update(d, n, td (ctxO, ctxN, df))
 
-        override this.decl(ctxO: Context, ctxN: Context, d: Diff.Decl) =
-            Option.map (fun (n: Diff.Name) -> this.addPath (ctxO, ctxO.currentDecl.child (n.getOld))) d.nameO
-            |> ignore
-
-            this.declDefault (ctxO, ctxN, d)
+        override this.declList(ctxO: Context, ctxN: Context, dsD: Diff.List<Decl, Diff.Decl>) =
+            // Ignore any changes on lemmas
+            Diff.UpdateList(
+                List.map
+                    (fun (dD: Diff.Elem<Decl, Diff.Decl>) ->
+                        match dD with
+                        | Diff.Same d
+                        | Diff.Add d
+                        | Diff.Delete d when d.isLemma () -> dD
+                        | Diff.Update (d, n, _) when d.isLemma () && n.isLemma () -> dD
+                        | _ -> this.elem (ctxO, ctxN, dD, this.decl))
+                    dsD.elements
+            )
 
         member this.gather(ctxO: Context, ctxN: Context, prog: Diff.Program) =
             this.prog (ctxO, ctxN, prog) |> ignore
