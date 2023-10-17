@@ -168,7 +168,10 @@ module Differ =
             Some(Diff.Field(name (nO, nN), tp (tO, tN), exprO (iO, iN)))
         | Method (lO, nO, tsO, iO, oO, _, _, _, bO, gO, sO, qO, _),
           Method (lN, nN, tsN, iN, oN, modN, readN, decrN, bN, gN, sN, qN, _) when
-            methodTypeSimilar(lO, lN) && gO = gN && sO = sN && qO = qN ->
+            methodTypeSimilar (lO, lN)
+            && gO = gN
+            && sO = sN
+            && qO = qN ->
             Some(
                 Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec (iO, iN), outputSpec (oO, oN), exprO (bO, bN))
             )
@@ -213,8 +216,14 @@ module Differ =
 
     /// diffs two lists of local decls
     /// insertions and deletions are detected, but renamings and reorderings generate Delete+Add
+    /// two different anonymous local decls are considered similar iff their types are the same
     and localDecls (old: LocalDecl list, nw: LocalDecl list) =
-        let similar (o: LocalDecl, n: LocalDecl) = o.name = n.name
+        let similar (o: LocalDecl, n: LocalDecl) =
+            o.name = n.name
+            || (o.name.StartsWith('#')
+                && n.name.StartsWith('#')
+                && o.tp = n.tp)
+
         complexList (old, nw, similar, (fun (o, n) -> Some(localDecl (o, n))))
 
     // diffs two local declarations
