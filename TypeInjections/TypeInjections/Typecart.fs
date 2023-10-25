@@ -185,6 +185,14 @@ module Typecart =
         member this.go(outputWriter: TypecartOutputProcessor) =
             // for debugging: tests the transformation code
             // Traverser.test oldYIL
+            this.logger "***** preprocessing the two programs"
+
+            let oldYIL =
+                Analysis.UnifyAnonymousVariableNames().prog oldYIL
+
+            let newYIL =
+                Analysis.UnifyAnonymousVariableNames().prog newYIL
+
             // diff the programs
             this.logger "***** diffing the two programs"
             let diff = Differ.prog (oldYIL, newYIL)

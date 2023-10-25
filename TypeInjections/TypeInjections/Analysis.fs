@@ -578,6 +578,23 @@ module Analysis =
                 [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k.addAttribute("axiom", [])) ]
             | d -> this.declDefault (ctx, d)
     
+    /// turn anonymous variable names "_v1" into "_"
+    type UnifyAnonymousVariableNames() =
+        inherit Traverser.Identity()
+        override this.ToString() = "unifying anonymous variable names"
+        
+        override this.localDecl(ctx: Context, ld: LocalDecl) =
+            LocalDecl((if ld.name.StartsWith("_") then "_" else ld.name), this.tp (ctx, ld.tp), ld.ghost)
+        
+        override this.expr(ctx: Context, expr: Expr) =
+            match expr with
+            | EVar name ->
+                if name.StartsWith("_") then
+                    EVar "_"
+                else
+                    expr
+            | _ -> this.exprDefault(ctx, expr)
+    
     /// we need to leave a qualified version of YIL for combined to resolve names
     type LeaveQualifiedYILForCombined() =
         inherit Traverser.Identity()
