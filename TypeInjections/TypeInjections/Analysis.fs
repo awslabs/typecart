@@ -595,10 +595,10 @@ module Analysis =
                     expr
             | _ -> this.exprDefault(ctx, expr)
     
-    /// we need to leave a qualified version of YIL for combined to resolve names
-    type LeaveQualifiedYILForCombined() =
+    /// we need to leave a qualified version of YIL for proofs to resolve names
+    type LeaveQualifiedYILForProofs() =
         inherit Traverser.Identity()
-        override this.ToString() = "leaving qualified YIL for combined"
+        override this.ToString() = "leaving qualified YIL for Proofs"
 
     type Pipeline(passes: Traverser.Transform list) =
         member this.apply(prog: Program, otherProgs: Program list) =
@@ -631,7 +631,7 @@ module Analysis =
                     | :? UnqualifyPaths as p ->
                         Console.WriteLine(p.ToString())
                         pM <- p.run(pM, visiblePaths)
-                    | :? LeaveQualifiedYILForCombined as p ->
+                    | :? LeaveQualifiedYILForProofs as p ->
                         Console.WriteLine(p.ToString())
                         pPreserved <- pM
                     | _ ->

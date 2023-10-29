@@ -13,7 +13,7 @@ module Typecart =
         abstract member processOld : oldYIL: Program -> unit
         abstract member processNew : newYIL: Program -> unit
         abstract member processJoint : jointYIL: Program -> unit
-        abstract member processCombine : translationsYIL: Program -> unit
+        abstract member processProofs : translationsYIL: Program -> unit
 
     // Sample output-writing interface for diffing two files
     type DefaultTypecartOutput(outFolder: string) =
@@ -32,7 +32,7 @@ module Typecart =
             member this.processOld(oldYIL: YIL.Program) = write ("old.dfy", oldYIL)
             member this.processNew(newYIL: YIL.Program) = write ("new.dfy", newYIL)
             member this.processJoint(jointYIL: YIL.Program) = write ("joint.dfy", jointYIL)
-            member this.processCombine(translationsYIL: YIL.Program) = write ("combine.dfy", translationsYIL)
+            member this.processProofs(translationsYIL: YIL.Program) = write ("proofs.dfy", translationsYIL)
 
 
     // replace "." with "\." and "/" with "\/" to make specifying regex on filenames easier
@@ -131,7 +131,7 @@ module Typecart =
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =
         let oldOrNewPrefix (old: bool) = if old then "Old" else "New"
         let jointPrefix = "Joint"
-        let combinePrefix = "Combine"
+        let proofsPrefix = "Proofs"
         // pipelines for transforming old, new, joint, translations
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.FilterDeclsAndPrefixImports(
@@ -139,7 +139,7 @@ module Typecart =
                 "Joint"
               )
               Analysis.LemmasToAxioms()
-              Analysis.LeaveQualifiedYILForCombined()
+              Analysis.LeaveQualifiedYILForProofs()
               Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(oldOrNewPrefix (old))
               Analysis.AddImports([ "joint.dfy" ], [ "Joint" ])
@@ -152,15 +152,15 @@ module Typecart =
                 "(no prefix)"
               )
               Analysis.LemmasToAxioms()
-              Analysis.LeaveQualifiedYILForCombined()
+              Analysis.LeaveQualifiedYILForProofs()
               Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(jointPrefix)
               Analysis.DeduplicateImportsIncludes()
               Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
-        let combinePipeline : Traverser.Transform list =
+        let proofsPipeline : Traverser.Transform list =
             [ Analysis.UnqualifyPaths()
-              Analysis.WrapTopDecls(combinePrefix)
+              Analysis.WrapTopDecls(proofsPrefix)
               Analysis.AddImports(
                   [ "joint.dfy"; "old.dfy"; "new.dfy" ],
                   [ "Joint"
@@ -202,8 +202,8 @@ module Typecart =
             // generate translation
             this.logger "***** generating translation code"
 
-            let combineYIL, jointPaths =
-                Translation.prog (oldYIL, newYIL, "Combine", diff)
+            let proofsYIL, jointPaths =
+                Translation.prog (oldYIL, newYIL, "Proofs", diff)
 
             // emitting output
             this.logger "************ emitting output"
@@ -234,13 +234,13 @@ module Typecart =
 
             outputWriter.processNew (newYILresult)
 
-            this.logger "***** combine"
+            this.logger "***** proofs"
 
-            let combineYILresult, _ =
+            let proofsYILresult, _ =
                 Analysis
-                    .Pipeline(combinePipeline)
+                    .Pipeline(proofsPipeline)
                     .apply (
-                        combineYIL,
+                        proofsYIL,
                         [ Analysis
                             .WrapTopDecls(jointPrefix)
                               .prog jointYILpreserved
@@ -252,6 +252,6 @@ module Typecart =
                               .prog newYILpreserved ]
                     )
 
-            outputWriter.processCombine (combineYILresult)
+            outputWriter.processProofs (proofsYILresult)
 
     let typecart (oldYIL: Program, newYIL: Program, logger: string -> unit) = Typecart(oldYIL, newYIL, logger)
