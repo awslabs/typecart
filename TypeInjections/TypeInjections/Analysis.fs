@@ -578,7 +578,12 @@ module Analysis =
                 [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k.addAttribute("axiom", [])) ]
             | d -> this.declDefault (ctx, d)
     
-    /// turn anonymous variable names "_v1" into "_"
+    /// turn anonymous variable names "_v1" into "_".
+    /// This is the expedient way to let Differ treat expressions with the same structure but different
+    /// anonymous variable names as the same. This is correct as long as we use Differ.exprO and Differ.expr
+    /// only in the context without any anonymous variables (which is true).
+    /// A more systematic approach would be to implement alpha-equality in the Differ, and also restore the
+    /// original anonymous variable name in DafnyToYIL.
     type UnifyAnonymousVariableNames() =
         inherit Traverser.Identity()
         override this.ToString() = "unifying anonymous variable names"
