@@ -21,3 +21,9 @@ TypeInjections/Tool.Test/bin
 TypeInjections/Tool.Test/obj
 *.dll
 *.runtimeconfig.json
+scripts/cedar-spec
+scripts/proofs
+scripts/old
+scripts/new
+scripts/result.csv
+scripts/*.txt
