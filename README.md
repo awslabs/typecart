@@ -35,6 +35,12 @@ TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections \
   tmp
 ```
 
+To run typeCart on the commit history of Cedar's Dafny specification:
+```shell
+cd scripts
+bash run_cedar.sh
+```
+
 ## Troubleshooting
 
 typeCart may generate code that is not automatically verifiable by Dafny. See [Troubleshooting](docs/Troubleshooting.md).
