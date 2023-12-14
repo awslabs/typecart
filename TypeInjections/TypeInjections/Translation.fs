@@ -54,7 +54,8 @@ module Translation =
             jointDecls: Path list,
             changedDecls: Set<Path>,
             alwaysGenerateLemmas: bool,
-            useForallInFunctionArguments: bool
+            useForallInFunctionArguments: bool,
+            generateBackwardTranslationFunctions: bool
         ) =
         /// old, new, and translations path for a path
         // This is the only place that uses the literal prefix strings.
@@ -260,7 +261,11 @@ module Translation =
                                         |> List.collect
                                             (fun (t: Type) ->
                                                 let _, _, (tT1, tT2) = tpAbstracted ("x", t, t)
-                                                [ tT1; tT2 ])
+
+                                                if generateBackwardTranslationFunctions then
+                                                    [ tT1; tT2 ]
+                                                else
+                                                    [ tT1 ])
 
                                     // the type arguments (of type Type, not TypeArg)
                                     let tsO, tsN = tpargs, tpargs
@@ -270,7 +275,10 @@ module Translation =
                                             (fun (t: Type) ->
                                                 let _, _, (tForward, tBackward) = tpAbstracted ("x", t, t)
 
-                                                [ tForward; tBackward ])
+                                                if generateBackwardTranslationFunctions then
+                                                    [ tForward; tBackward ]
+                                                else
+                                                    [ tForward ])
                                             tpargs
 
                                     let typeParams = Utils.listInterleave (tsO, tsN)
@@ -495,7 +503,7 @@ module Translation =
 
                     let _, _, names = name p.name
 
-                    [ Method(
+                    Method(
                         IsFunction,
                         fst names,
                         typeParams,
@@ -509,22 +517,25 @@ module Translation =
                         true,
                         false,
                         contextO.currentMeta ()
-                      )
-                      Method(
-                          IsFunction,
-                          snd names,
-                          typeParams,
-                          inSpecBack,
-                          outSpecBack,
-                          [],
-                          [],
-                          [],
-                          Some body_back,
-                          false,
-                          true,
-                          false,
-                          contextO.currentMeta ()
-                      ) ]
+                    )
+                    :: if generateBackwardTranslationFunctions then
+                           [ Method(
+                                 IsFunction,
+                                 snd names,
+                                 typeParams,
+                                 inSpecBack,
+                                 outSpecBack,
+                                 [],
+                                 [],
+                                 [],
+                                 Some body_back,
+                                 false,
+                                 true,
+                                 false,
+                                 contextO.currentMeta ()
+                             ) ]
+                       else
+                           []
                 | _ -> failwith ("impossible") // Diff.TypeDef must go with YIL.TypeDef
 
             | Diff.Datatype (nameD, tvsD, ctrsD, msD) ->
@@ -689,7 +700,7 @@ module Translation =
                         EMatch(xN, tN, List.collect (mkCase false) ctrsD.elements, None)
 
                 let translations =
-                    [ Method(
+                    Method(
                         IsFunction,
                         fst names,
                         typeParams,
@@ -703,22 +714,25 @@ module Translation =
                         true,
                         false,
                         emptyMeta
-                      )
-                      Method(
-                          IsFunction,
-                          snd names,
-                          typeParams,
-                          inSpecBack,
-                          outSpecBack,
-                          [],
-                          [],
-                          [],
-                          Some body_back,
-                          false,
-                          true,
-                          false,
-                          emptyMeta
-                      ) ]
+                    )
+                    :: (if generateBackwardTranslationFunctions then
+                            [ Method(
+                                  IsFunction,
+                                  snd names,
+                                  typeParams,
+                                  inSpecBack,
+                                  outSpecBack,
+                                  [],
+                                  [],
+                                  [],
+                                  Some body_back,
+                                  false,
+                                  true,
+                                  false,
+                                  emptyMeta
+                              ) ]
+                        else
+                            [])
 
                 let memberLemmas = decls ctxOb ctxNb msD
                 // All paths to a lemma generated by a datatype function must insert "_bc" (already inserted elsewhere).
@@ -931,8 +945,14 @@ module Translation =
 
                     let inputs =
                         instanceInputs
-                        @ (Utils.listInterleave (List.unzip parentTvsT))
-                          @ (Utils.listInterleave (List.unzip tvsT))
+                        @ (if generateBackwardTranslationFunctions then
+                               Utils.listInterleave (List.unzip parentTvsT)
+                           else
+                               List.map fst parentTvsT)
+                          @ (if generateBackwardTranslationFunctions then
+                                 Utils.listInterleave (List.unzip tvsT)
+                             else
+                                 List.map fst tvsT)
                             @ insO @ insN
 
                     // old requires clauses applied to old arguments
@@ -976,13 +996,16 @@ module Translation =
 
                     // lossless assumptions
                     let losslessAssumptions =
-                        List.map
-                            (fun (tpargO: TypeArg, tparg_o: TypeArg, tparg_n: TypeArg) ->
-                                let _, _, tT =
-                                    tp (TVar(fst tparg_o), TVar(fst tparg_n))
+                        if generateBackwardTranslationFunctions then
+                            List.map
+                                (fun (tpargO: TypeArg, tparg_o: TypeArg, tparg_n: TypeArg) ->
+                                    let _, _, tT =
+                                        tp (TVar(fst tparg_o), TVar(fst tparg_n))
 
-                                lossless (TVar(fst tpargO)) tT)
-                            (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_n @ tvs_n))
+                                    lossless (TVar(fst tpargO)) tT)
+                                (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_n @ tvs_n))
+                        else
+                            []
 
                     let inSpec =
                         InputSpec(
@@ -1096,14 +1119,22 @@ module Translation =
             let xtN = LocalDecl(xN, newType, false)
 
             let inputs =
-                (Utils.listInterleave (List.unzip tvsT)) @ [ xtO ]
+                (if generateBackwardTranslationFunctions then
+                     Utils.listInterleave (List.unzip tvsT)
+                 else
+                     List.map fst tvsT)
+                @ [ xtO ]
 
             let inSpec = InputSpec(inputs, [])
             let outType = newType
             let outSpec = outputType (outType, [])
 
             let inputs_back =
-                (Utils.listInterleave (List.unzip tvsT)) @ [ xtN ]
+                (if generateBackwardTranslationFunctions then
+                     Utils.listInterleave (List.unzip tvsT)
+                 else
+                     List.map fst tvsT)
+                @ [ xtN ]
 
             let inSpec_back = InputSpec(inputs_back, [])
             let outType_back = oldType
@@ -1238,7 +1269,13 @@ module Translation =
                     List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", n, o, t2))) tsONT
 
                 let tsT1, tsT2 = List.unzip tsT
-                let tsTs = Utils.listInterleave (tsT1, tsT2)
+
+                let tsTs =
+                    if generateBackwardTranslationFunctions then
+                        Utils.listInterleave (tsT1, tsT2)
+                    else
+                        tsT1
+
                 let tsO, tsN, _ = List.unzip3 tsONT
 
                 TApply(pO, tsO),
@@ -1487,7 +1524,7 @@ module Translation =
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
             let tr =
-                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true, true)
+                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true, true, true)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -1531,6 +1568,10 @@ module Translation =
         // to forall expressions.
         let useForallInFunctionArguments = true
 
+        // Set this variable to false only when no function types (higher-order functions) are used
+        // to reduce the number of functions and variables that Dafny must consider.
+        let generateBackwardTranslationFunctions = true
+
         let tr =
             Translator(
                 Context(pO),
@@ -1539,7 +1580,8 @@ module Translation =
                 jointPaths,
                 changedInOld,
                 alwaysGenerateLemmas,
-                useForallInFunctionArguments
+                useForallInFunctionArguments,
+                generateBackwardTranslationFunctions
             )
 
         let translations =
