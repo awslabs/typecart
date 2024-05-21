@@ -786,7 +786,7 @@ module DafnyToYIL =
             | Y.TString _ when List.isEmpty elems -> Y.EString ""
             | Y.TString _ -> Y.EToString elems
             | Y.TSeq (_, a) -> Y.ESeq(a, elems)
-            | _ -> unsupported (sprintf "unexpected sequence type: %s" ((tp e.Type).ToString()))
+            | _ -> unsupported $"unexpected sequence type: %s{(tp e.Type).ToString()}"
         | :? SeqUpdateExpr as e -> Y.ESeqUpdate(expr e.Seq, expr e.Index, expr e.Value)
         // applications
         | :? FunctionCallExpr as e ->
