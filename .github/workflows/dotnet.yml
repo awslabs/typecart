@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 env:
-  DAFNY_DOWNLOAD_LOCATION: https://github.com/dafny-lang/dafny/releases/download/v3.6.0/dafny-3.6.0-x64-ubuntu-16.04.zip
-  DAFNY_ZIP: dafny-3.6.0-x64-ubuntu-16.04.zip
+  DAFNY_DOWNLOAD_LOCATION: https://github.com/dafny-lang/dafny/releases/download/v4.6.0/dafny-4.6.0-x64-ubuntu-20.04.zip
+  DAFNY_ZIP: dafny-4.6.0-x64-ubuntu-20.04.zip
   TOOL_DLL: TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections.dll
   TOOL_SLN: TypeInjections/TypeInjections.sln
   TOOL_TEST: TypeInjections/TypeInjections.Test/TypeInjections.Test.fsproj
