@@ -292,6 +292,7 @@ module DafnyToYIL =
         match isByMethod, s with
         | _, Prefix "static " s2 -> methodType (isByMethod, s2)
         | _, Prefix "ghost " s2 -> methodType (isByMethod, s2)
+        | _, Prefix "opaque " s2 -> methodType (isByMethod, s2)
         | true, "function" -> Y.IsFunctionMethod
         | false, "function" -> Y.IsFunction
         | _, "function method" -> Y.IsFunctionMethod
