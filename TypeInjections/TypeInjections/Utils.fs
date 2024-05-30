@@ -127,7 +127,8 @@ module Utils =
     let initDafny : ConsoleErrorReporter =
         // preparations, adapted from DafnyDriver.Main
         let options = DafnyOptions.Default
-        options.ApplyDefaultOptions() // needed to enable \U unicode
+        options.ApplyDefaultOptions()
+        options.Set(CommonOptionBag.UnicodeCharacters, true) // needed to enable \U unicode
         // Disable module reveals / provides scopes, otherwise we get e.g. lemmas with empty bodies.
         options.DisableScopes <- true
         let reporter = ConsoleErrorReporter(options)
