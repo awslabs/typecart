@@ -385,7 +385,7 @@ module DafnyToYIL =
                 let modifies = [] // functions do not modify
 
                 let reads =
-                    List.ofSeq m.Reads
+                    List.ofSeq m.Reads.Expressions
                     |> List.map (fun (e: FrameExpression) -> expr e.E)
 
                 let decreases =

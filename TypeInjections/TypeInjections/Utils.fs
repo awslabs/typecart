@@ -134,13 +134,28 @@ module Utils =
         log "***** Dafny initialised"
         reporter
 
+    let dafnyFileOf (reporter: ConsoleErrorReporter) (filepath: string) : DafnyFile =
+        let absPath =
+            if System.IO.Path.IsPathRooted filepath then
+                filepath
+            else
+                System.IO.Path.GetFullPath(filepath)
+
+        DafnyFile.CreateAndValidate(
+            reporter,
+            OnDiskFileSystem.Instance,
+            reporter.Options,
+            Uri(absPath, UriKind.Absolute),
+            Token.NoToken
+        )
+
     // Read in and parse a list of Dafny files
     let parseASTs (files: FileInfo list) (programName: string) (reporter: ConsoleErrorReporter) : Program =
         if List.length files = 0 then
             failwith "error: list of files supplied to parser is empty"
 
         let dafnyFiles =
-            List.map (fun (x: FileInfo) -> DafnyFile(reporter.Options, Uri(x.FullName))) files
+            List.map (fun (x: FileInfo) -> (dafnyFileOf reporter x.FullName)) files
 
         let mutable dafnyProgram = Unchecked.defaultof<Program>
         log "***** calling dafny parser for multiple files"
