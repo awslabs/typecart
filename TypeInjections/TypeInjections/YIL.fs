@@ -1745,7 +1745,8 @@ module YIL =
                     + esS
                     + (if 0 < precedence then ")" else "")
             | ELet (v, x, orfail, lhs, d, e) ->
-                "var "
+                (if 0 < precedence then "(" else "")
+                + "var "
                 + (exprsNoBrExceptForSemicolon lhs ", ")
                 + (match (x, orfail) with
                    | true, false -> " := "
@@ -1755,6 +1756,7 @@ module YIL =
                 + (exprsNoBrExceptForSemicolon d ", ")
                 + ";\n"
                 + (expr 0 e)
+                + (if 0 < precedence then ")" else "")
             | EIf (c, t, e) ->
                 let elsePart =
                     match e with
