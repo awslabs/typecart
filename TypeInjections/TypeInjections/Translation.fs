@@ -483,9 +483,13 @@ module Translation =
                         else
                             match declN with
                             | TypeDef (_, _, superN, _, _, _) ->
-                                // otherwise, call function of supertype
-                                let _, _, superT = tp (super, superN)
-                                (fst superT) xO
+                                if isJoint p then
+                                    // for joint typedefs, generate identity function
+                                    xO
+                                else
+                                    // otherwise, call function of supertype
+                                    let _, _, superT = tp (super, superN)
+                                    (fst superT) xO
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     let body_back =
@@ -496,9 +500,13 @@ module Translation =
                         else
                             match declN with
                             | TypeDef (_, _, superN, _, _, _) ->
-                                // otherwise, call function of supertype
-                                let _, _, superT = tp (super, superN)
-                                (snd superT) xN
+                                if isJoint p then
+                                    // for joint typedefs, generate identity function
+                                    xN
+                                else
+                                    // otherwise, call function of supertype
+                                    let _, _, superT = tp (super, superN)
+                                    (snd superT) xN
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     let _, _, names = name p.name
