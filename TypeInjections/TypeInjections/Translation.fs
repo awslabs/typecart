@@ -476,37 +476,35 @@ module Translation =
                     let xN = localDeclTerm xtN
 
                     let body =
-                        if isNew then
+                        if isJoint p then
+                            // for joint typedefs, generate identity function
+                            xO
+                        elif isNew then
                             // new types are new primitive types, so return identity map
                             // but we may need explicit type conversion
                             ETypeConversion(xO, xtN.tp)
                         else
                             match declN with
                             | TypeDef (_, _, superN, _, _, _) ->
-                                if isJoint p then
-                                    // for joint typedefs, generate identity function
-                                    xO
-                                else
-                                    // otherwise, call function of supertype
-                                    let _, _, superT = tp (super, superN)
-                                    (fst superT) xO
+                                // otherwise, call function of supertype
+                                let _, _, superT = tp (super, superN)
+                                (fst superT) xO
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     let body_back =
-                        if isNew then
+                        if isJoint p then
+                            // for joint typedefs, generate identity function
+                            xN
+                        elif isNew then
                             // new types are new primitive types, so return identity map
                             // but we may need explicit type conversion
                             ETypeConversion(xN, xtO.tp)
                         else
                             match declN with
                             | TypeDef (_, _, superN, _, _, _) ->
-                                if isJoint p then
-                                    // for joint typedefs, generate identity function
-                                    xN
-                                else
-                                    // otherwise, call function of supertype
-                                    let _, _, superT = tp (super, superN)
-                                    (snd superT) xN
+                                // otherwise, call function of supertype
+                                let _, _, superT = tp (super, superN)
+                                (snd superT) xN
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     let _, _, names = name p.name

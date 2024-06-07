@@ -578,6 +578,49 @@ module Analysis =
                 [ Method(IsLemma, a, b, c, d, e, f, g, None, h, i, j, k.addAttribute("axiom", [])) ]
             | d -> this.declDefault (ctx, d)
     
+    /// Returns the set of identity translation functions
+    type GatherIdentityTranslationFunctions() =
+        inherit Traverser.Identity()
+        
+        let mutable result: Set<Path> = Set.empty
+
+        override this.decl(ctx: Context, d: Decl) : Decl list =
+            match d with
+            | Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta) ->
+                if (name.EndsWith("_forward") || name.EndsWith("_backward")) && inputSpec.decls.Length = 1 &&
+                   outputSpec.decls.Length = 1 && inputSpec.decls[0].tp = outputSpec.decls[0].tp then
+                    result <- result.Add(ctx.currentDecl.child(name))
+            | _ -> ()
+            this.declDefault(ctx, d)
+        
+        member this.gather(prog: Program) =
+            this.progDefault(prog) |> ignore
+            result
+
+    /// inline identity translation functions
+    type InlineIdentityTranslationFunctions() =
+        inherit Traverser.Identity()
+        
+        let mutable identities: Set<Path> = Set.empty
+        
+        override this.ToString() = "inlining identity translation functions"
+        
+        override this.expr(ctx: Context, expr: Expr) =
+            match expr with
+            | EMethodApply (r, m, ts, es, isG) when es.Length = 1 && identities.Contains(m) ->
+                this.exprDefault(ctx, es[0])  // extract the argument and dive inside
+            | _ -> this.exprDefault(ctx, expr)
+        
+        override this.decl(ctx: Context, d: Decl) =
+            match d with
+            | Method (_, name, _, _, _, _, _, _, _, _, _, _, _) when identities.Contains(ctx.currentDecl.child(name)) ->
+                []  // remove the function
+            | _ -> this.declDefault (ctx, d)
+        
+        override this.prog(p: Program) =
+            identities <- GatherIdentityTranslationFunctions().gather(p)
+            this.progDefault(p)
+    
     /// turn anonymous variable names "_v1" into "_".
     /// This is the expedient way to let Differ treat expressions with the same structure but different
     /// anonymous variable names as the same. This is correct as long as we use Differ.exprO and Differ.expr

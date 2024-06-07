@@ -159,7 +159,8 @@ module Typecart =
               Analysis.AddEmptyModuleIfProgramEmpty(jointPrefix) ]
 
         let proofsPipeline : Traverser.Transform list =
-            [ Analysis.UnqualifyPaths()
+            [ Analysis.InlineIdentityTranslationFunctions()
+              Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(proofsPrefix)
               Analysis.AddImports(
                   [ "joint.dfy"; "old.dfy"; "new.dfy" ],
