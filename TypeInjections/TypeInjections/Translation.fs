@@ -328,6 +328,20 @@ module Translation =
                         let nO, _, _ = typearg (plainTypeArg n)
                         TVar(fst nO)
                     | _ -> this.tpDefault (ctx, t) }
+        and InsertAssertionsAtResults (resultN: Expr, resultOTranslation: Expr -> Expr) =
+            { new Traverser.Identity() with
+                override this.path(ctx: Context, p: Path) =
+                    let pO, _, _ = path p
+                    pO
+
+                override this.expr(ctx: Context, e: Expr) =
+                    let rcEb (e: Expr) = EBlock [ this.expr (ctx, e) ]
+                    let rcEbo (eO: Expr option) = Option.map rcEb eO
+                    let eDefault = EAssert(EEqual(resultN, resultOTranslation e), None, None)
+                    match e with
+                    | EIf (c, t, e) ->
+                        EIf (c, rcEb t, rcEbo e)
+                    | _ -> eDefault }
         and backward_compatible
             (insT: (Condition * Condition) list)
             (insO: LocalDecl list)
@@ -382,8 +396,10 @@ module Translation =
                     (fun n ->
                         let _, nN, _ = name n
                         nN)
-
-            let generateLemmaCalls = true
+            
+            let generateProof = true  // if false, do not generate anything
+            let expandAssertions = true  // if false, generate a single assertion
+            let generateLemmaCalls = true  // if false, do not prepend lemma calls
 
             let eO =
                 if generateLemmaCalls then
@@ -392,10 +408,11 @@ module Translation =
                 else
                     exprOld oldCtx e
 
-            let generateProof = true
-
             if generateProof then
-                Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
+                if expandAssertions then
+                    Some(EBlock [ InsertAssertionsAtResults(resultN, resultOTranslation).expr(oldCtx, eO) ])
+                else
+                    Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
             else
                 Some(EBlock [])
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =

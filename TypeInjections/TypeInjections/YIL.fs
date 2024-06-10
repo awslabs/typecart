@@ -1531,8 +1531,7 @@ module YIL =
             | ECommented (c, e) -> "/* " + c + " */" + this.statement e pctx
             | EUnimplemented -> "/* UNIMPLEMENTED */"
             | b ->
-                failwith "encountered non-statement in statement: "
-                + (b.ToString())
+                failwith ("encountered non-statement in statement: " + b.ToString())
 
 
         member this.expr (e: Expr) (pctx: Context) : string =

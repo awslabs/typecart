@@ -25,7 +25,7 @@ module Sqr {
   function squareReal(x: RealType.my_type): RealType.my_type
     requires x == 0.0
   {
-    x * x
+    x * x + 0.0
   }
 }
 
