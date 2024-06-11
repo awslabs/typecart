@@ -1094,6 +1094,9 @@ module Translation =
                     let outSpec =
                         OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
+                    // copy the decreases clause from the old implementation
+                    let decreases = List.map (exprOld ctxOh) decreasesO
+
                     let oldBodyCtx =
                         if isStatic then
                             ctxOb
@@ -1142,7 +1145,7 @@ module Translation =
                           outSpec,
                           [],
                           [],
-                          [],
+                          decreases,
                           proof,
                           true,
                           true,
