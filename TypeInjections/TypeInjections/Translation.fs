@@ -337,10 +337,12 @@ module Translation =
                 override this.expr(ctx: Context, e: Expr) =
                     let rcEb (e: Expr) = EBlock [ this.expr (ctx, e) ]
                     let rcEbo (eO: Expr option) = Option.map rcEb eO
-                    let eDefault = EAssert(EEqual(resultN, resultOTranslation e), None, None)
+
+                    let eDefault =
+                        EAssert(EEqual(resultN, resultOTranslation e), None, None)
+
                     match e with
-                    | EIf (c, t, e) ->
-                        EIf (c, rcEb t, rcEbo e)
+                    | EIf (c, t, e) -> EIf(c, rcEb t, rcEbo e)
                     | _ -> eDefault }
         and backward_compatible
             (insT: (Condition * Condition) list)
@@ -381,8 +383,11 @@ module Translation =
             (oldCtx: Context)
             (newCtx: Context)
             (e: Expr)
+            (resultO: Expr)
             (resultN: Expr)
             (resultOTranslation: Expr -> Expr)
+            (generateRevealO: bool)
+            (generateRevealN: bool)
             : Expr option =
             // generate proof for backward compatibility theorem
             let oldCtxWithSuffix =
@@ -396,10 +401,10 @@ module Translation =
                     (fun n ->
                         let _, nN, _ = name n
                         nN)
-            
-            let generateProof = true  // if false, do not generate anything
-            let expandAssertions = true  // if false, generate a single assertion
-            let generateLemmaCalls = true  // if false, do not prepend lemma calls
+
+            let generateProof = true // if false, do not generate anything
+            let expandAssertions = true // if false, generate a single assertion
+            let generateLemmaCalls = true // if false, do not prepend lemma calls
 
             let eO =
                 if generateLemmaCalls then
@@ -408,11 +413,30 @@ module Translation =
                 else
                     exprOld oldCtx e
 
-            if generateProof then
+            let eAssertion =
                 if expandAssertions then
-                    Some(EBlock [ InsertAssertionsAtResults(resultN, resultOTranslation).expr(oldCtx, eO) ])
+                    InsertAssertionsAtResults(resultN, resultOTranslation)
+                        .expr (oldCtx, eO)
                 else
-                    Some(EBlock [ EAssert(EEqual(resultN, resultOTranslation eO), None, None) ])
+                    EAssert(EEqual(resultN, resultOTranslation eO), None, None)
+
+            let resultToReveal generateReveal result =
+                if generateReveal then
+                    match result with
+                    | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
+                        [ EReveal([ EMethodApply(receiver, method, tpargs, [], ghost) ]) ]
+                    | _ -> failwith "Proofs should only generated for method applications"
+                else
+                    []
+
+            if generateProof then
+                Some(
+                    EBlock(
+                        resultToReveal generateRevealO resultO
+                        @ resultToReveal generateRevealN resultN
+                          @ [ eAssertion ]
+                    )
+                )
             else
                 Some(EBlock [])
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
@@ -850,8 +874,8 @@ module Translation =
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
-                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, _, _),
-                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, _, _) ->
+                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
+                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
                     if not tvsD.isSameOrUpdated then
                         failwith (
                             unsupported "addition or deletion in type parameters: "
@@ -1094,7 +1118,9 @@ module Translation =
                             match outputTypeT with
                             | Some ot ->
                                 bdO
-                                |> Option.bind (fun b -> proof oldBodyCtx newBodyCtx b resultN (fst ot))
+                                |> Option.bind
+                                    (fun b ->
+                                        proof oldBodyCtx newBodyCtx b resultO resultN (fst ot) isOpaqueO isOpaqueN)
                             | None -> Some(EBlock [])
                         | _ ->
                             // updated body: try to generate proof sketch
@@ -1102,7 +1128,7 @@ module Translation =
                             match bodyO with
                             | Some bd ->
                                 match outputTypeT with
-                                | Some ot -> proof oldBodyCtx newBodyCtx bd resultN (fst ot)
+                                | Some ot -> proof oldBodyCtx newBodyCtx bd resultO resultN (fst ot) isOpaqueO isOpaqueN
                                 | None -> Some(EBlock [])
                             | None ->
                                 // other cases: generate empty proof
