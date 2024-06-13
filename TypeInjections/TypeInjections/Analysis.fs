@@ -667,6 +667,28 @@ module Analysis =
                         | _ ->
                             this.exprDefault(ctx, expr)
             | _ -> this.exprDefault(ctx, expr)
+        
+    /// EBlock [ EBlock [ exprs ] ] => EBlock [ exprs ]
+    /// EBlock [] => (deleted)
+    type RemoveRedundantEBLock() =
+        inherit Traverser.Identity()
+        override this.ToString() = "removing redundant blocks"
+        override this.expr(ctx: Context, expr: Expr) =
+            match expr with
+            | EBlock es ->
+                if es.Length = 1 then
+                    match es.Head with
+                    | EBlock _ ->
+                        this.exprDefault(ctx, es.Head)
+                    | _ ->
+                        EBlock [ this.exprDefault(ctx, es.Head) ]
+                else
+                    let filtered = List.filter (fun e ->
+                        match e with
+                        | EBlock [] -> false
+                        | _ -> true) es
+                    EBlock (this.exprList(ctx, filtered))
+            | _ -> this.exprDefault(ctx, expr)
     
     /// we need to leave a qualified version of YIL for proofs to resolve names
     type LeaveQualifiedYILForProofs() =

@@ -164,6 +164,7 @@ module Typecart =
 
         let proofsPipeline : Traverser.Transform list =
             [ Analysis.InlineIdentityTranslationFunctions()
+              Analysis.RemoveRedundantEBLock()
               Analysis.UnqualifyPaths()
               Analysis.WrapTopDecls(proofsPrefix)
               Analysis.AddImports(
