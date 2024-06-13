@@ -516,27 +516,46 @@ module Translation =
                     | _ -> rcE bd None v
 
                 ELet(v, x, o, lhs, df, bdT)
-            | EQuant (quant, ld, cond, ens, body) when quant = Quantifier.Forall ->
+            | EQuant (quant, ld, cond, ens, body) ->
                 let nonDeterministicVars = List.map localDeclTerm ld
 
-                let letCond =
+                let letCondNot =
                     match cond with
                     | Some c -> EBinOpApply("And", c, EUnOpApply("Not", body))
                     | _ -> EUnOpApply("Not", body)
+
+                let letCond =
+                    match cond with
+                    | Some c -> EBinOpApply("And", c, body)
+                    | _ -> body
 
                 let eBody =
                     YIL.block (KeepOnlyLemmaCalls.expr (ctx, body))
 
                 let newEnsures =
                     match eN with
-                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = Quantifier.Forall ->
-                        // match (ignoring condition), ensures the new body now; label=None
+                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
+                        // match (ignoring condition), ensures the new body is true; label=None
                         [ NameTranslator(false).expr (ctxN.add (ld), bodyN), None ]
                     | _ -> []
 
+                let newEnsuresNot =
+                    match eN with
+                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
+                        // match (ignoring condition), ensures the new body is false; label=None
+                        [ EUnOpApply("Not", NameTranslator(false).expr (ctxN.add (ld), bodyN)), None ]
+                    | _ -> []
+
+                let newAssert =
+                    match eN with
+                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
+                        // match (ignoring condition), assert the new body is true; label=None
+                        EAssert(NameTranslator(false).expr (ctxN.add (ld), bodyN), Some eBody, None)
+                    | _ -> eBody
+
                 let newAssertNot =
                     match eN with
-                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = Quantifier.Forall ->
+                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), assert the new body is false; label=None
                         Some(
                             EAssert(
@@ -547,15 +566,24 @@ module Translation =
                         )
                     | _ -> None
 
-                let quantExpr =
-                    EQuant(quant, ld, cond, ens @ newEnsures, eBody)
+                if quant = Quantifier.Forall then
+                    let quantExpr =
+                        EQuant(quant, ld, cond, ens @ newEnsures, eBody)
 
-                let letExpr =
-                    Option.map
-                        (fun e -> EBlock [ ELet(ld, false, false, nonDeterministicVars, [ letCond ], e) ])
-                        newAssertNot
+                    let letExpr =
+                        Option.map
+                            (fun e -> EBlock [ ELet(ld, false, false, nonDeterministicVars, [ letCondNot ], e) ])
+                            newAssertNot
 
-                EIf(e, EBlock [ quantExpr ], letExpr)
+                    EIf(e, EBlock [ quantExpr ], letExpr)
+                else
+                    let letExpr =
+                        EBlock [ ELet(ld, false, false, nonDeterministicVars, [ letCond ], newAssert) ]
+
+                    let quantExpr =
+                        EBlock [ EQuant(Quantifier.Forall, ld, cond, newEnsuresNot, eBody) ]
+
+                    EIf(e, letExpr, Some quantExpr)
             | _ -> eDefault
         and backward_compatible
             (insT: (Condition * Condition) list)
