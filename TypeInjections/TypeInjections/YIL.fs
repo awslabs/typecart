@@ -1401,6 +1401,8 @@ module YIL =
         member this.statement (e: Expr) (pctx: Context) =
             let expr e = this.expr e pctx
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
+            // we need to add parentheses in var a := (b; c);
+            let exprsNoBrExceptForSemicolon es sep = this.exprsNoBrWithPrecedence es 1 sep pctx
 
             match e with
             | EBlock es ->
@@ -1471,7 +1473,7 @@ module YIL =
                 "print "
                 + (String.concat ", " (List.map expr es))
                 + ";"
-            | EReturn es -> "return " + (exprsNoBr es ", ") + ";"
+            | EReturn es -> "return " + (exprsNoBrExceptForSemicolon es ", ") + ";"
             | EReveal es ->
                 if es.IsEmpty then
                     "" // happens when unresolved expressions are dropped in DafnyToYIL
@@ -1509,13 +1511,13 @@ module YIL =
             | ELet (v, ex, orfail, lhs, d, e) ->
                 let stmt = (this.statement e pctx)
                 "var "
-                + (exprsNoBr lhs ", ")
+                + (exprsNoBrExceptForSemicolon lhs ", ")
                 + (match (ex, orfail) with
                    | true, false -> " := "
                    | true, true -> " :- "
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
-                + (exprsNoBr d ", ")
+                + (exprsNoBrExceptForSemicolon d ", ")
                 + "; "
                 + (if stmt.Contains("\n") then "\n" else "")  // multiple-line let expression
                 + stmt

@@ -364,15 +364,18 @@ module Translation =
                     let rcEs (es: Expr list) = block (List.map rcE es)
 
                     match e with
-                    | EBlock exprs when exprs.Length = 2 ->
-                        match exprs.Head with
-                        | EMethodApply (lemmaReceiver, lemmaName, typeParams, inputs, true) when
-                            lemmaName.name.EndsWith("_bc") ->
-                            EBlock(
-                                exprs.Head
-                                :: removeEmptyBlock (this.exprList (ctx, exprs.Tail))
-                            )
-                        | _ -> block (this.exprList (ctx, exprs))
+                    | EBlock exprs ->
+                        if exprs.Length = 2 then // a potential lemma call
+                            match exprs.Head with
+                            | EMethodApply (lemmaReceiver, lemmaName, typeParams, inputs, true) when
+                                lemmaName.name.EndsWith("_bc") ->
+                                EBlock(
+                                    exprs.Head
+                                    :: removeEmptyBlock (this.exprList (ctx, exprs.Tail))
+                                )
+                            | _ -> block (this.exprList (ctx, exprs))
+                        else
+                            rcEs exprs
                     | ENew (ct, args) -> rcEs args
                     | EMemberRef (r, m, ts) -> rcR r
                     | EMethodApply (r, m, ts, es, isG) -> block (rcR r :: List.map rcE es)
@@ -482,6 +485,37 @@ module Translation =
                 | Some (EIf (cN, tN, eN)) -> EIf(c, rcEb t (Some tN), rcEbo e eN)
                 | _ -> // mismatch in new implementation, ignore new implementation
                     EIf(c, rcEb t None, rcEbo e None)
+            | EMatch (e, t, cases, d) ->
+                let rcCase (case: Case) (caseN: Case option) =
+                    let bodyT =
+                        rcE case.body (Option.map (fun c -> c.body) caseN) case.vars
+
+                    { vars = case.vars
+                      patterns = case.patterns
+                      body = bodyT }
+
+                let csT =
+                    match eN with
+                    | Some (EMatch (_, _, casesN, _)) when casesN.Length = cases.Length ->
+                        List.map (fun (c: Case, cN: Case) -> rcCase c (Some cN)) (List.zip cases casesN)
+                    | _ -> List.map (fun (c: Case) -> rcCase c None) cases
+
+                let dfltT =
+                    match d with
+                    | None -> None
+                    | Some dO ->
+                        match eN with
+                        | Some (EMatch (_, _, _, dN)) -> Some(rcE dO dN [])
+                        | _ -> Some(rcE dO None [])
+
+                EMatch(e, t, csT, dfltT)
+            | ELet (v, x, o, lhs, df, bd) ->
+                let bdT =
+                    match eN with
+                    | Some (ELet (_, xN, oN, _, _, bdN)) when xN = x && oN = o -> rcE bd (Some bdN) v
+                    | _ -> rcE bd None v
+
+                ELet(v, x, o, lhs, df, bdT)
             | EQuant (quant, ld, cond, ens, body) when quant = Quantifier.Forall ->
                 let nonDeterministicVars = List.map localDeclTerm ld
 
