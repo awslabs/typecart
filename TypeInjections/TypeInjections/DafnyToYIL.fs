@@ -855,7 +855,7 @@ module DafnyToYIL =
                 | :? ExistsExpr -> Y.Exists
                 | _ -> error "unknown quantifier"
 
-            Y.EQuant(q, boundVar @ e.BoundVars, exprO e.Range, expr e.Term)
+            Y.EQuant(q, boundVar @ e.BoundVars, exprO e.Range, [], expr e.Term)
         | :? OldExpr as e -> Y.EOld(expr e.E)
         | :? MapComprehension as e ->
             if not e.Finite then
@@ -1160,11 +1160,11 @@ module DafnyToYIL =
 
             Y.EReveal rs2
         | :? ForallStmt as s ->
-            // TODO: compile foralls correctly by also considering ensures clause
             Y.EQuant(
                 Y.Forall,
                 boundVar @ s.BoundVars,
                 exprO s.Range,
+                condition @ s.Ens,
                 if s.Body <> null then
                     statement s.Body
                 else

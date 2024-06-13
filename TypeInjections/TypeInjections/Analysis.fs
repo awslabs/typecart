@@ -643,6 +643,31 @@ module Analysis =
                     expr
             | _ -> this.exprDefault(ctx, expr)
     
+    /// Move the condition of forall expressions out of the body of the expression.
+    type NormalizeEQuant() =
+        inherit Traverser.Identity()
+        override this.ToString() = "normalizing forall expressions"
+        
+        override this.localDecl(ctx: Context, ld: LocalDecl) =
+            LocalDecl((if ld.name.StartsWith("_") then "_" else ld.name), this.tp (ctx, ld.tp), ld.ghost)
+        
+        override this.expr(ctx: Context, expr: Expr) =
+            match expr with
+            | EQuant (quant, ld, cond, ens, body) when quant = Quantifier.Forall ->
+                match cond with
+                    | Some _ -> this.exprDefault(ctx, expr)
+                    | None ->
+                        match body with
+                        | EBinOpApply (op, arg1, arg2) when Printer(true).binaryOperatorResolve (op) = "==>" ->
+                            let ctxE = ctx.add ld
+                            let ensT = this.conditionList (ctxE, ens)
+                            let arg1T = this.expr (ctxE, arg1)
+                            let arg2T = this.expr (ctxE, arg2)
+                            EQuant (quant, this.localDeclList (ctx, ld), Some arg1T, ensT, arg2T)
+                        | _ ->
+                            this.exprDefault(ctx, expr)
+            | _ -> this.exprDefault(ctx, expr)
+    
     /// we need to leave a qualified version of YIL for proofs to resolve names
     type LeaveQualifiedYILForProofs() =
         inherit Traverser.Identity()

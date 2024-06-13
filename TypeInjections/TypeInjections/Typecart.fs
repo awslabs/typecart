@@ -133,6 +133,10 @@ module Typecart =
         let jointPrefix = "Joint"
         let proofsPrefix = "Proofs"
         // pipelines for transforming old, new, joint, translations
+        let preprocessPipeline : Traverser.Transform list = // before diffing
+            [ Analysis.UnifyAnonymousVariableNames()
+              Analysis.NormalizeEQuant() ]
+
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.FilterDeclsAndPrefixImports(
                 (fun p -> not (List.exists (fun (q: YIL.Path) -> q.isAncestorOf (p)) joint)),
@@ -188,11 +192,15 @@ module Typecart =
             // Traverser.test oldYIL
             this.logger "***** preprocessing the two programs"
 
-            let oldYIL =
-                Analysis.UnifyAnonymousVariableNames().prog oldYIL
+            let oldYIL, _ =
+                Analysis
+                    .Pipeline(preprocessPipeline)
+                    .apply (oldYIL, [])
 
-            let newYIL =
-                Analysis.UnifyAnonymousVariableNames().prog newYIL
+            let newYIL, _ =
+                Analysis
+                    .Pipeline(preprocessPipeline)
+                    .apply (newYIL, [])
 
             // diff the programs
             this.logger "***** diffing the two programs"

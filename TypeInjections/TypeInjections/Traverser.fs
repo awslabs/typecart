@@ -222,11 +222,12 @@ module Traverser =
             | EMethodApply (r, m, ts, es, isG) ->
                 EMethodApply(this.receiver (ctx, r), this.path (ctx, m), rcTs ts, rcEs es, isG)
             | EConstructorApply (c, ts, es) -> EConstructorApply(this.path (ctx, c), rcTs ts, rcEs es)
-            | EQuant (q, lds, r, b) ->
+            | EQuant (q, lds, r, ens, b) ->
                 let ctxE = ctx.add lds
                 let rT = this.exprO (ctxE, r)
+                let ensT = this.conditionList (ctxE, ens)
                 let bT = this.expr (ctxE, b)
-                EQuant(q, this.localDeclList (ctx, lds), rT, bT)
+                EQuant(q, this.localDeclList (ctx, lds), rT, ensT, bT)
             | EOld e -> EOld(rcE e)
             | ETuple es -> ETuple(rcEs es)
             | EProj (e, i) -> EProj(rcE e, i)

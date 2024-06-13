@@ -582,8 +582,10 @@ module YIL =
         | EToString of expr: Expr list
         | EInt of BigInteger * tp: Type
         | EReal of BigDec * tp: Type
-        // Dafny allows quantifiers in computations if the domain is finite; cond is a predicate that restricts the domain of the bound variables
-        | EQuant of quant: Quantifier * ld: LocalDecl list * cond: Expr option * body: Expr
+        // Dafny allows quantifiers in computations if the domain is finite;
+        // cond is a predicate that restricts the domain of the bound variables;
+        // the ensures clause is only used in proofs
+        | EQuant of quant: Quantifier * ld: LocalDecl list * cond: Expr option * ens: Condition list * body: Expr
         | EOld of Expr // used in ensures conditions of methods in classes to refer to previous state
         | ETuple of elems: Expr list
         | EProj of tuple: Expr * index: int
@@ -1418,13 +1420,14 @@ module YIL =
                 $"break %s{label};"
             (* CalcStmt *)
             (* ExpectStmt *)
-            | EQuant (q, lds, r, b) ->
+            | EQuant (q, lds, r, ens, b) ->
                 q.ToString()
                 + " "
                 + this.localDeclsBr (lds, false)
                 + (match r with
                    | Some e -> " | " + expr e
                    | None -> "")
+                + this.conditions (false, ens, pctx)
                 + " "
                 + (this.statement b pctx)
             | EIf (c, t, e) ->
@@ -1504,6 +1507,7 @@ module YIL =
                 + " "
                 + this.statement body forBodyCtx
             | ELet (v, ex, orfail, lhs, d, e) ->
+                let stmt = (this.statement e pctx)
                 "var "
                 + (exprsNoBr lhs ", ")
                 + (match (ex, orfail) with
@@ -1513,7 +1517,8 @@ module YIL =
                    | _ -> failwith "unsupported let expression")
                 + (exprsNoBr d ", ")
                 + "; "
-                + (this.statement e pctx)
+                + (if stmt.Contains("\n") then "\n" else "")  // multiple-line let expression
+                + stmt
             | EAssert (e, p, l) ->
                 "assert "
                 + (match l with
@@ -1583,7 +1588,8 @@ module YIL =
             | EToString es -> "[" + (exprsNoBr es ", ") + "]"
             | EInt (v, _) -> v.ToString()
             | EReal (v, _) -> v.ToDecimalString()
-            | EQuant (q, lds, r, b) ->
+            | EQuant (q, lds, r, ens, b) ->
+                assert (ens.Length = 0)
                 // Dafny complains about unusual indentation if we do not indent when there is a new line
                 // inside the condition or the body.
                 let forallCondition =

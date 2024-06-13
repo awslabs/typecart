@@ -328,22 +328,201 @@ module Translation =
                         let nO, _, _ = typearg (plainTypeArg n)
                         TVar(fst nO)
                     | _ -> this.tpDefault (ctx, t) }
-        and InsertAssertionsAtResults (resultN: Expr, resultOTranslation: Expr -> Expr) =
+        and KeepOnlyLemmaCalls =
             { new Traverser.Identity() with
-                override this.path(ctx: Context, p: Path) =
-                    let pO, _, _ = path p
-                    pO
+                override this.case(ctx, case) =
+                    let ctxE = ctx.add case.vars
+                    let bodyT = this.expr (ctxE, case.body)
+
+                    { vars = case.vars
+                      patterns = case.patterns
+                      body = bodyT }
 
                 override this.expr(ctx: Context, e: Expr) =
-                    let rcEb (e: Expr) = EBlock [ this.expr (ctx, e) ]
-                    let rcEbo (eO: Expr option) = Option.map rcEb eO
+                    let rcE (e: Expr) = this.expr (ctx, e)
 
-                    let eDefault =
-                        EAssert(EEqual(resultN, resultOTranslation e), None, None)
+                    let rcEo (eO: Expr option) = Option.map rcE eO
+
+                    let rcEol (e: Expr option) =
+                        match e with
+                        | Some expr -> [ this.expr (ctx, expr) ]
+                        | None -> []
+
+                    let rcR (rcv: Receiver) =
+                        match rcv with
+                        | StaticReceiver ct -> EBlock []
+                        | ObjectReceiver (e, tp) -> this.expr (ctx, e)
+
+                    let removeEmptyBlock =
+                        List.filter
+                            (fun b ->
+                                match b with
+                                | EBlock exprs -> exprs.Length > 0
+                                | _ -> true)
+
+                    let block (es: Expr list) = EBlock(removeEmptyBlock es)
+                    let rcEs (es: Expr list) = block (List.map rcE es)
 
                     match e with
-                    | EIf (c, t, e) -> EIf(c, rcEb t, rcEbo e)
-                    | _ -> eDefault }
+                    | EBlock exprs when exprs.Length = 2 ->
+                        match exprs.Head with
+                        | EMethodApply (lemmaReceiver, lemmaName, typeParams, inputs, true) when
+                            lemmaName.name.EndsWith("_bc") ->
+                            EBlock(
+                                exprs.Head
+                                :: removeEmptyBlock (this.exprList (ctx, exprs.Tail))
+                            )
+                        | _ -> block (this.exprList (ctx, exprs))
+                    | ENew (ct, args) -> rcEs args
+                    | EMemberRef (r, m, ts) -> rcR r
+                    | EMethodApply (r, m, ts, es, isG) -> block (rcR r :: List.map rcE es)
+                    | EConstructorApply (c, ts, es) -> rcEs es
+                    | EQuant (q, lds, r, ens, b) ->
+                        let ctxE = ctx.add lds
+                        let bT = this.expr (ctxE, b)
+                        EQuant(q, lds, r, [], bT)
+                    | EOld e -> block [ rcE e ]
+                    | ETuple es -> rcEs es
+                    | EProj (e, i) -> block [ rcE e ]
+                    | ESet (t, es) -> rcEs es
+                    | ESetComp (lds, p, b) ->
+                        let ctxE = ctx.add lds
+                        let bT = this.expr (ctxE, b)
+                        ESetComp(lds, p, bT)
+                    | ESeq (t, es) -> rcEs es
+                    | ESeqConstr (t, l, i) -> block [ rcE l; rcE i ]
+                    | ESeqSelect (s, t, elem, frI, toI) -> block ([ rcE s ] @ rcEol frI @ rcEol toI)
+                    | ESeqUpdate (s, i, e) -> block [ rcE s; rcE i; rcE e ]
+                    | EToString es -> rcEs es
+                    | EArray (t, dim, init) ->
+                        let initT =
+                            match init with
+                            | Uninitialized -> []
+                            | ValueList es -> List.map rcE es
+                            | ComprehensionLambda e -> [ rcE e ]
+
+                        block initT
+                    | EMultiSelect (a, i) -> block [ rcE a ]
+                    | EArrayUpdate (a, i, e) -> block [ rcE a; rcE e ]
+                    | EMapKeys m -> block [ rcE m ]
+                    | EMapValues m -> block [ rcE m ]
+                    | EMapDisplay kvs ->
+                        (List.fold (fun l (eKey, eVal) -> rcE eVal :: rcE eKey :: l) [] kvs)
+                        |> List.rev
+                        |> block
+                    | EMapComp (lds, p, tL, tR) ->
+                        Console.WriteLine("WARNING: dropping EMapComp in KeepOnlyLemmaCalls")
+                        EBlock []
+                    | EFun (ins, cond, out, bd) -> EFun(ins, cond, out, this.expr (ctx.add ins, bd))
+                    | EAnonApply (f, es) -> block (rcE f :: List.map rcE es)
+                    | EUnOpApply (op, e) -> block [ rcE e ]
+                    | EBinOpApply (op, e1, e2) -> block [ rcE e1; rcE e2 ]
+                    | ELet (v, x, o, lhs, df, bd) ->
+                        let ctxI = ctx.add (v)
+                        ELet(v, x, o, lhs, df, this.expr (ctxI, bd))
+                    | ETypeConversion (e, t) -> block [ rcE e ]
+                    | ETypeTest (e, t) -> block [ rcE e ]
+                    | EIf (c, t, e) -> EIf(c, rcE t, rcEo e)
+                    | EAlternative (conds, bodies) -> EAlternative(conds, List.map rcE bodies)
+                    | EFor (index, init, ls, up, body) ->
+                        let innerCtx = ctx.add [ index ]
+                        let bodyT = this.expr (innerCtx, body)
+                        EFor(index, init, ls, up, bodyT)
+                    | EWhile (c, e, l) -> EWhile(c, rcE e, l)
+                    | EReturn es -> rcEs es
+                    | EMatch (e, t, cases, d) ->
+                        let csT =
+                            List.map (fun (c: Case) -> this.case (ctx, c)) cases
+
+                        let dfltT = this.exprO (ctx, d)
+                        EMatch(e, t, csT, dfltT)
+                    | EDecls (vars, lhs, rhs) -> EDecls(vars, lhs, List.map (fun u -> this.updateRHS (ctx, u)) rhs)
+                    | EUpdate (es, rhs) -> EUpdate(es, this.updateRHS (ctx, rhs))
+                    | EPrint es -> rcEs es
+                    | EAssert (e, p, l) -> block (rcE e :: rcEol p)
+                    | EAssume e -> block [ rcE e ]
+                    | EReveal es -> rcEs es
+                    | EExpect e -> block [ rcE e ]
+                    | ECommented (s, e) -> block [ rcE e ]
+                    | EVar _
+                    | EThis
+                    | EReal _
+                    | EInt _
+                    | EBool _
+                    | EChar _
+                    | EString _
+                    | EBreak _
+                    | ENull _
+                    | EUnimplemented -> EBlock [] }
+        and insertAssertionsAtResults
+            (
+                resultN: Expr,
+                resultOTranslation: Expr -> Expr,
+                ctx: Context,
+                e: Expr,
+                ctxN: Context,
+                eN: Expr option
+            ) =
+            let rcE (e: Expr) (eN: Expr option) (ld: LocalDecl list) =
+                insertAssertionsAtResults (resultN, resultOTranslation, ctx.add (ld), e, ctxN.add (ld), eN)
+
+            let rcEb (e: Expr) (eN: Expr option) = EBlock [ rcE e eN [] ]
+
+            let rcEbo (eO: Expr option) (eN: Expr option) =
+                match eO with
+                | Some e -> Some(rcEb e eN)
+                | None -> None
+
+            let eDefault =
+                EAssert(EEqual(resultN, resultOTranslation e), None, None)
+
+            match e with
+            | EIf (c, t, e) ->
+                match eN with
+                | Some (EIf (cN, tN, eN)) -> EIf(c, rcEb t (Some tN), rcEbo e eN)
+                | _ -> // mismatch in new implementation, ignore new implementation
+                    EIf(c, rcEb t None, rcEbo e None)
+            | EQuant (quant, ld, cond, ens, body) when quant = Quantifier.Forall ->
+                let nonDeterministicVars = List.map localDeclTerm ld
+
+                let letCond =
+                    match cond with
+                    | Some c -> EBinOpApply("And", c, EUnOpApply("Not", body))
+                    | _ -> EUnOpApply("Not", body)
+
+                let eBody =
+                    YIL.block (KeepOnlyLemmaCalls.expr (ctx, body))
+
+                let newEnsures =
+                    match eN with
+                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = Quantifier.Forall ->
+                        // match (ignoring condition), ensures the new body now; label=None
+                        [ NameTranslator(false).expr (ctxN.add (ld), bodyN), None ]
+                    | _ -> []
+
+                let newAssertNot =
+                    match eN with
+                    | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = Quantifier.Forall ->
+                        // match (ignoring condition), assert the new body is false; label=None
+                        Some(
+                            EAssert(
+                                EUnOpApply("Not", NameTranslator(false).expr (ctxN.add (ld), bodyN)),
+                                Some eBody,
+                                None
+                            )
+                        )
+                    | _ -> None
+
+                let quantExpr =
+                    EQuant(quant, ld, cond, ens @ newEnsures, eBody)
+
+                let letExpr =
+                    Option.map
+                        (fun e -> EBlock [ ELet(ld, false, false, nonDeterministicVars, [ letCond ], e) ])
+                        newAssertNot
+
+                EIf(e, EBlock [ quantExpr ], letExpr)
+            | _ -> eDefault
         and backward_compatible
             (insT: (Condition * Condition) list)
             (insO: LocalDecl list)
@@ -363,6 +542,7 @@ module Translation =
                             Forall,
                             vars,
                             Option.map fst cond,
+                            [],
                             EEqual(EAnonApply(localDeclTerm inN, List.map localDeclTerm vars), body)
                         )
                     | _ ->
@@ -378,7 +558,7 @@ module Translation =
             // forall x1_O: U_O :: U_backward(U_forward(x1_O)) == x1_O
             let nO, _, _ = name "x"
             let ld = LocalDecl(nO, tO, true)
-            EQuant(Forall, [ ld ], None, EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
+            EQuant(Forall, [ ld ], None, [], EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
         and proof
             (oldCtx: Context)
             (newCtx: Context)
@@ -415,8 +595,7 @@ module Translation =
 
             let eAssertion =
                 if expandAssertions then
-                    InsertAssertionsAtResults(resultN, resultOTranslation)
-                        .expr (oldCtx, eO)
+                    insertAssertionsAtResults (resultN, resultOTranslation, oldCtx, eO, newCtxWithSuffix, Some e)
                 else
                     EAssert(EEqual(resultN, resultOTranslation eO), None, None)
 
