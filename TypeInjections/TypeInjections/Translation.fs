@@ -485,6 +485,12 @@ module Translation =
                 | Some (EIf (cN, tN, eN)) -> EIf(c, rcEb t (Some tN), rcEbo e eN)
                 | _ -> // mismatch in new implementation, ignore new implementation
                     EIf(c, rcEb t None, rcEbo e None)
+            | EBlock exprs when exprs.Length > 0 ->
+                EBlock (exprs[..exprs.Length - 2] @ [ rcE exprs[exprs.Length - 1] (
+                    match eN with
+                    | Some (EBlock esN) when esN.Length > 0 ->
+                        Some esN[esN.Length - 1]
+                    | _ -> None) [] ])
             | EMatch (e, t, cases, d) ->
                 let rcCase (case: Case) (caseN: Case option) =
                     let bodyT =
