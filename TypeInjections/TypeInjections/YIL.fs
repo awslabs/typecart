@@ -741,6 +741,10 @@ module YIL =
             match this with
             | Forall -> "forall"
             | Exists -> "exists"
+        member this.negate() =
+            match this with
+            | Forall -> Exists
+            | Exists -> Forall
 
     // result type for imports analysis
     type ModuleImports(modulePath: Path, imports: ImportType list) =

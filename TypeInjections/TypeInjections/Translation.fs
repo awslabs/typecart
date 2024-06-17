@@ -590,6 +590,36 @@ module Translation =
                         EBlock [ EQuant(Quantifier.Forall, ld, cond, newEnsuresNot, eBody) ]
 
                     EIf(e, letExpr, Some quantExpr)
+            | EBinOpApply (op, arg1, arg2) when op = "NeqCommon" || op = "EqCommon" ->
+                // (arg1 == EQuant), (arg1 != EQuant)
+                // generate if (arg1) { ... } else { ... }
+                let eNarg2 =
+                    match eN with
+                    | Some (EBinOpApply (_, _, arg2N)) ->
+                        Some arg2N
+                    | _ -> None
+                let arg1, arg2 =  // "==" and "!=" are symmetric
+                    match arg1 with
+                    | EQuant _ -> arg2, arg1
+                    | _ -> arg1, arg2
+                match arg2 with
+                | EQuant (quant, ld, cond, ens, body) ->
+                    let eNtrueBranch =
+                        match eNarg2 with
+                        | Some (EQuant _) -> eNarg2
+                        | _ -> None
+                    let trueBranch = EBlock [rcE arg2 eNtrueBranch []]
+                    let eNfalseBranch =
+                        match eNarg2 with
+                        | Some (EQuant (quantN, ldN, condN, ensN, bodyN)) ->
+                            Some (EQuant (quantN.negate(), ldN, condN, ensN, EUnOpApply("Not", bodyN)))
+                        | _ -> None
+                    let falseBranch = EBlock [rcE (EQuant (quant.negate(), ld, cond, ens, EUnOpApply("Not", body))) eNfalseBranch []]
+                    if op = "EqCommon" then
+                        EIf (arg1, trueBranch, Some falseBranch)
+                    else
+                        EIf (arg1, falseBranch, Some trueBranch)
+                | _ -> eDefault
             | _ -> eDefault
         and backward_compatible
             (insT: (Condition * Condition) list)
