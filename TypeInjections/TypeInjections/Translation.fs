@@ -69,6 +69,24 @@ module Translation =
                 (p.prefix "Old", p.prefix "New", p)
         and isJoint (p: Path) : bool =
             List.exists (fun (j: Path) -> j.isAncestorOf p) jointDecls
+        and isJointType (tO: Type, tN: Type) : bool =
+            match tO, tN with
+            | TApply (pO, argsO), TApply (pN, argsN) ->
+                pO = pN && isJoint pO && argsO.Length = argsN.Length && List.forall isJointType (List.zip argsO argsN)
+            | TSeq (bO, sO), TSeq (bN, sN)
+            | TSet (bO, sO), TSet (bN, sN) ->
+                bO = bN && isJointType (sO, sN)
+            | TMap (bO, kO, vO), TMap (bN, kN, vN) ->
+                bO = bN && isJointType (kO, kN) && isJointType (vO, vN)
+            | TArray (bO, nO, sO), TArray (bN, nN, sN) ->
+                bO = bN && nO = nN && isJointType (sO, sN)
+            | TNullable sO, TNullable sN ->
+                isJointType (sO, sN)
+            | TTuple tsO, TTuple tsN ->
+                tsO.Length = tsN.Length && List.forall isJointType (List.zip tsO tsN)
+            | TFun (tsO, oO), TFun (tsN, oN) ->
+                isJointType (oO, oN) && tsO.Length = tsN.Length && List.forall isJointType (List.zip tsO tsN)
+            | _ -> tO = tN
         and generateLemmaFor (p: Path) : bool =
             alwaysGenerateLemmas || changedDecls.Contains(p)
         and name (s: string) =
@@ -1609,8 +1627,11 @@ module Translation =
 
                 TApply(pO, tsO),
                 TApply(pN, tsN),
-                ((fun x -> EMethodApply(rO, parO.child (fst names), tsO, tsTs @ [ x ], false)),
-                 (fun x -> EMethodApply(rN, parN.child (snd names), tsN, tsTs @ [ x ], false)))
+                if isJointType (tO, tN) then
+                    (id, id)
+                else
+                    ((fun x -> EMethodApply(rO, parO.child (fst names), tsO, tsTs @ [ x ], false)),
+                     (fun x -> EMethodApply(rN, parN.child (snd names), tsN, tsTs @ [ x ], false)))
             | TTuple ts_o ->
                 match tN with
                 | TTuple ts_n ->
@@ -1707,15 +1728,19 @@ module Translation =
             | TNullable t_o ->
                 match tN with
                 | TNullable t_n ->
-                    let tO, tN, tT = tp (t_o, t_n)
+                    let tOa, tNa, tT = tp (t_o, t_n)
 
                     let tT1 =
-                        fun x -> EIf(EEqual(x, ENull tO), ENull tN, Some((fst tT) x))
+                        fun x -> EIf(EEqual(x, ENull tOa), ENull tNa, Some((fst tT) x))
 
                     let tT2 =
-                        fun x -> EIf(EEqual(x, ENull tN), ENull tO, Some((snd tT) x))
+                        fun x -> EIf(EEqual(x, ENull tNa), ENull tOa, Some((snd tT) x))
 
-                    TNullable tO, TNullable tN, (tT1, tT2)
+                    TNullable tOa, TNullable tNa,
+                    if isJointType (tO, tN) then
+                        (id, id)
+                    else
+                        (tT1, tT2)
                 | _ ->
                     failwith (
                         unsupported "trying to translate "
@@ -1726,8 +1751,12 @@ module Translation =
             | TSeq (b_o, t_o) ->
                 match tN with
                 | TSeq (b_n, t_n) ->
-                    let tO, tN, tT = tpAbstracted ("sq", t_o, t_n)
-                    TSeq(b_o, tO), TSeq(b_n, tN), (seqRel tO tN (fst tT), seqRel tN tO (snd tT))
+                    let tOa, tNa, tT = tpAbstracted ("sq", t_o, t_n)
+                    TSeq(b_o, tOa), TSeq(b_n, tNa),
+                    if isJointType (tO, tN) then
+                        (id, id)
+                    else
+                        (seqRel tOa tNa (fst tT), seqRel tNa tOa (snd tT))
                 | _ ->
                     failwith (
                         unsupported "trying to translate "
@@ -1738,8 +1767,12 @@ module Translation =
             | TSet (b_o, t_o) ->
                 match tN with
                 | TSet (b_n, t_n) ->
-                    let tO, tN, tT = tpAbstracted ("st", t_o, t_n)
-                    TSet(b_o, tO), TSet(b_n, tN), (setRel tO tN (fst tT), setRel tN tO (snd tT))
+                    let tOa, tNa, tT = tpAbstracted ("st", t_o, t_n)
+                    TSet(b_o, tOa), TSet(b_n, tNa),
+                    if isJointType (tO, tN) then
+                        (id, id)
+                    else
+                        (setRel tOa tNa (fst tT), setRel tNa tOa (snd tT))
                 | _ ->
                     failwith (
                         unsupported "trying to translate "
@@ -1751,11 +1784,14 @@ module Translation =
                 match tN with
                 | TMap (b_n, s_n, t_n) ->
                     let sO, sN, sT = tpAbstracted ("mp", s_o, s_n)
-                    let tO, tN, tT = tpAbstracted ("mp", t_o, t_n)
+                    let tOa, tNa, tT = tpAbstracted ("mp", t_o, t_n)
 
-                    TMap(b_o, sO, tO),
-                    TMap(b_n, sN, tN),
-                    ((mapRel sO sN sT tO tN tT), (mapRel sN sO (snd sT, fst sT) tN tO (snd tT, fst tT)))
+                    TMap(b_o, sO, tOa),
+                    TMap(b_n, sN, tNa),
+                    if isJointType (tO, tN) then
+                        (id, id)
+                    else
+                        ((mapRel sO sN sT tOa tNa tT), (mapRel sN sO (snd sT, fst sT) tNa tOa (snd tT, fst tT)))
                 | _ ->
                     failwith (
                         unsupported "trying to translate "
@@ -1766,8 +1802,12 @@ module Translation =
             | TArray (b_o, n_o, t_o) ->
                 match tN with
                 | TArray (b_n, n_n, t_n) ->
-                    let tO, tN, tT = tpAbstracted ("ar", t_o, t_n)
-                    TArray(b_o, n_o, tO), TArray(b_n, n_n, tN), (arrayRel tO tN (fst tT), arrayRel tN tO (snd tT))
+                    let tOa, tNa, tT = tpAbstracted ("ar", t_o, t_n)
+                    TArray(b_o, n_o, tOa), TArray(b_n, n_n, tNa),
+                    if isJointType (tO, tN) then
+                        (id, id)
+                    else
+                        (arrayRel tOa tNa (fst tT), arrayRel tNa tOa (snd tT))
                 | _ ->
                     failwith (
                         unsupported "trying to translate "
