@@ -120,6 +120,10 @@ module Translation =
                 (LocalDecl(fst nameT, TFun([ TVar nameO ], TVar nameN), false),
                  LocalDecl(snd nameT, TFun([ TVar nameN ], TVar nameO), false))
         and varname (n: string) = n.Chars(0).ToString()
+        and unblock (e: Expr) =
+            match e with
+            | EBlock es -> es
+            | _ -> [ e ]
         and NameTranslator (old: bool) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -332,12 +336,16 @@ module Translation =
                                     let lemmaCall =
                                         EMethodApply(lemmaReceiver, lemmaName, typeParams, inputs, true)
 
-                                    EBlock([ lemmaCall; eDefault ])
+                                    EBlock [ lemmaCall; eDefault ]
                                 with _ -> eDefault // fall back to default if there is anything wrong prepending the lemma
                             | Method _, Method _ -> eDefault
                             | _ -> failwith "EMethodApply called without a method"
                         else
                             eDefault
+                    | EReveal exprs ->
+                        // duplicate the reveal statement with new context
+                        let newReveal = EReveal (List.map (fun e -> NameTranslator(false).expr (ctx, e)) exprs)
+                        EBlock [ eDefault ; newReveal ]
                     | _ -> eDefault
 
                 override this.tp(ctx: Context, t: Type) =
@@ -545,8 +553,8 @@ module Translation =
 
                 let letCondNot =
                     match cond with
-                    | Some c -> EBinOpApply("And", c, EUnOpApply("Not", body))
-                    | _ -> EUnOpApply("Not", body)
+                    | Some c -> EBinOpApply("And", c, notExpr body)
+                    | _ -> notExpr body
 
                 let letCond =
                     match cond with
@@ -567,7 +575,7 @@ module Translation =
                     match eN with
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), ensures the new body is false; label=None
-                        [ EUnOpApply("Not", NameTranslator(false).expr (ctxN.add (ld), bodyN)), None ]
+                        [ notExpr (NameTranslator(false).expr (ctxN.add (ld), bodyN)), None ]
                     | _ -> []
 
                 let newAssert =
@@ -583,7 +591,7 @@ module Translation =
                         // match (ignoring condition), assert the new body is false; label=None
                         Some(
                             EAssert(
-                                EUnOpApply("Not", NameTranslator(false).expr (ctxN.add (ld), bodyN)),
+                                notExpr (NameTranslator(false).expr (ctxN.add (ld), bodyN)),
                                 Some eBody,
                                 None
                             )
@@ -630,9 +638,9 @@ module Translation =
                     let eNfalseBranch =
                         match eNarg2 with
                         | Some (EQuant (quantN, ldN, condN, ensN, bodyN)) ->
-                            Some (EQuant (quantN.negate(), ldN, condN, ensN, EUnOpApply("Not", bodyN)))
+                            Some (EQuant (quantN.negate(), ldN, condN, ensN, notExpr bodyN))
                         | _ -> None
-                    let falseBranch = EBlock [rcE (EQuant (quant.negate(), ld, cond, ens, EUnOpApply("Not", body))) eNfalseBranch []]
+                    let falseBranch = EBlock [rcE (EQuant (quant.negate(), ld, cond, ens, notExpr body)) eNfalseBranch []]
                     if op = "EqCommon" then
                         EIf (arg1, trueBranch, Some falseBranch)
                     else
@@ -729,7 +737,7 @@ module Translation =
                     EBlock(
                         resultToReveal generateRevealO resultO
                         @ resultToReveal generateRevealN resultN
-                          @ [ eAssertion ]
+                          @ unblock eAssertion
                     )
                 )
             else
@@ -1528,6 +1536,10 @@ module Translation =
                 EFun([ LocalDecl(x, tO, false) ], None, tN, bodyXOE)
 
             reduce abs // reduce eta-contracts
+        and notExpr (e: Expr) : Expr =
+            match e with
+            | EUnOpApply ("Not", arg) -> arg // remove "!" if there is one
+            | _ -> EUnOpApply ("Not", e) // add "!" if there is not one
         and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
             let realToInt eReal tReal tInt =
                 EMemberRef(ObjectReceiver(eReal, tReal), Path [ "Floor" ], [])

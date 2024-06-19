@@ -655,39 +655,31 @@ module Analysis =
             match expr with
             | EQuant (quant, ld, cond, ens, body) when quant = Quantifier.Forall ->
                 match cond with
-                    | Some _ -> this.exprDefault(ctx, expr)
-                    | None ->
-                        match body with
-                        | EBinOpApply (op, arg1, arg2) when Printer(true).binaryOperatorResolve (op) = "==>" ->
-                            let ctxE = ctx.add ld
-                            let ensT = this.conditionList (ctxE, ens)
-                            let arg1T = this.expr (ctxE, arg1)
-                            let arg2T = this.expr (ctxE, arg2)
-                            EQuant (quant, this.localDeclList (ctx, ld), Some arg1T, ensT, arg2T)
-                        | _ ->
-                            this.exprDefault(ctx, expr)
+                | Some _ -> this.exprDefault(ctx, expr)
+                | None ->
+                    match body with
+                    | EBinOpApply (op, arg1, arg2) when Printer(true).binaryOperatorResolve (op) = "==>" ->
+                        let ctxE = ctx.add ld
+                        let ensT = this.conditionList (ctxE, ens)
+                        let arg1T = this.expr (ctxE, arg1)
+                        let arg2T = this.expr (ctxE, arg2)
+                        EQuant (quant, this.localDeclList (ctx, ld), Some arg1T, ensT, arg2T)
+                    | _ ->
+                        this.exprDefault(ctx, expr)
             | _ -> this.exprDefault(ctx, expr)
         
-    /// EBlock [ EBlock [ exprs ] ] => EBlock [ exprs ]
-    /// EBlock [] => (deleted)
+    /// EBlock [ ..., EBlock [ exprs ], ... ] => EBlock [ ..., exprs, ... ]
     type RemoveRedundantEBLock() =
         inherit Traverser.Identity()
         override this.ToString() = "removing redundant blocks"
         override this.expr(ctx: Context, expr: Expr) =
             match expr with
             | EBlock es ->
-                if es.Length = 1 then
-                    match es.Head with
-                    | EBlock _ ->
-                        this.exprDefault(ctx, es.Head)
-                    | _ ->
-                        EBlock [ this.exprDefault(ctx, es.Head) ]
-                else
-                    let filtered = List.filter (fun e ->
-                        match e with
-                        | EBlock [] -> false
-                        | _ -> true) es
-                    EBlock (this.exprList(ctx, filtered))
+                let unblock exprs = List.concat (List.map (fun e ->
+                    match e with
+                    | EBlock esInside -> esInside
+                    | _ -> [ e ]) exprs)
+                EBlock (this.exprList(ctx, unblock (unblock es))) // assume no more than 2 consecutive redundant layers
             | _ -> this.exprDefault(ctx, expr)
     
     /// we need to leave a qualified version of YIL for proofs to resolve names
