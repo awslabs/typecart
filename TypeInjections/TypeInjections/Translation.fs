@@ -57,7 +57,7 @@ module Translation =
             useForallInFunctionArguments: bool,
             generateBackwardTranslationFunctions: bool
         ) =
-        /// old, new, and translations path for a path
+        /// given p, produces the paths to p in OLD, NEW, and PROOFS
         // This is the only place that uses the literal prefix strings.
         let rec path (p: Path) : Path * Path * Path =
             // joint decls are the same in old and new version
@@ -67,8 +67,10 @@ module Translation =
                 (p.prefix "Joint", p.prefix "Joint", p)
             else
                 (p.prefix "Old", p.prefix "New", p)
+        /// p will become part of JOINT
         and isJoint (p: Path) : bool =
             List.exists (fun (j: Path) -> j.isAncestorOf p) jointDecls
+        /// OLD and NEW type are equal and will become part of JOINT
         and isJointType (tO: Type, tN: Type) : bool =
             match tO, tN with
             | TApply (pO, argsO), TApply (pN, argsN) ->
@@ -87,43 +89,40 @@ module Translation =
             | TFun (tsO, oO), TFun (tsN, oN) ->
                 isJointType (oO, oN) && tsO.Length = tsN.Length && List.forall isJointType (List.zip tsO tsN)
             | _ -> tO = tN
+        /// true if we generate a lemma for method p
         and generateLemmaFor (p: Path) : bool =
             alwaysGenerateLemmas || changedDecls.Contains(p)
+        /// names for a name s: OLD, NEW, (forward translation function, backward translation function)
         and name (s: string) =
-            // old variable name, new variable name,
-            // (forward translation function name, backward translation function name)
             s + "_O", s + "_N", (s + "_forward", s + "_backward")
+        /// like name, but ???
         and name2 (s: string, t: string) =
-            // old variable name, new variable name,
-            // (forward translation function name, backward translation function name)
             s + "_O",
             t + "_N",
             if s = t then
                 (s + "_forward", s + "_backward")
             else
                 (s + "_to_" + t, t + "_back_to_" + s)
+        /// for a type argument: a ---> a_O, a_N, a_forward: a_O -> a_N, a_backward: a_N -> a_O (variance is kept)
         and typearg (a: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
             let v = snd a
             let aO, aN, aT = name (fst a)
-
             (aO, v),
             (aN, v),
             (LocalDecl(fst aT, TFun([ TVar aO ], TVar aN), false), LocalDecl(snd aT, TFun([ TVar aN ], TVar aO), false))
+        /// like typearg, but ???
         and typearg2 (a: TypeArg, b: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
             if a = b then
                 typearg a
             else
                 let nameO, nameN, nameT = name2 (fst a, fst b)
-
                 (nameO, snd a),
                 (nameN, snd b),
                 (LocalDecl(fst nameT, TFun([ TVar nameO ], TVar nameN), false),
                  LocalDecl(snd nameT, TFun([ TVar nameN ], TVar nameO), false))
+        /// heuristically picks a variable name for a type name
         and varname (n: string) = n.Chars(0).ToString()
-        and unblock (e: Expr) =
-            match e with
-            | EBlock es -> es
-            | _ -> [ e ]
+        /// translates every name (path or type/term variable) to either its OLD or NEW name
         and NameTranslator (old: bool) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -210,6 +209,7 @@ module Translation =
                         let _, nN, _ = typearg (plainTypeArg n)
                         TVar(fst nN)
                     | _ -> this.tpDefault (ctx, t) }
+       
         and PrependLemmaCalls (oldCtx: Context, newCtx: Context) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -737,25 +737,23 @@ module Translation =
                     EBlock(
                         resultToReveal generateRevealO resultO
                         @ resultToReveal generateRevealN resultN
-                          @ unblock eAssertion
+                          @ YIL.exprToList eAssertion
                     )
                 )
             else
                 Some(EBlock [])
+        /// extends declaration-translation to lists 
         and decls (contextO: Context) (contextN: Context) (dsD: Diff.List<Decl, Diff.Decl>) =
             List.collect (decl contextO contextN) dsD.elements
+        /// entry point for declaration-translation
         and decl (contextO: Context) (contextN: Context) (dD: Diff.Elem<Decl, Diff.Decl>) : Decl list =
             match dD with
             | Diff.Same d -> declSameOrUpdate contextO contextN (d, d) (Diff.idDecl d)
             | Diff.Add _
             | Diff.Delete _ -> [] // nothing to generate for added/deleted declarations
             | Diff.Update (d, n, df) -> declSameOrUpdate contextO contextN (d, n) df
-        and declSameOrUpdate
-            (contextO: Context)
-            (contextN: Context)
-            (declO: Decl, declN: Decl)
-            (dif: Diff.Decl)
-            : Decl list =
+        /// core function for declaration-translation
+        and declSameOrUpdate(contextO: Context)(contextN: Context)(declO: Decl, declN: Decl)(dif: Diff.Decl): Decl list =
             let n =
                 match dif.name with
                 | Diff.SameName n -> n
@@ -1457,6 +1455,7 @@ module Translation =
                       ) ]
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
             | Diff.Method _ -> [] // unchanged methods produce nothing
+        /// generates the header info (types, specs) of the translation functions for a type declaration
         and typeDeclHeader (p: Path, dO: Decl, dN: Decl) =
             assert (dO.name = dN.name)
             typeDeclHeaderMain (p, dO.name, dO.tpvars, dN.tpvars)
@@ -1495,11 +1494,8 @@ module Translation =
             let outType_back = oldType
             let outSpec_back = outputType (outType_back, [])
             typeParams, inSpec, outSpec, xtO, xtN, inSpec_back, outSpec_back
-        and context
-            (
-                tpDs: Diff.TypeArgList,
-                ldDs: Diff.LocalDeclList
-            ) : TypeArg list * LocalDecl list * (Condition * Condition) list =
+        /// iterates LocalDecl-translation over a list and groups up the results
+        and context(tpDs: Diff.TypeArgList,ldDs: Diff.LocalDeclList) : TypeArg list * LocalDecl list * (Condition * Condition) list =
             if tpDs.isSame && ldDs.isSame then
                 let tps = tpDs.getSame ()
                 let lds = ldDs.getSame ()
@@ -1512,6 +1508,7 @@ module Translation =
                 ldsT
             else
                 failwith (unsupported "change in type/term arguments")
+        /// translates a local decl: x:A --->  xO: AO, xN: AN, 
         and localDecl (ld: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
             let nO, nN, _ = name ld.name
             let tO, tN, tT = tp (ld.tp, ld.tp)
@@ -1531,19 +1528,16 @@ module Translation =
         and abstractRel (x: string, tO: Type, tN: Type, body: Expr -> Expr) : Expr =
             let xOE = EVar x
             let bodyXOE = body xOE
-
-            let abs =
-                EFun([ LocalDecl(x, tO, false) ], None, tN, bodyXOE)
-
+            let abs = EFun([ LocalDecl(x, tO, false) ], None, tN, bodyXOE)
             reduce abs // reduce eta-contracts
         and notExpr (e: Expr) : Expr =
             match e with
             | EUnOpApply ("Not", arg) -> arg // remove "!" if there is one
             | _ -> EUnOpApply ("Not", e) // add "!" if there is not one
+        /// translates built-in types
         and tpBuiltinTypes (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
             let realToInt eReal tReal tInt =
                 EMemberRef(ObjectReceiver(eReal, tReal), Path [ "Floor" ], [])
-
             match tO, tN with
             | TUnit, TUnit
             | TBool, TBool
@@ -1563,6 +1557,11 @@ module Translation =
                     + " to another type: "
                     + tN.ToString()
                 )
+        /// inductively extends the translation of type names to complex types
+        /// a --->  aO, aN, a_forward, a_backward
+        /// the translation functions are produced as meta-expressions to use F# for simplification
+        /// because they are usually only needed applied to arguments
+        /// if they are needed unapplied, they must be wrapped in YIL-lambdas.
         and tp (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
             match tO with
             | TUnit
@@ -1831,6 +1830,7 @@ module Translation =
         and tpAbstracted (x: string, t_o: Type, t_n: Type) =
             let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
+        /// inductively extends the translation of paths to expressions, returning the OLD expression
         and exprOld (exprCtx: Context) (e: Expr) : Expr =
             NameTranslator(true)
                 .expr (
@@ -1840,6 +1840,7 @@ module Translation =
                             nO),
                     e
                 )
+        /// inductively extends the translation of paths to expressions, returning the NEW expression
         and exprNew (exprCtx: Context) (e: Expr) : Expr =
             NameTranslator(false)
                 .expr (
