@@ -5,17 +5,23 @@ open System.IO
 open System.Text.RegularExpressions
 open TypeInjections.YIL
 
-// TypecartAPI exposes typeCart functionalities as a reusable component
+/// the high-level logic of typecart between the user-interface (see Program) and the kernel logic (see Translation)
+/// Typecart takes 2 Dafny projects (OLD and NEW) and produces 1 Dafny project consisting of 4 parts:
+/// - JOINT: the shared and unchanged parts of OLD and NEW
+/// - OLD, NEW: variants of the inputs but without the JOINT part
+/// - the key output, variously called COMBINE, PROOFS, or TRANSLATION, which
+///   * translates between OLD and NEW
+///   * states compatibility lemmas between OLD and NEW and generates proof stubs for them
 module Typecart =
 
-    // interface for handling how typeCart writes out the diffed files
+    /// interface for handling how typeCart writes out the output files
     type TypecartOutputProcessor =
         abstract member processOld : oldYIL: Program -> unit
         abstract member processNew : newYIL: Program -> unit
         abstract member processJoint : jointYIL: Program -> unit
         abstract member processProofs : translationsYIL: Program -> unit
 
-    // Sample output-writing interface for diffing two files
+    /// simple output instance that writes the 4 output parts into separate files
     type DefaultTypecartOutput(outFolder: string) =
         let mkdir (f: string) =
             IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(f))
@@ -35,12 +41,11 @@ module Typecart =
             member this.processProofs(translationsYIL: YIL.Program) = write ("proofs.dfy", translationsYIL)
 
 
-    // replace "." with "\." and "/" with "\/" to make specifying regex on filenames easier
+    /// replace "." with "\." and "/" with "\/" to make specifying regex on filenames easier
     let private makeRegex (s: string) =
         s.Replace(".", "\.").Replace("/", "\/") |> Regex
 
-    // the class TypecartProject defines the input directory scope,
-    // typeCart reads in every file in the directory structure of a project, and produce a diff
+    /// wraps around a Dafny project to allow for handling directory structure,
     type TypecartProject(project: Utils.SystemPathKind, ignorePatterns: Regex list) =
         // append .typecartignore file to ignorePatterns list
         let currDirIgnores =
@@ -66,7 +71,7 @@ module Typecart =
                 false
                 (ignorePatterns @ currDirIgnores)
 
-        // constructor that helps read in ignore patterns from file
+        /// constructor that helps read in ignore patterns from file
         new(project: Utils.SystemPathKind, ignorePatternsFile: string option) =
             let ign =
                 match ignorePatternsFile with
@@ -119,27 +124,38 @@ module Typecart =
             this.files
             @ List.collect (fun (subProject: TypecartProject) -> subProject.collect ()) this.subDirectories
 
-        // turn the directory into a single Dafny AST
+        // ****** below are the two key methods for operating on the Dafny project *****
+        
+        /// run Dafny: parse+type-check
         member this.toDafnyAST(projectName: string, reporter) =
             Utils.parseASTs (this.collect ()) projectName reporter
 
-        // turn dafny AST representation of directory into a YIL AST
+        /// run Dafny + convert to YIL
         member this.toYILProgram(projectName: string, reporter) =
             DafnyToYIL.program (this.toDafnyAST (projectName, reporter), reporter.Options)
 
-    // API entry
+    // ***************************************
+    
+    /// the high-level logic: calls the kernel on 2 Dafny projects and performs simplifications/cleanup
     type Typecart(oldYIL: Program, newYIL: Program, logger: (string -> unit) option) =
         let oldOrNewPrefix (old: bool) = if old then "Old" else "New"
         let jointPrefix = "Joint"
         let proofsPrefix = "Proofs"
+        
+        // all 4 parts are produced by chaining transformations, we set up the piplelines here
+         
         // pipelines for transforming old, new, joint, translations
-        let preprocessPipeline : Traverser.Transform list = // before diffing
+        
+        // run before diffing to normalize programs and thus simplify the diffs
+        let preprocessPipeline : Traverser.Transform list =
             [ Analysis.UnifyAnonymousVariableNames()
               Analysis.NormalizeEQuant() ]
-
+        
+        // joint: the paths that are moved into joint and must be removed from the project
+        // old: true for OLD, false for NEW
         let oldOrNewPipeline (joint: YIL.Path list, old: bool) : Traverser.Transform list =
             [ Analysis.FilterDeclsAndPrefixImports(
-                (fun p -> not (List.exists (fun (q: YIL.Path) -> q.isAncestorOf (p)) joint)),
+                (fun p -> not (List.exists (fun (q: YIL.Path) -> q.isAncestorOf p) joint)),
                 "Joint"
               )
               Analysis.LemmasToAxioms()
@@ -187,21 +203,14 @@ module Typecart =
             | None -> ()
             | Some logger -> logger s
 
-        /// run typecart on oldYIL and newYIL and perform program-level diffing with module granularity
+        /// ***** the entry point for running the typecart loigc
         member this.go(outputWriter: TypecartOutputProcessor) =
-            // for debugging: tests the transformation code
+            // only used for debugging: tests the transformation code
             // Traverser.test oldYIL
+            
             this.logger "***** preprocessing the two programs"
-
-            let oldYIL, _ =
-                Analysis
-                    .Pipeline(preprocessPipeline)
-                    .apply (oldYIL, [])
-
-            let newYIL, _ =
-                Analysis
-                    .Pipeline(preprocessPipeline)
-                    .apply (newYIL, [])
+            let oldYIL, _ = Analysis.Pipeline(preprocessPipeline).apply (oldYIL, [])
+            let newYIL, _ = Analysis.Pipeline(preprocessPipeline).apply (newYIL, [])
 
             // diff the programs
             this.logger "***** diffing the two programs"
@@ -211,57 +220,31 @@ module Typecart =
 
             // generate translation
             this.logger "***** generating translation code"
-
-            let proofsYIL, jointPaths =
-                Translation.prog (oldYIL, newYIL, "Proofs", diff)
+            let proofsYIL, jointPaths = Translation.prog (oldYIL, newYIL, "Proofs", diff)
 
             // emitting output
             this.logger "************ emitting output"
             this.logger "***** joint"
-
             let jointYILresult, jointYILpreserved =
-                Analysis
-                    .Pipeline(jointPipeline jointPaths)
-                    .apply (newYIL, [])
-
+                Analysis.Pipeline(jointPipeline jointPaths).apply (newYIL, [])
             outputWriter.processJoint (jointYILresult)
 
             this.logger "***** old"
-
             let oldYILresult, oldYILpreserved =
-                Analysis
-                    .Pipeline(oldOrNewPipeline (jointPaths, true))
-                    .apply (oldYIL, [])
-
+                Analysis.Pipeline(oldOrNewPipeline (jointPaths, true)).apply (oldYIL, [])
             outputWriter.processOld (oldYILresult)
 
             this.logger "***** new"
-
             let newYILresult, newYILpreserved =
-                Analysis
-                    .Pipeline(oldOrNewPipeline (jointPaths, false))
-                    .apply (newYIL, [])
-
+                Analysis.Pipeline(oldOrNewPipeline (jointPaths, false)).apply (newYIL, [])
             outputWriter.processNew (newYILresult)
 
             this.logger "***** proofs"
-
             let proofsYILresult, _ =
-                Analysis
-                    .Pipeline(proofsPipeline)
-                    .apply (
+                Analysis.Pipeline(proofsPipeline).apply (
                         proofsYIL,
-                        [ Analysis
-                            .WrapTopDecls(jointPrefix)
-                              .prog jointYILpreserved
-                          Analysis
-                              .WrapTopDecls(oldOrNewPrefix (true))
-                              .prog oldYILpreserved
-                          Analysis
-                              .WrapTopDecls(oldOrNewPrefix (false))
-                              .prog newYILpreserved ]
+                        [ Analysis.WrapTopDecls(jointPrefix).prog jointYILpreserved
+                          Analysis.WrapTopDecls(oldOrNewPrefix true).prog oldYILpreserved
+                          Analysis.WrapTopDecls(oldOrNewPrefix false).prog newYILpreserved ]
                     )
-
             outputWriter.processProofs (proofsYILresult)
-
-    let typecart (oldYIL: Program, newYIL: Program, logger: string -> unit) = Typecart(oldYIL, newYIL, logger)

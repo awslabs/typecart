@@ -423,7 +423,8 @@ module Traverser =
     // ***** some concrete implementations for examples and testing
 
     (* identity transformation: implements every translation method by delegating to the default implementation
-       log: if true, print some info while traversing
+       i.e., it traverses the whole AST and copies it
+       This is useful as a base class that only needs some of the abstract methods to be non-trivial.
     *)
     type Identity() =
         inherit Transform()
@@ -525,7 +526,7 @@ module Traverser =
                         if Utils.listDisjoint (List.map localDeclName toCtx.vars, List.map localDeclName ctx.vars) then
                             s
                         else
-                            // capture-avoidance should be when/if practical inputs need it
+                            // capture-avoidance should be added when/if practical inputs need it
                             failwith ("implementation limitation: possible variable capture")
             | _ -> this.exprDefault (ctx, e)
 
@@ -546,6 +547,7 @@ module Traverser =
                     // beta-reduction for tuples: (t_1,...,t_n).i --->  t_i
                     ts.Item i
                 | ETuple (es) ->
+                    // eta-contraction for tuples: (t.1, ..., t.i) ---> t
                     let mutable vars = []
 
                     let isEtaExp =
@@ -564,16 +566,16 @@ module Traverser =
                         e
                 | EAnonApply (EFun (lds, _, _, b), es) when lds.Length = es.Length ->
                     // beta-reduction: (fun x_1,...,x_n -> b) e_1 ... e_n ---> b[x_1/e_1,...,x_n/e_n]
-                    // we drop the condition of the lambda expression here
+                    // we assume the redex is well-typed; in particular, we ignore the condition field of the lambda
                     let subs =
                         (List.zip lds es)
                         |> List.map (fun (ld, e) -> ld.name, e)
 
                     substituteExprs (ctx.add (lds), ctx, subs, b)
-                | EFun (lds, _, _, EAnonApply (EVar (f), args)) when lds.Length = args.Length ->
+                | EFun (lds, None, _, EAnonApply (EVar (f), args)) when lds.Length = args.Length ->
                     // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
-                    // covers only special case where f is variable
-                    // we drop the condition of the lambda expression here
+                    // covers only the special case where f is variable because nothing else has come up
+                    // the condition must be globally true, we only cover the case where it is omitted
                     let isEtaExp =
                         List.zip lds args
                         |> List.forall (fun (ld, a) -> a = EVar(ld.name))
@@ -587,7 +589,7 @@ module Traverser =
                 this.exprDefault (ctx, e)
             else
                 this.expr (ctx, e)
-    /// basic term normalization
+    /// basic one-top-step term normalization
     let reduce (ctx: Context, e: Expr) = Reduce(true).expr (ctx, e)
 
     /// test the traverser class by running a deep identity transformation on a program

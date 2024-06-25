@@ -10,11 +10,11 @@ module Program =
     [<EntryPoint>]
     let main (argv: string array) =
         // for now, typeCart requires fully qualified paths of input files or folders
-        // check the arguments
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
-        if argv.Length < 3 then
-            failwith "usage: program OLD[FILE|FOLDER] NEW[FILE|FOLDER] OUTPUTFOLDER"
-
+        
+        // check and read arguments
+        if argv.Length < 3 || argv.Length > 4 then
+            failwith "usage: program OLD[FILE|FOLDER] NEW[FILE|FOLDER] OUTPUTFOLDER [IGNORE-PATTERNS-FILE]"
         let argvList = argv |> Array.toList
         let oldPath = argvList.Item(0)
         let newPath = argvList.Item(1)
@@ -30,24 +30,18 @@ module Program =
         // initialise Dafny
         let reporter = Utils.initDafny
 
-        // parse input files into Dafny programs
-        Utils.log "***** calling Dafny to parse and type-check old and new file"
+        // initialise typecart wrappers for Dafny projects
+        let oldProject = TypecartProject(oldPath, ignorePatternsFile)
+        let newProject = TypecartProject(newPath, ignorePatternsFile)
 
-        let oldProject =
-            TypecartProject(oldPath, ignorePatternsFile)
-
-        let newProject =
-            TypecartProject(newPath, ignorePatternsFile)
-
-        Utils.log "***** calling typeCart API"
-
-        let oldYIL =
-            oldProject.toYILProgram ("Old", reporter)
-
-        let newYIL =
-            newProject.toYILProgram ("New", reporter)
-
-        typecart(oldYIL, newYIL, Utils.log)
-            .go (DefaultTypecartOutput(outFolder))
+        // run Dafny
+        Utils.log "***** calling Dafny to parse and type-check OLD project and convert it to YIL"
+        let oldYIL = oldProject.toYILProgram ("Old", reporter)
+        Utils.log "***** calling Dafny to parse and type-check NEW project and convert it to YIL"
+        let newYIL = newProject.toYILProgram ("New", reporter)
+    
+        // run typecart
+        Utils.log "***** calling typeCart to produce output project"
+        Typecart(oldYIL, newYIL, Utils.log).go(DefaultTypecartOutput(outFolder))
 
         0
