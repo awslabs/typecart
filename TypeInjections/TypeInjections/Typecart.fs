@@ -142,7 +142,7 @@ module Typecart =
         let jointPrefix = "Joint"
         let proofsPrefix = "Proofs"
         
-        // all 4 parts are produced by chaining transformations, we set up the piplelines here
+        // all 4 parts are produced by chaining transformations, we set up the pipelines here
          
         // pipelines for transforming old, new, joint, translations
         

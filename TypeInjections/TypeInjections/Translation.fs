@@ -95,7 +95,7 @@ module Translation =
         /// names for a name s: OLD, NEW, (forward translation function, backward translation function)
         and name (s: string) =
             s + "_O", s + "_N", (s + "_forward", s + "_backward")
-        /// like name, but ???
+        /// like name, but also accounts for name changes
         and name2 (s: string, t: string) =
             s + "_O",
             t + "_N",
@@ -110,7 +110,7 @@ module Translation =
             (aO, v),
             (aN, v),
             (LocalDecl(fst aT, TFun([ TVar aO ], TVar aN), false), LocalDecl(snd aT, TFun([ TVar aN ], TVar aO), false))
-        /// like typearg, but ???
+        /// like typearg, but also accounts for type argument name changes
         and typearg2 (a: TypeArg, b: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
             if a = b then
                 typearg a
