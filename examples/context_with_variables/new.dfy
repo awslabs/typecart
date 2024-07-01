@@ -1,4 +1,4 @@
-// a simple term language with strings and propositions that is evaluated against a context holding variable definitions
+// a simple term language with strings and propositions that is evaluated against a context holding variable definitions 
 
 module CommonTypes {
    datatype Context = | Context(vars: seq<(string, string)>)
@@ -36,10 +36,24 @@ module ContextEval {
       Find(ctx.vars, k)
    }
 
+   function RemoveSpace(v: string): string {
+      if v == "" then
+         ""
+      else if v[0] == ' ' then
+         RemoveSpace(v[1..])
+      else
+         [v[0]] + RemoveSpace(v[1..])
+   }
+
    function Find(vars: seq<(string, string)>, k: string): Option<string> {
       if vars == [] then
          None()
+      else if vars[0].0 == k then
+         if ' ' !in vars[0].1 then
+            Some(vars[0].1)
+         else
+            Some(RemoveSpace(vars[0].1))
       else
-         if vars[0].0 == k then Some(vars[0].1) else Find(vars[1..], k)
+         Find(vars[1..], k)
    }
 }

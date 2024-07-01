@@ -1,0 +1,45 @@
+--- proofs.dfy	2024-07-01 15:10:48
++++ proofs.dfy	2024-07-01 15:08:55
+@@ -68,6 +68,7 @@
+     
+     lemma Eval_bc(ctx_O: Joint.CommonTypes.Context, condition_O: Joint.CommonTypes.Prop, ctx_N: Joint.CommonTypes.Context, condition_N: Joint.CommonTypes.Prop)
+     	decreases ctx_O, condition_O
++      requires NoSpaceInContextVars(ctx_O.vars)
+       requires ctx_N == ctx_O
+       requires condition_N == condition_O
+       ensures New.ContextEval.Eval(ctx_N, condition_N) == Old.ContextEval.Eval(ctx_O, condition_O)
+\ No newline at end of file
+@@ -89,6 +90,7 @@
+     
+     lemma EvalTerm_bc(ctx_O: Joint.CommonTypes.Context, t_O: Joint.CommonTypes.Term, ctx_N: Joint.CommonTypes.Context, t_N: Joint.CommonTypes.Term)
+     	decreases ctx_O, t_O
++      requires NoSpaceInContextVars(ctx_O.vars)
+       requires ctx_N == ctx_O
+       requires t_N == t_O
+       ensures New.ContextEval.EvalTerm(ctx_N, t_N) == Old.ContextEval.EvalTerm(ctx_O, t_O)
+\ No newline at end of file
+@@ -112,6 +114,7 @@
+     
+     lemma Lookup_bc(ctx_O: Joint.CommonTypes.Context, k_O: string, ctx_N: Joint.CommonTypes.Context, k_N: string)
+     	decreases ctx_O, k_O
++      requires NoSpaceInContextVars(ctx_O.vars)
+       requires ctx_N == ctx_O
+       requires k_N == k_O
+       ensures New.ContextEval.Lookup(ctx_N, k_N) == Old.ContextEval.Lookup(ctx_O, k_O)
+\ No newline at end of file
+@@ -119,9 +122,14 @@
+       Find_bc(ctx_O.vars, k_O, ctx_N.vars, k_N);
+       assert New.ContextEval.Lookup(ctx_N, k_N) == Old.ContextEval.Find(ctx_O.vars, k_O);
+     }
++
++    ghost predicate NoSpaceInContextVars(ctxVars: seq<(string,string)>) {
++      forall p :: p in ctxVars ==> ' ' !in p.1
++    }
+     
+     lemma Find_bc(vars_O: seq<(string,string)>, k_O: string, vars_N: seq<(string,string)>, k_N: string)
+     	decreases vars_O, k_O
++      requires NoSpaceInContextVars(vars_O)
+       requires vars_N == vars_O
+       requires k_N == k_O
+       ensures New.ContextEval.Find(vars_N, k_N) == Old.ContextEval.Find(vars_O, k_O)
+\ No newline at end of file
