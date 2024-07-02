@@ -588,7 +588,8 @@ module Analysis =
             match d with
             | Method(methodType, name, tpvars, inputSpec, outputSpec, modifies, reads, decreases, body, ghost, isStatic, isOpaque, meta) ->
                 if (name.EndsWith("_forward") || name.EndsWith("_backward")) && inputSpec.decls.Length = 1 &&
-                   outputSpec.decls.Length = 1 && inputSpec.decls[0].tp = outputSpec.decls[0].tp then
+                   outputSpec.decls.Length = 1 && inputSpec.decls[0].tp = outputSpec.decls[0].tp &&
+                   body = Some(EVar(inputSpec.decls[0].name)) then
                       result <- result.Add(ctx.currentDecl.child(name))
             | _ -> ()
             this.declDefault(ctx, d)
