@@ -150,10 +150,10 @@ module Translation =
                         let nO, nN, _ = typearg (plainTypeArg n)
                         TVar(if old then fst nO else fst nN)
                     | _ -> this.tpDefault (ctx, t) }
+        /// translate non-local variables a -> a_N
+        /// translate local variables (a:A) -> A_forward(a)
         and ForwardLocalDeclTranslator (lds: LocalDecl list) =
             { new Traverser.Identity() with
-                // translate non-local variables a -> a_N
-                // translate local variables (a:A) -> A_forward(a)
                 override this.path(ctx: Context, p: Path) =
                     let _, pN, _ = path p
                     pN
@@ -209,7 +209,11 @@ module Translation =
                         let _, nN, _ = typearg (plainTypeArg n)
                         TVar(fst nN)
                     | _ -> this.tpDefault (ctx, t) }
-       
+        /// for each method call, if there is a corresponding backward compatibility lemma, invoke it
+        /// while translating variables to old names
+        /// e.g., foo(x) ----> (foo_bc(x_O); Old.foo(x_O))
+        /// for each reveal statement, reveal both the old and the new ones
+        /// e.g., reveal foo(); ---> {reveal Old.foo(); reveal New.foo();}
         and PrependLemmaCalls (oldCtx: Context, newCtx: Context) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -354,6 +358,8 @@ module Translation =
                         let nO, _, _ = typearg (plainTypeArg n)
                         TVar(fst nO)
                     | _ -> this.tpDefault (ctx, t) }
+        /// After PrependLemmaCalls, keep only the lemma calls
+        /// e.g., (foo_bc(x_O); Old.foo(x_O)) ----> foo_bc(x_O);
         and KeepOnlyLemmaCalls =
             { new Traverser.Identity() with
                 override this.case(ctx, case) =
@@ -483,6 +489,56 @@ module Translation =
                     | EBreak _
                     | ENull _
                     | EUnimplemented -> EBlock [] }
+        /// Insert assertions at the results of the old expression that the forward translation of the old result
+        /// is equal to the new result.
+        /// e.g.,
+        /// e ----> assert resultN == forward(e);
+        /// 
+        /// if cond then e1 else e2
+        /// ---->
+        /// if (cond) { assert resultN == forward(e1); } else { assert resultN == forward(e2); }
+        ///
+        /// match e {
+        ///   case c1 => e1
+        ///   case c2 => e2
+        /// }
+        /// ---->
+        /// match e {
+        ///   case c1 => assert resultN == forward(e1);
+        ///   case c2 => assert resultN == forward(e2);
+        /// }
+        ///
+        /// var x := / :| / :- df; body
+        /// ---->
+        /// var x := / :| / :- df; assert resultN == forward(body);
+        ///
+        /// forall x :: cond ==> body
+        /// ---->
+        /// if (forall x :: cond ==> body) {
+        ///   forall x | cond
+        ///     ensures resultN {
+        ///       KeepOnlyLemmaCalls(body)
+        ///   }
+        /// } else {
+        ///   var x :| cond && !body;
+        ///   assert !resultN by {
+        ///     KeepOnlyLemmaCalls(body)
+        ///   }
+        /// }
+        ///
+        /// exists x :: cond && body
+        /// ---->
+        /// if (exists x :: cond && body) {
+        ///   var x :| cond && body;
+        ///   assert resultN by {
+        ///     KeepOnlyLemmaCalls(body)
+        ///   }
+        /// } else {
+        ///   forall x | cond
+        ///     ensures !resultN {
+        ///       KeepOnlyLemmaCalls(body)
+        ///   }
+        /// }
         and insertAssertionsAtResults
             (
                 resultN: Expr,
@@ -618,7 +674,12 @@ module Translation =
                     EIf(e, letExpr, Some quantExpr)
             | EBinOpApply (op, arg1, arg2) when op = "NeqCommon" || op = "EqCommon" ->
                 // (arg1 == EQuant), (arg1 != EQuant)
-                // generate if (arg1) { ... } else { ... }
+                // generate the following:
+                // if (arg1) {
+                //   ... (generate proof sketch for EQuant)
+                // } else {
+                //   ... (generate proof sketch for EQuant)
+                // }
                 let eNarg2 =
                     match eN with
                     | Some (EBinOpApply (_, _, arg2N)) ->
@@ -645,8 +706,9 @@ module Translation =
                         EIf (arg1, trueBranch, Some falseBranch)
                     else
                         EIf (arg1, falseBranch, Some trueBranch)
-                | _ -> eDefault
+                | _ -> eDefault  // not EQuant, use the default case
             | _ -> eDefault
+        /// input translations for backward compatibility lemmas
         and backward_compatible
             (insT: (Condition * Condition) list)
             (insO: LocalDecl list)
@@ -678,11 +740,13 @@ module Translation =
                 (fun ((f1, f2), inO: LocalDecl, inN: LocalDecl) ->
                     translationCondition (fst f1) (fst f2) inO inN, snd f1)
                 (List.zip3 insT insO insN)
+        /// lossless condition for translation functions
         and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
             // forall x1_O: U_O :: U_backward(U_forward(x1_O)) == x1_O
             let nO, _, _ = name "x"
             let ld = LocalDecl(nO, tO, true)
             EQuant(Forall, [ ld ], None, [], EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
+        /// generate proof for backward compatibility theorem
         and proof
             (oldCtx: Context)
             (newCtx: Context)
@@ -693,7 +757,6 @@ module Translation =
             (generateRevealO: bool)
             (generateRevealN: bool)
             : Expr option =
-            // generate proof for backward compatibility theorem
             let oldCtxWithSuffix =
                 oldCtx.translateLocalDeclNames
                     (fun n ->
@@ -710,19 +773,23 @@ module Translation =
             let expandAssertions = true // if false, generate a single assertion
             let generateLemmaCalls = true // if false, do not prepend lemma calls
 
+            // e is the old implementation, e.g.,
+            // foo(x)
             let eO =
                 if generateLemmaCalls then
                     PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix)
                         .expr (oldCtxWithSuffix, e)
                 else
                     exprOld oldCtx e
-
+            // eO is the old implementation with lemma calls and translated names, e.g.,
+            // (foo_bc(x_O); Old.foo(x_O))
             let eAssertion =
                 if expandAssertions then
                     insertAssertionsAtResults (resultN, resultOTranslation, oldCtx, eO, newCtxWithSuffix, Some e)
                 else
                     EAssert(EEqual(resultN, resultOTranslation eO), None, None)
-
+            // eAssertion is the proof sketch, e.g.,
+            // { foo_bc(x_O); assert resultN == forward(Old.foo(x_O)); }
             let resultToReveal generateReveal result =
                 if generateReveal then
                     match result with
@@ -731,7 +798,8 @@ module Translation =
                     | _ -> failwith "Proofs should only generated for method applications"
                 else
                     []
-
+            // resultToReveal is a function to generate the reveal statements for the original methods.
+            // These reveal statements should be prepended to the proof sketch if the original method is opaque. 
             if generateProof then
                 Some(
                     EBlock(
