@@ -102,7 +102,7 @@ module Translation =
             if s = t then
                 (s + "_forward", s + "_backward")
             else
-                (s + "_to_" + t, t + "_back_to_" + s)
+                (s + "_to_" + t, t + "_back_to_" + s) // TODO make names more uniform
         /// for a type argument: a ---> a_O, a_N, a_forward: a_O -> a_N, a_backward: a_N -> a_O (variance is kept)
         and typearg (a: TypeArg) : TypeArg * TypeArg * (LocalDecl * LocalDecl) =
             let v = snd a
@@ -1517,7 +1517,6 @@ module Translation =
         and localDecl2 (ldO: LocalDecl, ldN: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
             let nO, nN, _ = name2 (ldO.name, ldN.name)
             let tO, tN, tT = tp (ldO.tp, ldN.tp)
-
             LocalDecl(nO, tO, ldO.ghost),
             LocalDecl(nN, tN, ldN.ghost),
             (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
