@@ -42,6 +42,13 @@ module YIL =
         /// prefix root component; used for adding "Old", "New", etc.
         member this.prefix(s: string) =
             Path((s + "." + this.names.Head) :: this.names.Tail)
+        /// remove prefix in the root component
+        member this.unprefix() =
+            assert (this.names.Head.Split(".").Length <= 2)
+            if this.names.Head.Split(".").Length = 1 then
+                this
+            else
+                Path(this.names.Head.Split(".")[1] :: this.names.Tail)
         /// a.b.c ---> a.b
         member this.parent = Path(listDropLast this.names)
         /// a.b.c ---> c

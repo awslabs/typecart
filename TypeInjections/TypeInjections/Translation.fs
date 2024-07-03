@@ -122,7 +122,13 @@ module Translation =
                  LocalDecl(snd nameT, TFun([ TVar nameN ], TVar nameO), false))
         /// heuristically picks a variable name for a type name
         and varname (n: string) = n.Chars(0).ToString()
+        /// Remove Joint/Old/New prefixes from paths
+        and RemovePrefix =
+            { new Traverser.Identity() with
+                override this.path(ctx: Context, p: Path) =
+                    p.unprefix() }
         /// translates every name (path or type/term variable) to either its OLD or NEW name
+        /// a -> a_O or a_N
         and NameTranslator (old: bool) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
@@ -167,8 +173,11 @@ module Translation =
                             // generate forward translation
                             let ld =
                                 List.findBack (fun (x: LocalDecl) -> x.name = n) lds
+                            // When called from insertAssertionsAtResults, some types may have redundant prefixes.
+                            // We have to remove them before calling tp()
+                            let ldtp = RemovePrefix.tp(ctx, ld.tp)
 
-                            let _, _, (tT1, _) = tp (ld.tp, ld.tp)
+                            let _, _, (tT1, _) = tp (ldtp, ldtp)
                             tT1 e
                         else
                             let _, nN, _ = name n
@@ -624,30 +633,34 @@ module Translation =
                     match eN with
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), ensures the new body is true; label=None
-                        [ NameTranslator(false).expr (ctxN.add (ld), bodyN), None ]
+                        // Do not use exprNew because it adds the new suffix but we want forward translation
+                        [ ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN), None ]
                     | _ -> []
 
                 let newEnsuresNot =
                     match eN with
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), ensures the new body is false; label=None
-                        [ notExpr (NameTranslator(false).expr (ctxN.add (ld), bodyN)), None ]
+                        // Do not use exprNew because it adds the new suffix but we want forward translation
+                        [ notExpr (ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN)), None ]
                     | _ -> []
 
                 let newAssert =
                     match eN with
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), assert the new body is true; label=None
-                        EAssert(NameTranslator(false).expr (ctxN.add (ld), bodyN), Some eBody, None)
+                        // Do not use exprNew because it adds the new suffix but we want forward translation
+                        EAssert(ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN), Some eBody, None)
                     | _ -> eBody
 
                 let newAssertNot =
                     match eN with
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), assert the new body is false; label=None
+                        // Do not use exprNew because it adds the new suffix but we want forward translation
                         Some(
                             EAssert(
-                                notExpr (NameTranslator(false).expr (ctxN.add (ld), bodyN)),
+                                notExpr (ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN)),
                                 Some eBody,
                                 None
                             )
@@ -790,6 +803,7 @@ module Translation =
                     EAssert(EEqual(resultN, resultOTranslation eO), None, None)
             // eAssertion is the proof sketch, e.g.,
             // { foo_bc(x_O); assert resultN == forward(Old.foo(x_O)); }
+            Console.WriteLine("QQQ")
             let resultToReveal generateReveal result =
                 if generateReveal then
                     match result with
