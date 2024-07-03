@@ -668,19 +668,49 @@ module Analysis =
                     | _ ->
                         this.exprDefault(ctx, expr)
             | _ -> this.exprDefault(ctx, expr)
+    
+    /// Gather all LocalDecl names defined in an expression and potentially used in its subexpressions.
+    /// If there is variable shadowing, only one copy of the name is gathered.
+    type GatherLocalDecls() =
+        inherit Traverser.Identity()
         
-    /// EBlock [ ..., EBlock [ exprs ], ... ] => EBlock [ ..., exprs, ... ]
+        let mutable result: Set<string> = Set.empty
+        let mutable numCurrentCtxVars: int = 0
+        override this.expr(ctx: Context, expr: Expr) =
+            result <- List.fold (fun (s: Set<string>) (ld: LocalDecl) -> s.Add(ld.name)) result ctx.vars[numCurrentCtxVars..]
+            let numPrevCtxVars = numCurrentCtxVars  // record the number outside this expr
+            numCurrentCtxVars <- ctx.vars.Length
+            let ret = this.exprDefault(ctx, expr)
+            numCurrentCtxVars <- numPrevCtxVars
+            ret
+
+        member this.gather(ctx: Context, es: Expr list) =
+            numCurrentCtxVars <- ctx.vars.Length
+            this.exprList(ctx, es) |> ignore
+            result
+
+    /// EBlock [ exprBefore, EBlock [ exprInside ], exprAfter ] => EBlock [ exprBefore, exprInside, exprAfter ]
+    /// only if exprInside and [exprBefore + exprAfter] do not share any LocalDecl with the same name.
     type RemoveRedundantEBLock() =
         inherit Traverser.Identity()
         override this.ToString() = "removing redundant blocks"
         override this.expr(ctx: Context, expr: Expr) =
             match expr with
             | EBlock es ->
-                let unblock exprs = List.concat (List.map (fun e ->
+                let rec unblock exprs = List.concat (List.mapi (fun i e ->
                     match e with
-                    | EBlock esInside -> esInside
+                    | EBlock esInside ->
+                        let innerBlock = unblock esInside
+                        // We should use the ctx with LocalDecls from exprs[..i - 1], but it is fine to have some
+                        // variables usages undefined when gathering LocalDecls here, so we can simply use ctx.
+                        let innerBlockVars = GatherLocalDecls().gather(ctx, innerBlock)
+                        let outerBlockVars = GatherLocalDecls().gather(ctx, exprs[..i - 1] @ exprs[i + 1..])
+                        if (Set.intersect innerBlockVars outerBlockVars).IsEmpty then
+                            innerBlock  // no variable shadowing, unblock
+                        else
+                            [ e ]  // potential variable shadowing, do not unblock
                     | _ -> [ e ]) exprs)
-                EBlock (this.exprList(ctx, unblock (unblock es))) // assume no more than 2 consecutive redundant layers
+                EBlock (this.exprList(ctx, unblock es))
             | _ -> this.exprDefault(ctx, expr)
     
     /// we need to leave a qualified version of YIL for proofs to resolve names

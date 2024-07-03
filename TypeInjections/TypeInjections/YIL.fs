@@ -1034,8 +1034,9 @@ module YIL =
         /// precondition: name must exist in the current context
         /// (which it always does for names encountered while traversing well-typed programs)
         member this.lookupTpvar(n: string) =
+            // lookup in reverse order to find the innermost one in case there is variable shadowing
             let dO =
-                List.tryFind (fun x -> fst x = n) (List.rev tpvars)
+                List.tryFindBack (fun x -> fst x = n) (List.rev tpvars)
 
             match dO with
             | None -> error $"type variable {n} not visible {this}"
@@ -1051,7 +1052,8 @@ module YIL =
             | Some t -> t
 
         member this.lookupLocalDeclO(n: string) : LocalDecl option =
-            List.tryFind (fun (x: LocalDecl) -> x.name = n) (List.rev vars)
+            // lookup in reverse order to find the innermost one in case there is variable shadowing
+            List.tryFindBack (fun (x: LocalDecl) -> x.name = n) (List.rev vars)
 
         /// short string rendering
         override this.ToString() =
