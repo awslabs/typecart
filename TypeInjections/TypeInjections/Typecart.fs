@@ -204,7 +204,7 @@ module Typecart =
             | Some logger -> logger s
 
         /// ***** the entry point for running the typecart loigc
-        member this.go(outputWriter: TypecartOutputProcessor) =
+        member this.go(config: Translation.TranslatorConfig, outputWriter: TypecartOutputProcessor) =
             // only used for debugging: tests the transformation code
             // Traverser.test oldYIL
             
@@ -220,7 +220,7 @@ module Typecart =
 
             // generate translation
             this.logger "***** generating translation code"
-            let proofsYIL, jointPaths = Translation.prog (oldYIL, newYIL, "Proofs", diff)
+            let proofsYIL, jointPaths = Translation.prog (oldYIL, newYIL, "Proofs", diff, config)
 
             // emitting output
             this.logger "************ emitting output"

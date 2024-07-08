@@ -13,8 +13,12 @@ module Program =
         // Dafny fails with cryptic exception if we accidentally pass an empty list of files
         
         // check and read arguments
-        if argv.Length < 3 || argv.Length > 4 then
-            failwith "usage: program OLD[FILE|FOLDER] NEW[FILE|FOLDER] OUTPUTFOLDER [IGNORE-PATTERNS-FILE]"
+        if argv.Length < 3 then
+            failwith "usage: program OLD[FILE|FOLDER] NEW[FILE|FOLDER] OUTPUTFOLDER\n\
+            [-i IGNORE-PATTERNS-FILE]\n\
+            [-g true/false (always Generate lemmas, default=false)]\n\
+            [-f true/false (use Forall in function arguments, default=true)]\n\
+            [-b true/false (generate Backward translation functions, default=true)]"
         let argvList = argv |> Array.toList
         let oldPath = argvList.Item(0)
         let newPath = argvList.Item(1)
@@ -22,10 +26,17 @@ module Program =
 
         // path to the file that specifies filenames to ignore when processing change.
         let ignorePatternsFile =
-            if List.length argvList = 4 then
-                Some(argvList.Item(3))
+            if argv.Length >= 4 && (List.exists (fun s -> s = "-i") argvList[3..]) then
+                Some(List.item ((List.findIndex (fun s -> s = "-i") argvList) + 1) argvList)
             else
                 None
+        
+        // typecart config
+        let config =
+            if argv.Length >= 4 then
+                Translation.parseConfig(argvList[3..])
+            else
+                Translation.defaultConfig
 
         // initialise Dafny
         let reporter = Utils.initDafny
@@ -42,6 +53,6 @@ module Program =
     
         // run typecart
         Utils.log "***** calling typeCart to produce output project"
-        Typecart(oldYIL, newYIL, Utils.log).go(DefaultTypecartOutput(outFolder))
+        Typecart(oldYIL, newYIL, Utils.log).go(config, DefaultTypecartOutput(outFolder))
 
         0

@@ -44,6 +44,59 @@ open DafnyFunctions
 /// takes a diff between two YIL objects and returns the translation declarations/objects for it
 module Translation =
     let unsupported s = "unsupported: " + s
+    /// config for translator
+    type TranslatorConfig =
+        { // If we want to generate lemmas even if the function/method is not affected by the change.
+          alwaysGenerateLemmas: bool 
+
+          // If we want to expand all function arguments' requirements by one level from lambda expressions
+          // to forall expressions.
+          useForallInFunctionArguments: bool
+
+          // Set this variable to false only when no function types (higher-order functions) are used
+          // to reduce the number of functions and variables that Dafny must consider.
+          generateBackwardTranslationFunctions: bool
+          
+          // If we want to generate the proof sketch (if false, do not generate anything in the lemma body)
+          generateProof: bool
+          
+          // In the proof sketch, we want to generate assertions at the leaf level of the AST (true)
+          // or generate a single assertion (false)
+          expandAssertions: bool
+          
+          // In the proof sketch, if we want to prepend lemma calls
+          generateLemmaCalls: bool
+        }
+    let defaultConfig =
+        { alwaysGenerateLemmas = false
+          useForallInFunctionArguments = true
+          generateBackwardTranslationFunctions = true
+          generateProof = true
+          expandAssertions = true
+          generateLemmaCalls = true }
+    let stringToBool (value: string) =
+        match Boolean.TryParse(value) with
+        | true, b -> b
+        | _ -> failwith "expected \"true\" or \"false\""
+    let parseConfig (argvList: string list) =
+        { alwaysGenerateLemmas =
+              if List.exists (fun s -> s = "-g") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-g") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.alwaysGenerateLemmas
+          useForallInFunctionArguments =
+              if List.exists (fun s -> s = "-f") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.useForallInFunctionArguments
+          generateBackwardTranslationFunctions =
+              if List.exists (fun s -> s = "-b") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-b") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.generateBackwardTranslationFunctions
+          generateProof = defaultConfig.generateProof
+          expandAssertions = defaultConfig.expandAssertions
+          generateLemmaCalls = defaultConfig.generateLemmaCalls }
 
     /// translates a program, encapsulates global data/state for use during translation
     type Translator
@@ -53,9 +106,7 @@ module Translation =
             declsD: Diff.DeclList,
             jointDecls: Path list,
             changedDecls: Set<Path>,
-            alwaysGenerateLemmas: bool,
-            useForallInFunctionArguments: bool,
-            generateBackwardTranslationFunctions: bool
+            config: TranslatorConfig
         ) =
         /// given p, produces the paths to p in OLD, NEW, and PROOFS
         // This is the only place that uses the literal prefix strings.
@@ -91,7 +142,7 @@ module Translation =
             | _ -> tO = tN
         /// true if we generate a lemma for method p
         and generateLemmaFor (p: Path) : bool =
-            alwaysGenerateLemmas || changedDecls.Contains(p)
+            config.alwaysGenerateLemmas || changedDecls.Contains(p)
         /// names for a name s: OLD, NEW, (forward translation function, backward translation function)
         and name (s: string) =
             s + "_O", s + "_N", (s + "_forward", s + "_backward")
@@ -297,7 +348,7 @@ module Translation =
                                             (fun (t: Type) ->
                                                 let _, _, (tT1, tT2) = tpAbstracted ("x", t, t)
 
-                                                if generateBackwardTranslationFunctions then
+                                                if config.generateBackwardTranslationFunctions then
                                                     [ tT1; tT2 ]
                                                 else
                                                     [ tT1 ])
@@ -310,7 +361,7 @@ module Translation =
                                             (fun (t: Type) ->
                                                 let _, _, (tForward, tBackward) = tpAbstracted ("x", t, t)
 
-                                                if generateBackwardTranslationFunctions then
+                                                if config.generateBackwardTranslationFunctions then
                                                     [ tForward; tBackward ]
                                                 else
                                                     [ tForward ])
@@ -728,7 +779,7 @@ module Translation =
             (insN: LocalDecl list)
             : Condition list =
             let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: LocalDecl) (inN: LocalDecl) =
-                if not useForallInFunctionArguments then
+                if not config.useForallInFunctionArguments then
                     // x_N == forward(x_O)
                     EEqual(localDeclTerm inN, oldToNew)
                 else
@@ -782,14 +833,10 @@ module Translation =
                         let _, nN, _ = name n
                         nN)
 
-            let generateProof = true // if false, do not generate anything
-            let expandAssertions = true // if false, generate a single assertion
-            let generateLemmaCalls = true // if false, do not prepend lemma calls
-
             // e is the old implementation, e.g.,
             // foo(x)
             let eO =
-                if generateLemmaCalls then
+                if config.generateLemmaCalls then
                     PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix)
                         .expr (oldCtxWithSuffix, e)
                 else
@@ -797,13 +844,12 @@ module Translation =
             // eO is the old implementation with lemma calls and translated names, e.g.,
             // (foo_bc(x_O); Old.foo(x_O))
             let eAssertion =
-                if expandAssertions then
+                if config.expandAssertions then
                     insertAssertionsAtResults (resultN, resultOTranslation, oldCtx, eO, newCtxWithSuffix, Some e)
                 else
                     EAssert(EEqual(resultN, resultOTranslation eO), None, None)
             // eAssertion is the proof sketch, e.g.,
             // { foo_bc(x_O); assert resultN == forward(Old.foo(x_O)); }
-            Console.WriteLine("QQQ")
             let resultToReveal generateReveal result =
                 if generateReveal then
                     match result with
@@ -814,7 +860,7 @@ module Translation =
                     []
             // resultToReveal is a function to generate the reveal statements for the original methods.
             // These reveal statements should be prepended to the proof sketch if the original method is opaque. 
-            if generateProof then
+            if config.generateProof then
                 Some(
                     EBlock(
                         resultToReveal generateRevealO resultO
@@ -948,7 +994,7 @@ module Translation =
                         false,
                         contextO.currentMeta ()
                     )
-                    :: if generateBackwardTranslationFunctions then
+                    :: if config.generateBackwardTranslationFunctions then
                            [ Method(
                                  IsFunction,
                                  snd names,
@@ -1145,7 +1191,7 @@ module Translation =
                         false,
                         emptyMeta
                     )
-                    :: (if generateBackwardTranslationFunctions then
+                    :: (if config.generateBackwardTranslationFunctions then
                             [ Method(
                                   IsFunction,
                                   snd names,
@@ -1375,11 +1421,11 @@ module Translation =
 
                     let inputs =
                         instanceInputs
-                        @ (if generateBackwardTranslationFunctions then
+                        @ (if config.generateBackwardTranslationFunctions then
                                Utils.listInterleave (List.unzip parentTvsT)
                            else
                                List.map fst parentTvsT)
-                          @ (if generateBackwardTranslationFunctions then
+                          @ (if config.generateBackwardTranslationFunctions then
                                  Utils.listInterleave (List.unzip tvsT)
                              else
                                  List.map fst tvsT)
@@ -1426,7 +1472,7 @@ module Translation =
 
                     // lossless assumptions
                     let losslessAssumptions =
-                        if generateBackwardTranslationFunctions then
+                        if config.generateBackwardTranslationFunctions then
                             List.map
                                 (fun (tpargO: TypeArg, tparg_o: TypeArg, tparg_n: TypeArg) ->
                                     let _, _, tT =
@@ -1555,7 +1601,7 @@ module Translation =
             let xtN = LocalDecl(xN, newType, false)
 
             let inputs =
-                (if generateBackwardTranslationFunctions then
+                (if config.generateBackwardTranslationFunctions then
                      Utils.listInterleave (List.unzip tvsT)
                  else
                      List.map fst tvsT)
@@ -1566,7 +1612,7 @@ module Translation =
             let outSpec = outputType (outType, [])
 
             let inputs_back =
-                (if generateBackwardTranslationFunctions then
+                (if config.generateBackwardTranslationFunctions then
                      Utils.listInterleave (List.unzip tvsT)
                  else
                      List.map fst tvsT)
@@ -1710,7 +1756,7 @@ module Translation =
                 let tsT1, tsT2 = List.unzip tsT
 
                 let tsTs =
-                    if generateBackwardTranslationFunctions then
+                    if config.generateBackwardTranslationFunctions then
                         Utils.listInterleave (tsT1, tsT2)
                     else
                         tsT1
@@ -1986,8 +2032,7 @@ module Translation =
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
-            let tr =
-                Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, true, true, true)
+            let tr = Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, defaultConfig)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -1999,7 +2044,7 @@ module Translation =
         Console.WriteLine("***** END " + kind + " *****")
 
     /// entry point for translating a program
-    let prog (pO: Program, pN: Program, newName: string, pD: Diff.Program) : Program * Path list =
+    let prog (pO: Program, pN: Program, newName: string, pD: Diff.Program, config: TranslatorConfig) : Program * Path list =
         let ctxO = Context(pO)
         let pathOf (d: Decl) = ctxO.currentDecl.child (d.name)
         let childPaths = List.map pathOf pO.decls // toplevel paths of p
@@ -2024,17 +2069,6 @@ module Translation =
 
         printPaths ("changed in old", Set.toList changedInOld)
 
-        // If we want to generate lemmas even if the function/method is not affected by the change.
-        let alwaysGenerateLemmas = false
-
-        // If we want to expand all function arguments' requirements by one level from lambda expressions
-        // to forall expressions.
-        let useForallInFunctionArguments = true
-
-        // Set this variable to false only when no function types (higher-order functions) are used
-        // to reduce the number of functions and variables that Dafny must consider.
-        let generateBackwardTranslationFunctions = true
-
         let tr =
             Translator(
                 Context(pO),
@@ -2042,9 +2076,7 @@ module Translation =
                 pD.decls,
                 jointPaths,
                 changedInOld,
-                alwaysGenerateLemmas,
-                useForallInFunctionArguments,
-                generateBackwardTranslationFunctions
+                config
             )
 
         let translations =
