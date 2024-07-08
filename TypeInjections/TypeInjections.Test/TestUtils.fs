@@ -85,10 +85,19 @@ module TestUtils =
         let newFolderPath = argvList.Item(1)
         let outFolderPath = argvList.Item(2)
         
-        // is there a typecartignore file?
+        // path to the file that specifies filenames to ignore when processing change.
         let tcIgnore =
-            if argvList.Length > 3 then Some (argvList.Item(3)) else None
+            if argv.Length >= 4 && (List.exists (fun s -> s = "-i") argvList[3..]) then
+                Some(List.item ((List.findIndex (fun s -> s = "-i") argvList) + 1) argvList)
+            else
+                None
         
+        // typecart config
+        let config =
+            if argv.Length >= 4 then
+                Translation.parseConfig(argvList[3..])
+            else
+                Translation.defaultConfig
         
         Directory.CreateDirectory(outFolderPath) |> ignore
         
@@ -103,7 +112,7 @@ module TestUtils =
         let outputWriter = DirectoryOutputWriter(outFolderPath)
         
         T.Typecart(oldProj.toYILProgram("Old", Utils.initDafny),
-                   newProj.toYILProgram("New", Utils.initDafny)).go(outputWriter)
+                   newProj.toYILProgram("New", Utils.initDafny)).go(config, outputWriter)
        
     let public testRunnerGen (directoryName: string) (outputDirectoryName: string) =
         let inputDirectory = Path.Combine([| pwd; directoryName |])
