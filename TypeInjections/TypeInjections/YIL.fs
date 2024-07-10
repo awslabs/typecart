@@ -1307,17 +1307,17 @@ module YIL =
                 + (match modifies with
                    | [] -> ""
                    | _ ->
-                       "\n\tmodifies "
+                       "\n" + indentString + "modifies "
                        + (List.map expr modifies |> String.concat ", "))
                 + (match reads with
                    | [] -> ""
                    | _ ->
-                       "\n\treads "
+                       "\n" + indentString + "reads "
                        + (List.map expr reads |> String.concat ", "))
                 + (match decreases with
                    | [] -> ""
                    | _ ->
-                       "\n\tdecreases "
+                       "\n" + indentString + "decreases "
                        + (List.map expr decreases |> String.concat ", "))
                 + (this.conditions (true, ins.conditions, methodCtx))
                 + (this.conditions (false, outs.conditions, methodCtx))

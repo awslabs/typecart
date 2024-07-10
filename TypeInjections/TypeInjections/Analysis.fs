@@ -644,7 +644,9 @@ module Analysis =
                     expr
             | _ -> this.exprDefault(ctx, expr)
     
-    /// Move the condition of forall expressions out of the body of the expression.
+    /// Move the condition of quantifier expressions out of the body of the expression.
+    /// This is necessary when generating proof sketches with quantifier expressions with bodies that need to
+    /// call lemmas with preconditions.
     type NormalizeEQuant() =
         inherit Traverser.Identity()
         override this.ToString() = "normalizing forall expressions"
@@ -654,12 +656,18 @@ module Analysis =
         
         override this.expr(ctx: Context, expr: Expr) =
             match expr with
-            | EQuant (quant, ld, cond, ens, body) when quant = Quantifier.Forall ->
+            | EQuant (quant, ld, cond, ens, body) ->
                 match cond with
                 | Some _ -> this.exprDefault(ctx, expr)
                 | None ->
-                    match body with
-                    | EBinOpApply (op, arg1, arg2) when Printer(true).binaryOperatorResolve (op) = "==>" ->
+                    match quant, body with
+                    | Quantifier.Forall, EBinOpApply (op, arg1, arg2) when Printer(true).binaryOperatorResolve (op) = "==>" ->
+                        let ctxE = ctx.add ld
+                        let ensT = this.conditionList (ctxE, ens)
+                        let arg1T = this.expr (ctxE, arg1)
+                        let arg2T = this.expr (ctxE, arg2)
+                        EQuant (quant, this.localDeclList (ctx, ld), Some arg1T, ensT, arg2T)
+                    | Quantifier.Exists, EBinOpApply (op, arg1, arg2) when Printer(true).binaryOperatorResolve (op) = "&&" ->
                         let ctxE = ctx.add ld
                         let ensT = this.conditionList (ctxE, ens)
                         let arg1T = this.expr (ctxE, arg1)
@@ -667,6 +675,7 @@ module Analysis =
                         EQuant (quant, this.localDeclList (ctx, ld), Some arg1T, ensT, arg2T)
                     | _ ->
                         this.exprDefault(ctx, expr)
+                    
             | _ -> this.exprDefault(ctx, expr)
     
     /// Gather all LocalDecl names defined in an expression and potentially used in its subexpressions.
