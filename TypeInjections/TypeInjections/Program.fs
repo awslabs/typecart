@@ -16,7 +16,9 @@ module Program =
         if argv.Length < 3 then
             failwith "usage: program OLD[FILE|FOLDER] NEW[FILE|FOLDER] OUTPUTFOLDER\n\
             [-i IGNORE-PATTERNS-FILE]\n\
-            [-g true/false (always Generate lemmas, default=false)]\n\
+            [-a 0/1/2 (affected analysis: 0 = do not generate anything for unaffected,\n\
+                                          1 = always generate lemmas,\n\
+                                          2 = generate axioms for unaffected, default=2)]\n\
             [-f true/false (use Forall in function arguments, default=true)]\n\
             [-b true/false (generate Backward translation functions, default=true)]"
         let argvList = argv |> Array.toList

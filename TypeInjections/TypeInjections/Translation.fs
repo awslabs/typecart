@@ -47,7 +47,11 @@ module Translation =
     /// config for translator
     type TranslatorConfig =
         { // If we want to generate lemmas even if the function/method is not affected by the change.
-          alwaysGenerateLemmas: bool 
+          alwaysGenerateLemmas: bool
+
+          // If we want to generate axioms for functions not affected by the change and called by functions
+          // affected by the change. alwaysGenerateLemmas and generateAxiomsForUnchanged should not both be true.
+          generateAxiomsForUnchanged: bool 
 
           // If we want to expand all function arguments' requirements by one level from lambda expressions
           // to forall expressions.
@@ -69,6 +73,7 @@ module Translation =
         }
     let defaultConfig =
         { alwaysGenerateLemmas = false
+          generateAxiomsForUnchanged = true
           useForallInFunctionArguments = true
           generateBackwardTranslationFunctions = true
           generateProof = true
@@ -80,10 +85,19 @@ module Translation =
         | _ -> failwith "expected \"true\" or \"false\""
     let parseConfig (argvList: string list) =
         { alwaysGenerateLemmas =
-              if List.exists (fun s -> s = "-g") argvList then
-                  List.item ((List.findIndex (fun s -> s = "-g") argvList) + 1) argvList |> stringToBool
+              if List.exists (fun s -> s = "-a") argvList then
+                  match List.item ((List.findIndex (fun s -> s = "-a") argvList) + 1) argvList with
+                  | "1" -> true
+                  | _ -> false
               else
                   defaultConfig.alwaysGenerateLemmas
+          generateAxiomsForUnchanged =
+              if List.exists (fun s -> s = "-a") argvList then
+                  match List.item ((List.findIndex (fun s -> s = "-a") argvList) + 1) argvList with
+                  | "2" -> true
+                  | _ -> false
+              else
+                  defaultConfig.generateAxiomsForUnchanged
           useForallInFunctionArguments =
               if List.exists (fun s -> s = "-f") argvList then
                   List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToBool
@@ -106,6 +120,7 @@ module Translation =
             declsD: Diff.DeclList,
             jointDecls: Path list,
             changedDecls: Set<Path>,
+            calledByChangedDecls: Set<Path>,
             config: TranslatorConfig
         ) =
         /// given p, produces the paths to p in OLD, NEW, and PROOFS
@@ -140,9 +155,17 @@ module Translation =
             | TFun (tsO, oO), TFun (tsN, oN) ->
                 isJointType (oO, oN) && tsO.Length = tsN.Length && List.forall isJointType (List.zip tsO tsN)
             | _ -> tO = tN
-        /// true if we generate a lemma for method p
+        /// true iff we generate a lemma for method p
         and generateLemmaFor (p: Path) : bool =
             config.alwaysGenerateLemmas || changedDecls.Contains(p)
+        /// true iff we generate an axiom for method p
+        and generateAxiomFor (p: Path) : bool =
+            (not config.alwaysGenerateLemmas) && (not (changedDecls.Contains(p)))
+            && config.generateAxiomsForUnchanged && (not (isJoint p)) && calledByChangedDecls.Contains(p)
+        /// true iff we generate a lemma or axiom for method p
+        and generateLemmaOrAxiomFor (p: Path) : bool =
+            config.alwaysGenerateLemmas || changedDecls.Contains(p)
+            || (config.generateAxiomsForUnchanged && (not (isJoint p)) && calledByChangedDecls.Contains(p))
         /// names for a name s: OLD, NEW, (forward translation function, backward translation function)
         and name (s: string) =
             s + "_O", s + "_N", (s + "_forward", s + "_backward")
@@ -299,7 +322,7 @@ module Translation =
                         let methodDeclO = ctx.lookupByPathOption (method)
                         let methodDeclN = newCtx.lookupByPathOption (method)
 
-                        if generateLemmaFor method
+                        if generateLemmaOrAxiomFor method
                            && methodDeclO.IsSome
                            && methodDeclN.IsSome then
                             match methodDeclO.Value, methodDeclN.Value with
@@ -1256,7 +1279,7 @@ module Translation =
 
                 translations @ memberLemmasWithPrefix
             // immutable fields with initializer yield a lemma, mutable fields yield nothing
-            | Diff.Field (_, tpD, dfD) when generateLemmaFor (p) ->
+            | Diff.Field (_, tpD, dfD) when generateLemmaOrAxiomFor (p) ->
                 match declO with
                 | Field (_, _, dfO, _, isStatic, isMutable, _) when dfO.IsNone || not isStatic || isMutable -> []
                 | Field (_, t, _, _, _, _, _) ->
@@ -1290,7 +1313,7 @@ module Translation =
                           [],
                           [],
                           [],
-                          Some(EBlock []),
+                          (if generateLemmaFor p then Some(EBlock []) else None),
                           true,
                           true,
                           false,
@@ -1299,7 +1322,7 @@ module Translation =
                 | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
             | Diff.Field _ -> [] // unchanged fields produce nothing
             // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-            | Diff.Method (nameD, tvsD, insD, outsD, bdD) when generateLemmaFor (p) ->
+            | Diff.Method (nameD, tvsD, insD, outsD, bdD) when generateLemmaOrAxiomFor (p) ->
                 match declO, declN with
                 | Method(methodType = IsLemma), _
                 | Method(methodType = IsMethod), _ -> []
@@ -1524,7 +1547,7 @@ module Translation =
                         OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
                     // copy the decreases clause from the old implementation
-                    let decreases = List.map (exprOld ctxOh) decreasesO
+                    let decreases = List.map (exprOld oldHeaderCtx) decreasesO
 
                     let oldBodyCtx =
                         if isStatic then
@@ -1540,31 +1563,34 @@ module Translation =
 
                     // The body yields the proof of the lemma.
                     let proof =
-                        match bdD with
-                        | Diff.SameExprO bdO ->
-                            // unchanged body: try to generate proof sketch
-                            // use oldCtx to replace "this" with old variables
-                            //
-                            // When bdO is None, both old and new functions are axioms.
-                            // So we also generate axioms (body=None) in this case.
-                            match outputTypeT with
-                            | Some ot ->
-                                bdO
-                                |> Option.bind
-                                    (fun b ->
-                                        proof oldBodyCtx newBodyCtx b resultO resultN (fst ot) isOpaqueO isOpaqueN)
-                            | None -> Some(EBlock [])
-                        | _ ->
-                            // updated body: try to generate proof sketch
-                            // use oldCtx to replace "this" with old variables
-                            match bodyO with
-                            | Some bd ->
+                        if generateAxiomFor p then
+                            None // an axiom
+                        else
+                            match bdD with
+                            | Diff.SameExprO bdO ->
+                                // unchanged body: try to generate proof sketch
+                                // use oldCtx to replace "this" with old variables
+                                //
+                                // When bdO is None, both old and new functions are axioms.
+                                // So we also generate axioms (body=None) in this case.
                                 match outputTypeT with
-                                | Some ot -> proof oldBodyCtx newBodyCtx bd resultO resultN (fst ot) isOpaqueO isOpaqueN
+                                | Some ot ->
+                                    bdO
+                                    |> Option.bind
+                                        (fun b ->
+                                            proof oldBodyCtx newBodyCtx b resultO resultN (fst ot) isOpaqueO isOpaqueN)
                                 | None -> Some(EBlock [])
-                            | None ->
-                                // other cases: generate empty proof
-                                Some(EBlock [])
+                            | _ ->
+                                // updated body: try to generate proof sketch
+                                // use oldCtx to replace "this" with old variables
+                                match bodyO with
+                                | Some bd ->
+                                    match outputTypeT with
+                                    | Some ot -> proof oldBodyCtx newBodyCtx bd resultO resultN (fst ot) isOpaqueO isOpaqueN
+                                    | None -> Some(EBlock [])
+                                | None ->
+                                    // other cases: generate empty proof
+                                    Some(EBlock [])
 
                     [ Method(
                           IsLemma,
@@ -2032,7 +2058,7 @@ module Translation =
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
-            let tr = Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, defaultConfig)
+            let tr = Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, Set.empty, defaultConfig)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -2061,13 +2087,18 @@ module Translation =
 
         printPaths ("unchanged", sameChildren)
         printPaths ("changed", changedChildren)
-        printPaths ("dependency closure of changed", changedClosed)
+        printPaths ("affected (dependency closure of changed)", changedClosed)
         printPaths ("joint", jointPaths)
 
         let changedInOld =
             DiffAnalysis.changedInOld (Context(pO), Context(pN), pD)
 
-        printPaths ("changed in old", Set.toList changedInOld)
+        printPaths ("affected in old", Set.toList changedInOld)
+        
+        let calledByAffectedInOld =
+            Analysis.GatherPathsUsedByPaths(changedInOld).gather pO
+        
+        printPaths ("directly called by affected in old", Set.toList calledByAffectedInOld)
 
         let tr =
             Translator(
@@ -2076,6 +2107,7 @@ module Translation =
                 pD.decls,
                 jointPaths,
                 changedInOld,
+                calledByAffectedInOld,
                 config
             )
 

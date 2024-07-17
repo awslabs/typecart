@@ -1292,6 +1292,7 @@ module YIL =
                    | _ -> this.ghost (g))
                 + methodType.ToString()
                 + " "
+                + (if methodType.isLemma() && b.IsNone then "{:axiom} " else "")
                 + (this.meta a)
                 + n
                 + (this.tpvars false g tpvs)
@@ -1321,10 +1322,10 @@ module YIL =
                        + (List.map expr decreases |> String.concat ", "))
                 + (this.conditions (true, ins.conditions, methodCtx))
                 + (this.conditions (false, outs.conditions, methodCtx))
-                + "\n"
                 + (match b with
                    | None -> ""
-                   | Some e -> (match methodType with
+                   | Some e -> ("\n" +
+                                match methodType with
                                 | IsLemma
                                 | IsMethod -> this.statement e methodCtx
                                 | _ -> indentedBraced (this.expr e methodCtx)
