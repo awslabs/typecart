@@ -359,7 +359,7 @@ module YIL =
             match this.provides, this.reveals with
             | [], [] -> ""
             | _ ->
-                "export \n"
+                "export\n"
                 + (match this.provides with
                    | [] -> ""
                    | _ -> "  provides " + (lts this.provides))
