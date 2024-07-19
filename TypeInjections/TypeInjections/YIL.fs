@@ -1419,13 +1419,6 @@ module YIL =
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
             // we need to add parentheses in var a := (b; c);
             let exprsNoBrExceptForSemicolon es sep = this.exprsNoBrWithPrecedence es 1 sep pctx
-            // add a space at the beginning only if the result is in a single line
-            let spaceThenStmt e pctx =
-                let s = this.statement e pctx
-                if s.Contains("\n") then
-                    s
-                else
-                    " " + s
 
             match e with
             | EBlock es ->
@@ -1453,7 +1446,8 @@ module YIL =
                    | Some e -> " | " + expr e
                    | None -> "")
                 + this.conditions (false, ens, pctx)
-                + (spaceThenStmt b pctx)
+                + " "
+                + (this.statement b pctx)
             | EIf (c, t, e) ->
                 let elsePart =
                     match e with
@@ -1463,15 +1457,15 @@ module YIL =
                 "if "
                 + "("
                 + (expr c)
-                + ")"
-                + (spaceThenStmt t pctx)
+                + ") "
+                + (this.statement t pctx)
                 + elsePart
             | EAlternative(conds, bodies) ->
                 let alternativeCase (cond, body) =
                     "case "
                     + (expr cond)
-                    + " =>"
-                    + (spaceThenStmt body pctx)
+                    + " => "
+                    + (this.statement body pctx)
                     + " "
                 "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EMatch (e, t, cases, dfltO) ->

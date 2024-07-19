@@ -12,4 +12,11 @@ module Sign {
     case i > 0 => x := 1;
     case i < 0 => x := -1;
   }
+  method test(i: int) {
+    var x := 0;
+    if
+    case i == 0 => x := 0;
+    case i > 0 => x := 1;
+    case i < 0 => x := -1;
+  }
 }
