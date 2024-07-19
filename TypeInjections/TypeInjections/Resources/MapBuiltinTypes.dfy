@@ -30,7 +30,7 @@ module Translations.Utils {
    * to verification errors (cannot prove false), so Dafny will not stop verifying the entire program
    * when it sees "???".
    */
-  function ???<X(0)>(): X 
+  function ???<X(0)>(): X
     requires false
   {
     var tmp: X :| true;

@@ -1130,6 +1130,7 @@ module YIL =
         let indented (s: string, braced: Boolean) =
             let s =
                 ("\n" + s).Replace("\n", "\n" + indentString)
+            let s = s.Replace("\n" + indentString + "\n", "\n\n") // do not indent empty lines
 
             if braced then "{" + s + "\n}" else s
 
@@ -1418,6 +1419,13 @@ module YIL =
             let exprsNoBr es sep = this.exprsNoBr es sep pctx
             // we need to add parentheses in var a := (b; c);
             let exprsNoBrExceptForSemicolon es sep = this.exprsNoBrWithPrecedence es 1 sep pctx
+            // add a space at the beginning only if the result is in a single line
+            let spaceThenStmt e pctx =
+                let s = this.statement e pctx
+                if s.Contains("\n") then
+                    s
+                else
+                    " " + s
 
             match e with
             | EBlock es ->
@@ -1445,8 +1453,7 @@ module YIL =
                    | Some e -> " | " + expr e
                    | None -> "")
                 + this.conditions (false, ens, pctx)
-                + " "
-                + (this.statement b pctx)
+                + (spaceThenStmt b pctx)
             | EIf (c, t, e) ->
                 let elsePart =
                     match e with
@@ -1456,15 +1463,15 @@ module YIL =
                 "if "
                 + "("
                 + (expr c)
-                + ") "
-                + (this.statement t pctx)
+                + ")"
+                + (spaceThenStmt t pctx)
                 + elsePart
             | EAlternative(conds, bodies) ->
                 let alternativeCase (cond, body) =
                     "case "
                     + (expr cond)
-                    + " => "
-                    + (this.statement body pctx)
+                    + " =>"
+                    + (spaceThenStmt body pctx)
                     + " "
                 "if " + String.concat "" (List.map alternativeCase (List.zip conds bodies))
             | EMatch (e, t, cases, dfltO) ->
@@ -2075,13 +2082,13 @@ module YIL =
 
             "case "
             + this.exprsNoBr case.patterns " | " (pctx.setPos PatternPosition)
-            + " => "
-            + indented (bodyStr, false)
+            + " =>"
+            + (if bodyStr = "" then "" else indented (bodyStr, false)) // do not generate empty line for empty body
 
         member this.case (case: Case) (pctx: Context) =
             "case "
             + this.exprsNoBr case.patterns " | " (pctx.setPos PatternPosition)
-            + " => "
+            + " =>"
             + indented (this.expr case.body pctx, false)
 
     /// shortcut to create a fresh strict printer
