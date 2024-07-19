@@ -1161,6 +1161,7 @@ module YIL =
               else
                   "\n"
             + this.declsGeneral (p.decls, pctx, false)
+            + "\n" // new line at the end of file
 
         member this.tpvar (inDecl: bool) (inGhostMethod: bool) (a: TypeArg) =
             // Only print out variance type info for declaration-level printing.
@@ -1532,8 +1533,8 @@ module YIL =
                    | false, false -> " :| "
                    | _ -> failwith "unsupported let expression")
                 + (exprsNoBrExceptForSemicolon d ", ")
-                + "; "
-                + (if stmt.Contains("\n") then "\n" else "")  // multiple-line let expression
+                + ";"
+                + (if stmt.Contains("\n") then "\n" else " ")  // multiple-line let expression
                 + stmt
             | EAssert (e, p, l) ->
                 "assert "
