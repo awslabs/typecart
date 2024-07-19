@@ -363,7 +363,7 @@ module YIL =
                 + (match this.provides with
                    | [] -> ""
                    | _ -> "  provides " + (lts this.provides))
-                + "\n"
+                + (if not this.provides.IsEmpty && not this.reveals.IsEmpty then "\n" else "")
                 + (match this.reveals with
                    | [] -> ""
                    | _ -> "  reveals " + (lts this.reveals))
@@ -1132,7 +1132,7 @@ module YIL =
                 ("\n" + s).Replace("\n", "\n" + indentString)
             let s = s.Replace("\n" + indentString + "\n", "\n\n") // do not indent empty lines
 
-            if braced then "{" + s + "\n}" else s
+            if braced then "{" + s.TrimEnd() + "\n}" else s
 
         let indentedBraced (s: string) = indented (s, true)
 
