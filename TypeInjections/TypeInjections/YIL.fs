@@ -1091,8 +1091,16 @@ module YIL =
         // abbreviation for a single non-ghost local variable
         member this.add(n: string, t: Type) : Context = this.add [ LocalDecl(n, t, false) ]
         // add old or new suffix to all LocalDecls
-        member this.translateLocalDeclNames(f: string -> string) : Context =
-            Context(prog, currentDecl, tpvars, List.map (fun (ld: LocalDecl) -> LocalDecl(f ld.name, ld.tp, ld.ghost)) vars, pos, importPaths, thisDecl)
+        member this.translateLocalDeclNames(f: LocalDecl -> string) : Context =
+            Context(prog, currentDecl, tpvars, List.map (fun (ld: LocalDecl) -> LocalDecl(f ld, ld.tp, ld.ghost)) vars, pos, importPaths, thisDecl)
+        
+        /// get a temporary unused local variable name
+        member this.getTempLocalDeclName() : string =
+            if not (List.exists (fun (x: LocalDecl) -> x.name = "x") vars) then
+                "x"
+            else
+                "x" + ([0..vars.Length] |> List.find (fun i -> not (
+                    List.exists (fun (x: LocalDecl) -> x.name = "x" + i.ToString()) vars))).ToString()
         
         // set the LocalDecl for "this"
         member this.setThisDecl(d: LocalDecl) : Context =

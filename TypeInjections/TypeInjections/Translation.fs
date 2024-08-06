@@ -70,6 +70,10 @@ module Translation =
           
           // In the proof sketch, if we want to prepend lemma calls
           generateLemmaCalls: bool
+          
+          // If we want to generate a separate lemma for each higher-order function invocation with a
+          // changed function argument
+          specializeHigherOrderLemmas: bool
         }
     let defaultConfig =
         { alwaysGenerateLemmas = false
@@ -78,7 +82,8 @@ module Translation =
           generateBackwardTranslationFunctions = true
           generateProof = true
           expandAssertions = true
-          generateLemmaCalls = true }
+          generateLemmaCalls = true
+          specializeHigherOrderLemmas = true }
     let stringToBool (value: string) =
         match Boolean.TryParse(value) with
         | true, b -> b
@@ -110,7 +115,8 @@ module Translation =
                   defaultConfig.generateBackwardTranslationFunctions
           generateProof = defaultConfig.generateProof
           expandAssertions = defaultConfig.expandAssertions
-          generateLemmaCalls = defaultConfig.generateLemmaCalls }
+          generateLemmaCalls = defaultConfig.generateLemmaCalls
+          specializeHigherOrderLemmas = defaultConfig.specializeHigherOrderLemmas }
 
     /// translates a program, encapsulates global data/state for use during translation
     type Translator
@@ -121,6 +127,7 @@ module Translation =
             jointDecls: Path list,
             changedDecls: Set<Path>,
             calledByChangedDecls: Set<Path>,
+            specializedLemmas: Map<Path, Expr list>,
             config: TranslatorConfig
         ) =
         /// given p, produces the paths to p in OLD, NEW, and PROOFS
@@ -166,6 +173,45 @@ module Translation =
         and generateLemmaOrAxiomFor (p: Path) : bool =
             config.alwaysGenerateLemmas || changedDecls.Contains(p)
             || (config.generateAxiomsForUnchanged && (not (isJoint p)) && calledByChangedDecls.Contains(p))
+        /// true iff e is a method and we generate a lemma or axiom for e
+        and generateLemmaOrAxiomForExpr (e: Expr) : bool =
+            match e with
+            | EMemberRef (_, m, _) -> generateLemmaOrAxiomFor m
+            | _ -> false
+        /// true iff e is a method call such that we generate an axiom for the method and we generate an axiom
+        /// for each argument we generate a lemma or axiom in the method call
+        and generateAxiomForMethodApply (e: Expr) : bool =
+            match e with
+            | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
+                generateAxiomFor method &&
+                exprs |> List.forall (fun expr ->
+                    match expr with
+                    | EMemberRef (_, m, _) ->
+                        if generateLemmaOrAxiomFor m then
+                            generateAxiomFor m
+                        else
+                            true
+                    | _ -> true )
+            | _ -> false
+        /// a helper method for specialized lemma names
+        and nameForEMemberRef (e: Expr) : string =
+            match e with
+            | EMemberRef (_, m, _) -> m.ToString().Replace('.', '_')
+            | _ -> failwith "nameForEMemberRef called without an EMemberRef"
+        /// get the specialized lemma name for an invocation
+        and getSpecializedLemmaName (e: Expr) : string =
+            match e with
+            | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
+                method.name + "_" + (
+                exprs |> List.indexed |> List.filter (fun x -> generateLemmaOrAxiomForExpr (snd x))
+                |> List.map (fun (i, x) -> i.ToString() + "_" + nameForEMemberRef x)
+                |> String.concat "_" ) + "_bc"
+            | _ -> failwith "getSpecializedLemmaName called without an EMethodApply"
+        and getSpecializedArgumentLocations (e: Expr) : int list =
+            match e with
+            | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
+                exprs |> List.indexed |> List.filter (fun x -> generateLemmaOrAxiomForExpr (snd x)) |> List.map fst
+            | _ -> failwith "getSpecializedArgumentLocations called without an EMethodApply"
         /// names for a name s: OLD, NEW, (forward translation function, backward translation function)
         and name (s: string) =
             s + "_O", s + "_N", (s + "_forward", s + "_backward")
@@ -203,7 +249,9 @@ module Translation =
                     p.unprefix() }
         /// translates every name (path or type/term variable) to either its OLD or NEW name
         /// a -> a_O or a_N
-        and NameTranslator (old: bool) =
+        /// optional argument ldmap:
+        /// for each localdecl in the map, translate it to the expr; keep other localdecls untranslated
+        and NameTranslator (old: bool, ldmap: Map<LocalDecl, Expr>) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
                     let pO, pN, _ = path p
@@ -212,8 +260,12 @@ module Translation =
                 override this.expr(ctx: Context, e: Expr) =
                     match e with
                     | EVar n ->
-                        if ctx.lookupLocalDeclO(n).IsSome then
-                            e // locally bound variables are not translated
+                        let ld = ctx.lookupLocalDeclO(n)
+                        if ld.IsSome then
+                            if ldmap.ContainsKey(ld.Value) then
+                                this.expr(ctx, ldmap[ld.Value]) // translate to old/new
+                            else
+                                e // locally bound variables are not translated
                         else
                             let nO, nN, _ = name n
                             EVar(if old then nO else nN)
@@ -297,7 +349,7 @@ module Translation =
         /// e.g., foo(x) ----> (foo_bc(x_O); Old.foo(x_O))
         /// for each reveal statement, reveal both the old and the new ones
         /// e.g., reveal foo(); ---> {reveal Old.foo(); reveal New.foo();}
-        and PrependLemmaCalls (oldCtx: Context, newCtx: Context) =
+        and PrependLemmaCalls (oldCtx: Context, newCtx: Context, ldmap: Map<LocalDecl, Expr>) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
                     let pO, _, _ = path p
@@ -308,10 +360,14 @@ module Translation =
 
                     match e with
                     | EVar n ->
-                        if ctx.lookupLocalDeclO(n).IsSome then
-                            e // locally bound variables are not translated
+                        let ld = ctx.lookupLocalDeclO(n)
+                        if ld.IsSome then
+                            if ldmap.ContainsKey(ld.Value) then
+                                this.expr(ctx, ldmap[ld.Value]) // translate to old
+                            else
+                                e // locally bound variables are not translated
                         else
-                            let nO, _, _ = name n
+                            let nO, nN, _ = name n
                             EVar(nO)
                     | EThis ->
                         if ctx.thisDecl.IsSome then
@@ -332,13 +388,19 @@ module Translation =
                               Method (_, _, _, insN, _, _, _, _, _, _, _, _, _) when
                                 insO.decls.Length = insN.decls.Length ->
                                 try
+                                    // Equivalent to (if we have not generated specializedLemmas before)
+                                    // let specializedLemma = config.specializeHigherOrderLemmas &&
+                                    //                        List.exists generateLemmaOrAxiomForExpr exprs
+                                    let specializedLemma = config.specializeHigherOrderLemmas && (
+                                        Map.tryFind method specializedLemmas |> Option.exists (List.contains e))
+                                    
                                     // Prepend a lemma call to this method application.
                                     // Only prepend the lemma call if the old method and the new method have the same
                                     // number of inputs.
                                     // See also the translation for Diff.Method below in declSameOrUpdate.
                                     let parentDeclO = ctx.lookupByPath (method.parent)
                                     // Do not set thisDecl again because "this" is the current method
-                                    // instead of the method begin called.
+                                    // instead of the method being called.
                                     // Do not use exprOld and exprNew because they add the old/new suffix again.
 
                                     let newLocalDecls =
@@ -353,7 +415,7 @@ module Translation =
                                             match receiver with
                                             | StaticReceiver _ -> failwith "unexpected static receiver"
                                             | ObjectReceiver (r, _) ->
-                                                [ NameTranslator(true).expr (oldNameCtx, r)
+                                                [ NameTranslator(true, Map.empty).expr (oldNameCtx, r)
                                                   ForwardLocalDeclTranslator(newLocalDecls)
                                                       .expr (newCtx, r) ]
 
@@ -393,15 +455,18 @@ module Translation =
                                     let typeParams = Utils.listInterleave (tsO, tsN)
 
                                     // the old inputs and new inputs
-                                    let insO =
-                                        List.map (fun e -> NameTranslator(true).expr (oldNameCtx, e)) exprs
+                                    let insO = exprs |>
+                                               (if specializedLemma then
+                                                         List.filter (generateLemmaOrAxiomForExpr >> not)
+                                                         else id) |>
+                                               List.map (fun e -> NameTranslator(true, Map.empty).expr (oldNameCtx, e))
 
-                                    let insN =
-                                        List.map
-                                            (fun e ->
-                                                ForwardLocalDeclTranslator(newLocalDecls)
-                                                    .expr (newCtx, e))
-                                            exprs
+                                    let insN = exprs |>
+                                               (if specializedLemma then
+                                                         List.filter (generateLemmaOrAxiomForExpr >> not)
+                                                         else id) |>
+                                               List.map (fun e ->
+                                                   ForwardLocalDeclTranslator(newLocalDecls).expr (newCtx, e))
 
                                     let inputs =
                                         instanceInputs
@@ -417,7 +482,11 @@ module Translation =
 
                                             StaticReceiver(ct),
                                             method.parent.parent.child (method.parent.name + "_" + method.name + "_bc")
-                                        | Module _ -> receiver, method.parent.child (method.name + "_bc")
+                                        | Module _ ->
+                                            if specializedLemma then
+                                                receiver, method.parent.child (getSpecializedLemmaName e)
+                                            else
+                                                receiver, method.parent.child (method.name + "_bc")
                                         | _ -> failwith (unsupported $"parent declaration {parentDeclO}")
 
                                     let lemmaCall =
@@ -431,7 +500,7 @@ module Translation =
                             eDefault
                     | EReveal exprs ->
                         // duplicate the reveal statement with new context
-                        let newReveal = EReveal (List.map (fun e -> NameTranslator(false).expr (ctx, e)) exprs)
+                        let newReveal = EReveal (List.map (fun e -> NameTranslator(false, Map.empty).expr (ctx, e)) exprs)
                         EBlock [ eDefault ; newReveal ]
                     | _ -> eDefault
 
@@ -798,13 +867,13 @@ module Translation =
         /// input translations for backward compatibility lemmas
         and backward_compatible
             (insT: (Condition * Condition) list)
-            (insO: LocalDecl list)
-            (insN: LocalDecl list)
+            (insO: Expr list)
+            (insN: Expr list)
             : Condition list =
-            let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: LocalDecl) (inN: LocalDecl) =
+            let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: Expr) (inN: Expr) =
                 if not config.useForallInFunctionArguments then
                     // x_N == forward(x_O)
-                    EEqual(localDeclTerm inN, oldToNew)
+                    EEqual(inN, oldToNew)
                 else
                     match oldToNew with
                     | EFun (vars, cond, _, body) ->
@@ -816,27 +885,28 @@ module Translation =
                             vars,
                             Option.map fst cond,
                             [],
-                            EEqual(EAnonApply(localDeclTerm inN, List.map localDeclTerm vars), body)
+                            EEqual(EAnonApply(inN, List.map localDeclTerm vars), body)
                         )
                     | _ ->
                         // not a function
                         // x_N == forward(x_O)
-                        EEqual(localDeclTerm inN, oldToNew)
+                        EEqual(inN, oldToNew)
 
             List.map
-                (fun ((f1, f2), inO: LocalDecl, inN: LocalDecl) ->
+                (fun ((f1, f2), inO: Expr, inN: Expr) ->
                     translationCondition (fst f1) (fst f2) inO inN, snd f1)
                 (List.zip3 insT insO insN)
         /// lossless condition for translation functions
-        and lossless (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
+        and lossless (ctx: Context) (tO: Type) (tT: (Expr -> Expr) * (Expr -> Expr)) : Condition =
             // forall x1_O: U_O :: U_backward(U_forward(x1_O)) == x1_O
-            let nO, _, _ = name "x"
+            let nO, _, _ = name (ctx.getTempLocalDeclName())
             let ld = LocalDecl(nO, tO, true)
             EQuant(Forall, [ ld ], None, [], EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
         /// generate proof for backward compatibility theorem
         and proof
             (oldCtx: Context)
             (newCtx: Context)
+            (ldmap: Map<LocalDecl, Expr>)
             (e: Expr)
             (resultO: Expr)
             (resultN: Expr)
@@ -846,24 +916,30 @@ module Translation =
             : Expr option =
             let oldCtxWithSuffix =
                 oldCtx.translateLocalDeclNames
-                    (fun n ->
-                        let nO, _, _ = name n
-                        nO)
+                    (fun (n: LocalDecl) ->
+                        if ldmap.ContainsKey(n) then
+                            n.name
+                        else
+                            let nO, _, _ = name n.name
+                            nO)
 
             let newCtxWithSuffix =
                 newCtx.translateLocalDeclNames
-                    (fun n ->
-                        let _, nN, _ = name n
-                        nN)
+                    (fun (n: LocalDecl) ->
+                        if ldmap.ContainsKey(n) then
+                            n.name
+                        else
+                            let _, nN, _ = name n.name
+                            nN)
 
             // e is the old implementation, e.g.,
             // foo(x)
             let eO =
                 if config.generateLemmaCalls then
-                    PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix)
+                    PrependLemmaCalls(oldCtxWithSuffix, newCtxWithSuffix, ldmap)
                         .expr (oldCtxWithSuffix, e)
                 else
-                    exprOld oldCtx e
+                    exprOld oldCtx ldmap e
             // eO is the old implementation with lemma calls and translated names, e.g.,
             // (foo_bc(x_O); Old.foo(x_O))
             let eAssertion =
@@ -1465,7 +1541,7 @@ module Translation =
                         ins_o.conditions
                         |> List.map
                             (fun c ->
-                                let es = exprOld oldHeaderCtx (fst c)
+                                let es = exprOld oldHeaderCtx Map.empty (fst c)
                                 (es, snd c))
 
                     // new requires clauses become ensures arguments
@@ -1479,19 +1555,22 @@ module Translation =
                         ins_n.conditions
                         |> List.map
                             (fun c ->
-                                let es = exprNew newInputCtx (fst c)
+                                let es = exprNew newInputCtx Map.empty (fst c)
                                 (es, snd c))
 
                     // insT is (f1(old), f2(new))
                     // backward compatibility: new == f1(old)
                     let inputsTranslations =
                         if isStatic then
-                            backward_compatible insT insO_translated insN_translated
+                            backward_compatible
+                                insT
+                                (List.map localDeclTerm insO_translated)
+                                (List.map localDeclTerm insN_translated)
                         else
                             backward_compatible
                                 (instancesTranslation :: insT)
-                                (oldInstDecl :: insO_translated)
-                                (newInstDecl :: insN_translated)
+                                (List.map localDeclTerm (oldInstDecl :: insO_translated))
+                                (List.map localDeclTerm (newInstDecl :: insN_translated))
 
                     // lossless assumptions
                     let losslessAssumptions =
@@ -1501,7 +1580,7 @@ module Translation =
                                     let _, _, tT =
                                         tp (TVar(fst tparg_o), TVar(fst tparg_n))
 
-                                    lossless (TVar(fst tpargO)) tT)
+                                    lossless ctxOb (TVar(fst tpargO)) tT)
                                 (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_n @ tvs_n))
                         else
                             []
@@ -1547,7 +1626,7 @@ module Translation =
                         OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
                     // copy the decreases clause from the old implementation
-                    let decreases = List.map (exprOld oldHeaderCtx) decreasesO
+                    let decreases = List.map (exprOld oldHeaderCtx Map.empty) decreasesO
 
                     let oldBodyCtx =
                         if isStatic then
@@ -1562,7 +1641,7 @@ module Translation =
                             ctxNb.setThisDecl (newInstDecl)
 
                     // The body yields the proof of the lemma.
-                    let proof =
+                    let proofBody =
                         if generateAxiomFor p then
                             None // an axiom
                         else
@@ -1578,7 +1657,7 @@ module Translation =
                                     bdO
                                     |> Option.bind
                                         (fun b ->
-                                            proof oldBodyCtx newBodyCtx b resultO resultN (fst ot) isOpaqueO isOpaqueN)
+                                            proof oldBodyCtx newBodyCtx Map.empty b resultO resultN (fst ot) isOpaqueO isOpaqueN)
                                 | None -> Some(EBlock [])
                             | _ ->
                                 // updated body: try to generate proof sketch
@@ -1586,13 +1665,13 @@ module Translation =
                                 match bodyO with
                                 | Some bd ->
                                     match outputTypeT with
-                                    | Some ot -> proof oldBodyCtx newBodyCtx bd resultO resultN (fst ot) isOpaqueO isOpaqueN
+                                    | Some ot -> proof oldBodyCtx newBodyCtx Map.empty bd resultO resultN (fst ot) isOpaqueO isOpaqueN
                                     | None -> Some(EBlock [])
                                 | None ->
                                     // other cases: generate empty proof
                                     Some(EBlock [])
-
-                    [ Method(
+                    
+                    let generatedLemma = Method(
                           IsLemma,
                           pT.name + "_bc",
                           typeParams,
@@ -1601,12 +1680,155 @@ module Translation =
                           [],
                           [],
                           decreases,
-                          proof,
+                          proofBody,
                           true,
                           true,
                           false,
                           emptyMeta
-                      ) ]
+                      )
+                    
+                    let generatedSpecializedLemmas =
+                        if config.specializeHigherOrderLemmas &&
+                                Map.containsKey ctxOh.currentDecl specializedLemmas then
+                            let invocations = Map.find ctxOh.currentDecl specializedLemmas |>
+                                              List.distinctBy getSpecializedLemmaName
+                            invocations |> List.map (fun e ->
+                                let exprs =
+                                    match e with
+                                    | EMethodApply (receiver, method, tpargs, exprs, ghost) -> exprs
+                                    | _ -> failwith "specialized lemma must come with EMethodApply"
+                                let specializedLocations = getSpecializedArgumentLocations e
+                                let filterInput ins = ins |> List.indexed |> List.filter (
+                                    fun x -> List.contains (fst x) specializedLocations |> not) |> List.map snd
+                                let specializedInputMap = ins_o.decls |> List.indexed |> List.filter (
+                                    fun x -> List.contains (fst x) specializedLocations) |> List.map (
+                                    fun (i, x) -> (x, exprs[i])) |> Map.ofList
+                                let specializedLocalDeclTerm ld =
+                                    Map.tryFind ld specializedInputMap |> Option.defaultValue (localDeclTerm ld)
+                                
+                                // inputs
+                                let specializedInputs =
+                                    instanceInputs
+                                    @ (if config.generateBackwardTranslationFunctions then
+                                           Utils.listInterleave (List.unzip parentTvsT)
+                                       else
+                                           List.map fst parentTvsT)
+                                      @ (if config.generateBackwardTranslationFunctions then
+                                             Utils.listInterleave (List.unzip tvsT)
+                                         else
+                                             List.map fst tvsT)
+                                        @ (insO |> filterInput)
+                                        @ (insN |> filterInput)
+                                let specializedInputRequiresO =
+                                    ins_o.conditions
+                                    |> List.map
+                                        (fun c ->
+                                            let es = exprOld oldHeaderCtx specializedInputMap (fst c)
+                                            (es, snd c))
+                                
+                                // translations from old inputs to new inputs
+                                let insOexprs, insNexprs, insT =
+                                    insD.decls.getSameOrUpdate()
+                                    |> List.map (fun (ldO, ldN) ->
+                                        if specializedInputMap.ContainsKey(ldO) then
+                                            let _, _, (argT1, argT2) = tp (ldO.tp, ldN.tp)
+                                            let argO = exprOld ctxOh specializedInputMap specializedInputMap[ldO]
+                                            let argN = exprNew ctxNh specializedInputMap specializedInputMap[ldO]
+                                            argO, argN, (Condition(argT1 argO, None), Condition(argT2 argN, None))
+                                        else
+                                            localDecl2 (ldO, ldN)
+                                            |> fun (x, y, z) -> localDeclTerm x, localDeclTerm y, z)
+                                    |> List.unzip3
+                                let specializedInputsTranslations =
+                                    if isStatic then
+                                        backward_compatible
+                                            insT
+                                            insOexprs
+                                            insNexprs
+                                    else
+                                        backward_compatible
+                                            (instancesTranslation :: insT)
+                                            (localDeclTerm oldInstDecl :: insOexprs)
+                                            (localDeclTerm newInstDecl :: insNexprs)
+                                let specializedInSpec =
+                                    InputSpec(
+                                        specializedInputs,
+                                        specializedInputRequiresO
+                                        @ specializedInputsTranslations @ losslessAssumptions
+                                    )
+                                
+                                // the outputs
+                                let specializedResultO =
+                                    EMethodApply(receiverO, pO, typeargsToTVars tvsO,
+                                                 ins_o.decls |> List.map (
+                                                     fun ld -> exprOld ctxOh specializedInputMap (specializedLocalDeclTerm ld)), true)
+
+                                let specializedResultN =
+                                    EMethodApply(receiverN, pN, typeargsToTVars tvsN,
+                                                 ins_n.decls |> List.map (
+                                                     fun ld -> exprNew ctxNh specializedInputMap (specializedLocalDeclTerm ld)), true)
+
+                                let specializedOutputsTranslation =
+                                    match outputTypeT, canTranslateOutput with
+                                    | Some ot, true -> EEqual(specializedResultN, reduce ((fst ot) specializedResultO)), None
+                                    | None, true -> EBool true, None
+                                    | _, false -> ECommented("cannot translate output type", EBool false), None
+                                // in general for mutable classes, we'd also have to return that the receivers remain translated
+                                // but that is redundant due to our highly restricted treatment of classes
+                                // New inputs' ensures becomes "output spec" here because "input spec" contains requires
+                                // and "output spec" contains ensures.
+                                let outSpec =
+                                    OutputSpec([], inputEnsuresN @ [ specializedOutputsTranslation ])
+                                
+                                // proof
+                                let specializedProof =
+                                    if generateAxiomForMethodApply e then
+                                        None // an axiom
+                                    else
+                                        match bdD with
+                                        | Diff.SameExprO bdO ->
+                                            // unchanged body: try to generate proof sketch
+                                            // use oldCtx to replace "this" with old variables
+                                            //
+                                            // When bdO is None, both old and new functions are axioms.
+                                            // So we also generate axioms (body=None) in this case.
+                                            match outputTypeT with
+                                            | Some ot ->
+                                                bdO
+                                                |> Option.bind
+                                                    (fun b ->
+                                                        proof oldBodyCtx newBodyCtx specializedInputMap b specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN)
+                                            | None -> Some(EBlock [])
+                                        | _ ->
+                                            // updated body: try to generate proof sketch
+                                            // use oldCtx to replace "this" with old variables
+                                            match bodyO with
+                                            | Some bd ->
+                                                match outputTypeT with
+                                                | Some ot -> proof oldBodyCtx newBodyCtx specializedInputMap bd specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN
+                                                | None -> Some(EBlock [])
+                                            | None ->
+                                                // other cases: generate empty proof
+                                                Some(EBlock [])
+                                Method(
+                                  IsLemma,
+                                  getSpecializedLemmaName e,
+                                  typeParams,
+                                  specializedInSpec,
+                                  outSpec,
+                                  [],
+                                  [],
+                                  decreases,
+                                  specializedProof,
+                                  true,
+                                  true,
+                                  false,
+                                  emptyMeta
+                                ))
+                        else
+                            []
+
+                    generatedLemma :: generatedSpecializedLemmas
                 | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
             | Diff.Method _ -> [] // unchanged methods produce nothing
         /// generates the header info (types, specs) of the translation functions for a type declaration
@@ -1984,23 +2206,29 @@ module Translation =
             let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
         /// inductively extends the translation of paths to expressions, returning the OLD expression
-        and exprOld (exprCtx: Context) (e: Expr) : Expr =
-            NameTranslator(true)
+        and exprOld (exprCtx: Context) (ldmap: Map<LocalDecl, Expr>) (e: Expr) : Expr =
+            NameTranslator(true, ldmap)
                 .expr (
                     exprCtx.translateLocalDeclNames
-                        (fun n ->
-                            let nO, _, _ = name n
-                            nO),
+                        (fun (n: LocalDecl) ->
+                            if ldmap.ContainsKey(n) then
+                                n.name
+                            else
+                                let nO, _, _ = name n.name
+                                nO),
                     e
                 )
         /// inductively extends the translation of paths to expressions, returning the NEW expression
-        and exprNew (exprCtx: Context) (e: Expr) : Expr =
-            NameTranslator(false)
+        and exprNew (exprCtx: Context) (ldmap: Map<LocalDecl, Expr>) (e: Expr) : Expr =
+            NameTranslator(false, ldmap)
                 .expr (
                     exprCtx.translateLocalDeclNames
-                        (fun n ->
-                            let _, nN, _ = name n
-                            nN),
+                        (fun (n: LocalDecl) ->
+                            if ldmap.ContainsKey(n) then
+                                n.name
+                            else
+                                let _, nN, _ = name n.name
+                                nN),
                     e
                 )
 
@@ -2058,7 +2286,7 @@ module Translation =
             List.iter (fun (p: Path) -> Console.WriteLine((p.ToString()))) jointPaths
             Console.WriteLine($" ***** JOINT PATHS FOR {mO.name} END *****")
 
-            let tr = Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, Set.empty, defaultConfig)
+            let tr = Translator(ctxOm, ctxNm, declD, jointPaths, Set.empty, Set.empty, Map.empty, defaultConfig)
 
             tr.doTranslate (), jointPaths
         | _ -> failwith "declaration to be translated is not a module"
@@ -2099,6 +2327,21 @@ module Translation =
             Analysis.GatherPathsUsedByPaths(changedInOld).gather pO
         
         printPaths ("directly called by affected in old", Set.toList calledByAffectedInOld)
+        
+        let isJoint (p: Path) : bool =
+            List.exists (fun (j: Path) -> j.isAncestorOf p) jointPaths
+        
+        // A copy of the function in "type Translator"
+        let generateLemmaOrAxiomFor (p: Path) : bool =
+            config.alwaysGenerateLemmas || changedInOld.Contains(p)
+            || (config.generateAxiomsForUnchanged && (not (isJoint p)) && calledByAffectedInOld.Contains(p))
+        
+        // higher-order function calls with a changed function argument
+        // a map from higher-order functions to a list of invocations (EMethodApply) where
+        // each invocation has at least one changed function argument
+        let mutable specializedCalls : Map<Path, Expr list> = Map.empty
+        let specializedLemmas =
+            DiffAnalysis.GatherSpecializedLemmaToGenerate(generateLemmaOrAxiomFor).gather(Context(pO), Context(pN), pD)
 
         let tr =
             Translator(
@@ -2108,6 +2351,7 @@ module Translation =
                 jointPaths,
                 changedInOld,
                 calledByAffectedInOld,
+                specializedLemmas,
                 config
             )
 

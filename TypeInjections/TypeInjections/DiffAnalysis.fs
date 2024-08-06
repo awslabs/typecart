@@ -40,7 +40,7 @@ module DiffAnalysis =
 
             e
 
-        override this.elem(ctxO: Context, ctxN: Context, dD: Diff.Elem<'y, 'd>, td: Context * Context * 'd -> 'd) =
+        override this.elem(ctxO: Context, ctxN: Context, dD: Diff.Elem<'y, 'd>, td: Context * Context * 'y * 'y * 'd -> 'd) =
             match dD with
             | Diff.Same _
             | Diff.Add _ -> dD
@@ -49,7 +49,7 @@ module DiffAnalysis =
                 dD
             | Diff.Update (d, n, df) ->
                 this.addPath (ctxO, ctxO.currentDecl)
-                Diff.Update(d, n, td (ctxO, ctxN, df))
+                Diff.Update(d, n, td (ctxO, ctxN, d, n, df))
 
         override this.declList(ctxO: Context, ctxN: Context, dsD: Diff.List<Decl, Diff.Decl>) =
             // Ignore any changes on lemmas
@@ -83,3 +83,58 @@ module DiffAnalysis =
             Analysis.dependencyClosureByGatherDeclsUsingPaths (ctxO.prog, changedDirectly)
 
         closure
+    
+    /// Gather all specialized lemmas to generate in the proof sketch.
+    type GatherSpecializedLemmaToGenerate(generateLemmaOrAxiomFor: Path -> bool) =
+        inherit DiffTraverser.Identity()
+        
+        let mutable specializedCalls: Map<Path, Expr list> = Map.empty
+        
+        let generateLemmaOrAxiomForExpr (e: Expr) : bool =
+            match e with
+            | EMemberRef (_, m, _) -> generateLemmaOrAxiomFor m
+            | _ -> false
+        
+        override this.elem
+            (
+                ctxO: Context,
+                ctxN: Context,
+                dD: Diff.Elem<'y, 'd>,
+                td: Context * Context * 'y * 'y * 'd -> 'd
+            ) =
+            match dD with
+            | Diff.Same d ->
+                match box (d, td) with
+                | :? (Decl * (Context * Context * Decl * Decl * Diff.Decl -> Diff.Decl)) as (d, td) ->
+                    td (ctxO, ctxN, d, d, Diff.idDecl d) |> ignore // declSameOrUpdate
+                    dD
+                | _ -> dD
+            | Diff.Add _
+            | Diff.Delete _ -> dD
+            | Diff.Update (d, n, df) -> Diff.Update(d, n, td (ctxO, ctxN, d, n, df))
+        override this.decl(ctxO: Context, ctxN: Context, declO: Decl, declN: Decl, d: Diff.Decl) =
+            let n = declO.name
+            let p = ctxO.currentDecl.child (n)
+            match d with
+            | Diff.Method (nameD, tvsD, insD, outsD, bdD) when generateLemmaOrAxiomFor (p) ->
+                match declO, declN with
+                | Method(methodType = IsLemma), _
+                | Method(methodType = IsMethod), _ -> ()
+                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
+                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
+                    let ctxOh = ctxO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
+                    let ctxOi = ctxOh.add (insD.decls.getOld ())
+                    let ctxOb = ctxOi.add(outsD.namedDecls.getOld ()).enterBody ()
+                    match bodyO with
+                    | Some bd ->
+                        specializedCalls <- Analysis.GatherSpecializedLemmaCalls(generateLemmaOrAxiomForExpr)
+                                                .gather(ctxOb, bd, specializedCalls)
+                        ()
+                    | _ -> ()
+                | _ -> ()
+            | _ -> ()
+            this.declDefault(ctxO, ctxN, declO, declN, d)
+        
+        member this.gather(ctxO: Context, ctxN: Context, prog: Diff.Program) =
+            this.prog(ctxO, ctxN, prog) |> ignore
+            specializedCalls

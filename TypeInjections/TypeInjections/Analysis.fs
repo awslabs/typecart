@@ -740,6 +740,29 @@ module Analysis =
                     
             | _ -> this.exprDefault(ctx, expr)
     
+    /// In the proof, gather all places that may use a specialized lemma call.
+    type GatherSpecializedLemmaCalls(generateLemmaOrAxiomForExpr: Expr -> bool) =
+        inherit Traverser.Identity()
+        
+        let mutable specializedCalls: Map<Path, Expr list> = Map.empty
+        override this.expr(ctx: Context, e: Expr) =
+            match e with
+            | EMethodApply (receiver, method, tpargs, exprs, ghost) ->
+                if List.exists generateLemmaOrAxiomForExpr exprs then
+                    // Generate a specialized lemma for the method with exprs in Translation.
+                    specializedCalls <- specializedCalls |> Map.change method (fun x ->
+                        match x with
+                        | Some c -> Some(e::c)
+                        | None -> Some([e])
+                    )
+            | _ -> ()
+            this.exprDefault(ctx, e)
+
+        member this.gather(ctx: Context, e: Expr, existingCalls: Map<Path, Expr list>) =
+            specializedCalls <- existingCalls
+            this.expr(ctx, e) |> ignore
+            specializedCalls
+    
     /// Gather all LocalDecl names defined in an expression and potentially used in its subexpressions.
     /// If there is variable shadowing, only one copy of the name is gathered.
     type GatherLocalDecls() =

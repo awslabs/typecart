@@ -572,7 +572,7 @@ module Traverser =
                         |> List.map (fun (ld, e) -> ld.name, e)
 
                     substituteExprs (ctx.add (lds), ctx, subs, b)
-                | EFun (lds, None, _, EAnonApply (EVar (f), args)) when lds.Length = args.Length ->
+                | EFun (lds, None, _, EAnonApply (f, args)) when lds.Length = args.Length ->
                     // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
                     // covers only the special case where f is variable because nothing else has come up
                     // the condition must be globally true, we only cover the case where it is omitted
@@ -580,7 +580,7 @@ module Traverser =
                         List.zip lds args
                         |> List.forall (fun (ld, a) -> a = EVar(ld.name))
 
-                    if isEtaExp then EVar(f) else e
+                    if isEtaExp then f else e
                 | _ -> e
 
             if topOnly then

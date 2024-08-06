@@ -18,22 +18,34 @@ module DiffTraverser =
         default this.error(s: string) = System.Console.WriteLine(s)
 
         abstract member list :
-            Context * Context * Diff.List<'y, 'd> * (Context * Context * 'd -> 'd) ->
+            Context * Context * Diff.List<'y, 'd> * (Context * Context * 'y * 'y * 'd -> 'd) ->
             Diff.List<'y, 'd>
 
         abstract member elem :
-            Context * Context * Diff.Elem<'y, 'd> * (Context * Context * 'd -> 'd) ->
+            Context * Context * Diff.Elem<'y, 'd> * (Context * Context * 'y * 'y * 'd -> 'd) ->
             Diff.Elem<'y, 'd>
 
-        default this.list(ctxO: Context, ctxN: Context, dsD: Diff.List<'y, 'd>, td: Context * Context * 'd -> 'd) =
+        default this.list
+            (
+                ctxO: Context,
+                ctxN: Context,
+                dsD: Diff.List<'y, 'd>,
+                td: Context * Context * 'y * 'y * 'd -> 'd
+            ) =
             Diff.UpdateList(List.map (fun dD -> this.elem (ctxO, ctxN, dD, td)) dsD.elements)
 
-        default this.elem(ctxO: Context, ctxN: Context, dD: Diff.Elem<'y, 'd>, td: Context * Context * 'd -> 'd) =
+        default this.elem
+            (
+                ctxO: Context,
+                ctxN: Context,
+                dD: Diff.Elem<'y, 'd>,
+                td: Context * Context * 'y * 'y * 'd -> 'd
+            ) =
             match dD with
             | Diff.Same _
             | Diff.Add _
             | Diff.Delete _ -> dD
-            | Diff.Update (d, n, df) -> Diff.Update(d, n, td (ctxO, ctxN, df))
+            | Diff.Update (d, n, df) -> Diff.Update(d, n, td (ctxO, ctxN, d, n, df))
 
         /// specialization for decl list
         abstract member declList : Context * Context * Diff.List<Decl, Diff.Decl> -> Diff.List<Decl, Diff.Decl>
@@ -47,28 +59,39 @@ module DiffTraverser =
         abstract member tp : Context * Context * Diff.Type -> Diff.Type
         default this.tp(ctxO: Context, ctxN: Context, t: Diff.Type) = t
 
-        abstract member typearg : Context * Context * Diff.TypeArg -> Diff.TypeArg
-        default this.typearg(ctxO: Context, ctxN: Context, t: Diff.TypeArg) = t
+        abstract member typearg : Context * Context * TypeArg * TypeArg * Diff.TypeArg -> Diff.TypeArg
+        default this.typearg(ctxO: Context, ctxN: Context, tO: TypeArg, tN: TypeArg, t: Diff.TypeArg) = t
 
-        abstract member classtype : Context * Context * Diff.ClassType -> Diff.ClassType
-        default this.classtype(ctxO: Context, ctxN: Context, ct: Diff.ClassType) = ct
+        abstract member classtype : Context * Context * ClassType * ClassType * Diff.ClassType -> Diff.ClassType
+        default this.classtype(ctxO: Context, ctxN: Context, ctO: ClassType, ctN: ClassType, ct: Diff.ClassType) = ct
 
-        abstract member condition : Context * Context * Diff.Condition -> Diff.Condition
-        default this.condition(ctxO: Context, ctxN: Context, cond: Diff.Condition) = cond
+        abstract member condition : Context * Context * Condition * Condition * Diff.Condition -> Diff.Condition
+
+        default this.condition(ctxO: Context, ctxN: Context, condO: Condition, condN: Condition, cond: Diff.Condition) =
+            cond
 
         abstract member exprO : Context * Context * Diff.ExprO -> Diff.ExprO
 
         default this.exprO(ctxO: Context, ctxN: Context, e: Diff.ExprO) = e
 
-        abstract member localDecl : Context * Context * Diff.LocalDecl -> Diff.LocalDecl
+        abstract member localDecl : Context * Context * LocalDecl * LocalDecl * Diff.LocalDecl -> Diff.LocalDecl
 
-        default this.localDecl(ctxO: Context, ctxN: Context, ld: Diff.LocalDecl) =
+        default this.localDecl(ctxO: Context, ctxN: Context, ldO: LocalDecl, ldN: LocalDecl, ld: Diff.LocalDecl) =
             match ld with
             | Diff.LocalDecl (n, t) -> Diff.LocalDecl(this.name (ctxO, ctxN, n), this.tp (ctxO, ctxN, t))
 
-        abstract member datatypeConstructor : Context * Context * Diff.DatatypeConstructor -> Diff.DatatypeConstructor
+        abstract member datatypeConstructor :
+            Context * Context * DatatypeConstructor * DatatypeConstructor * Diff.DatatypeConstructor ->
+            Diff.DatatypeConstructor
 
-        default this.datatypeConstructor(ctxO: Context, ctxN: Context, dc: Diff.DatatypeConstructor) =
+        default this.datatypeConstructor
+            (
+                ctxO: Context,
+                ctxN: Context,
+                dcO: DatatypeConstructor,
+                dcN: DatatypeConstructor,
+                dc: Diff.DatatypeConstructor
+            ) =
             match dc with
             | Diff.DatatypeConstructor (n, lds) ->
                 Diff.DatatypeConstructor(this.name (ctxO, ctxN, n), this.list (ctxO, ctxN, lds, this.localDecl))
@@ -95,9 +118,9 @@ module DiffTraverser =
             { name = prog.name
               decls = this.declList (ctxO, ctxN, prog.decls) }
 
-        abstract member decl : Context * Context * Diff.Decl -> Diff.Decl
+        abstract member decl : Context * Context * Decl * Decl * Diff.Decl -> Diff.Decl
 
-        member this.declDefault(ctxO: Context, ctxN: Context, d: Diff.Decl) =
+        member this.declDefault(ctxO: Context, ctxN: Context, declO: Decl, declN: Decl, d: Diff.Decl) =
             let name n = this.name (ctxO, ctxN, n)
 
             let decls ctxOb ctxNb ds = this.declList (ctxOb, ctxNb, ds)
@@ -220,5 +243,7 @@ module DiffTraverser =
     type Identity() =
         inherit Transform()
 
-        override this.decl(ctxO: Context, ctxN: Context, d: Diff.Decl) = base.declDefault (ctxO, ctxN, d)
+        override this.decl(ctxO: Context, ctxN: Context, declO: Decl, declN: Decl, d: Diff.Decl) =
+            base.declDefault (ctxO, ctxN, declO, declN, d)
+
         override this.prog(ctxO: Context, ctxN: Context, prog: Diff.Program) = base.progDefault (ctxO, ctxN, prog)
