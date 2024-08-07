@@ -55,7 +55,11 @@ module Translation =
 
           // If we want to expand all function arguments' requirements by one level from lambda expressions
           // to forall expressions.
-          useForallInFunctionArguments: bool
+          useForallInFunctionRequires: bool
+
+          // If we want to expand all ensure statements of function return values by one level from function
+          // equivalence to forall expressions.
+          useForallInFunctionEnsures: bool
 
           // Set this variable to false only when no function types (higher-order functions) are used
           // to reduce the number of functions and variables that Dafny must consider.
@@ -78,7 +82,8 @@ module Translation =
     let defaultConfig =
         { alwaysGenerateLemmas = false
           generateAxiomsForUnchanged = true
-          useForallInFunctionArguments = true
+          useForallInFunctionRequires = true
+          useForallInFunctionEnsures = true
           generateBackwardTranslationFunctions = true
           generateProof = true
           expandAssertions = true
@@ -103,11 +108,16 @@ module Translation =
                   | _ -> false
               else
                   defaultConfig.generateAxiomsForUnchanged
-          useForallInFunctionArguments =
+          useForallInFunctionRequires =
               if List.exists (fun s -> s = "-f") argvList then
                   List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToBool
               else
-                  defaultConfig.useForallInFunctionArguments
+                  defaultConfig.useForallInFunctionRequires
+          useForallInFunctionEnsures =
+              if List.exists (fun s -> s = "-f") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.useForallInFunctionEnsures
           generateBackwardTranslationFunctions =
               if List.exists (fun s -> s = "-b") argvList then
                   List.item ((List.findIndex (fun s -> s = "-b") argvList) + 1) argvList |> stringToBool
@@ -369,6 +379,19 @@ module Translation =
                         else
                             let nO, nN, _ = name n
                             EVar(nO)
+                    | EAnonApply (EVar n, args) ->
+                        let ld = ctx.lookupLocalDeclO(n)
+                        if ld.IsSome then
+                            if ldmap.ContainsKey(ld.Value) then
+                                match ldmap[ld.Value] with
+                                | EMemberRef(receiver, mmbr, tpargs) ->
+                                    // replace with EMethodApply to be able to append lemma calls here
+                                    this.expr(ctx, EMethodApply (receiver, mmbr, tpargs, args, false))
+                                | _ -> eDefault
+                            else
+                                eDefault
+                        else
+                            eDefault
                     | EThis ->
                         if ctx.thisDecl.IsSome then
                             EVar(ctx.thisDecl.Value.name)
@@ -871,7 +894,7 @@ module Translation =
             (insN: Expr list)
             : Condition list =
             let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: Expr) (inN: Expr) =
-                if not config.useForallInFunctionArguments then
+                if not config.useForallInFunctionRequires then
                     // x_N == forward(x_O)
                     EEqual(inN, oldToNew)
                 else
@@ -902,6 +925,40 @@ module Translation =
             let nO, _, _ = name (ctx.getTempLocalDeclName())
             let ld = LocalDecl(nO, tO, true)
             EQuant(Forall, [ ld ], None, [], EEqual((snd tT) ((fst tT) (EVar nO)), EVar nO)), None
+        /// output translation for backward compatibility lemmas
+        and backward_compatible_ensures
+            (outputTypeT: ((Expr -> Expr) * (Expr -> Expr)) option)
+            (outputTypeN: Type option)
+            (canTranslateOutput: bool)
+            (resultO: Expr)
+            (resultN: Expr)
+            : Condition =
+            match outputTypeT, outputTypeN, canTranslateOutput with
+            | Some otT, Some otN, true ->
+                let resultOTranslated = reduce ((fst otT) resultO)
+                if not config.useForallInFunctionEnsures then
+                    EEqual(resultN, resultOTranslated), None
+                else
+                    match otN with
+                    | TFun (ts_n, u_n) ->
+                        // x1:t1, ..., xn:tn
+                        let lds_n =
+                            List.indexed ts_n
+                            |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+                        // f is the return value of the function 
+                        // function f: (t1, ..., tn) -> u
+                        // forall x1:t1, ..., xn:tn :: New.f(x1, ..., xn) == f_forward(Old.f)(x1, ..., xn)
+                        EQuant(
+                            Forall,
+                            lds_n,
+                            None,
+                            [],
+                            EEqual(EAnonApply(resultN, List.map localDeclTerm lds_n),
+                                   EAnonApply(resultOTranslated, List.map localDeclTerm lds_n))
+                        ), None
+                    | _ -> EEqual(resultN, resultOTranslated), None
+            | None, None, true -> EBool true, None
+            | _ -> ECommented("cannot translate output type", EBool false), None
         /// generate proof for backward compatibility theorem
         and proof
             (oldCtx: Context)
@@ -1597,14 +1654,14 @@ module Translation =
                     // but we might add them if that helps
 
                     // the outputs and the translation function
-                    let outputTypeT, canTranslateOutput =
+                    let outputTypeT, outputTypeN, canTranslateOutput =
                         match outs_o, outs_n with
-                        | OutputSpec ([], _), OutputSpec ([], _) -> None, true
+                        | OutputSpec ([], _), OutputSpec ([], _) -> None, None, true
                         | OutputSpec ([ hdO ], _), OutputSpec ([ hdN ], _) ->
                             try
-                                let _, _, ot = tp (hdO.tp, hdN.tp)
-                                Some ot, true
-                            with _ -> None, false
+                                let _, otN, otT = tp (hdO.tp, hdN.tp)
+                                Some otT, Some otN, true
+                            with _ -> None, None, false
                         | _ -> failwith (unsupported "multiple output declarations")
 
                     let resultO =
@@ -1613,11 +1670,7 @@ module Translation =
                     let resultN =
                         EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
 
-                    let outputsTranslation =
-                        match outputTypeT, canTranslateOutput with
-                        | Some ot, true -> EEqual(resultN, (fst ot) resultO), None
-                        | None, true -> EBool true, None
-                        | _, false -> ECommented("cannot translate output type", EBool false), None
+                    let outputsTranslation = backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput resultO resultN
                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                     // but that is redundant due to our highly restricted treatment of classes
                     // New inputs' ensures becomes "output spec" here because "input spec" contains requires
@@ -1769,10 +1822,7 @@ module Translation =
                                                      fun ld -> exprNew ctxNh specializedInputMap (specializedLocalDeclTerm ld)), true)
 
                                 let specializedOutputsTranslation =
-                                    match outputTypeT, canTranslateOutput with
-                                    | Some ot, true -> EEqual(specializedResultN, reduce ((fst ot) specializedResultO)), None
-                                    | None, true -> EBool true, None
-                                    | _, false -> ECommented("cannot translate output type", EBool false), None
+                                    backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput specializedResultO specializedResultN
                                 // in general for mutable classes, we'd also have to return that the receivers remain translated
                                 // but that is redundant due to our highly restricted treatment of classes
                                 // New inputs' ensures becomes "output spec" here because "input spec" contains requires

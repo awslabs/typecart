@@ -19,7 +19,7 @@ module Program =
             [-a 0/1/2 (affected analysis: 0 = do not generate anything for unaffected,\n\
                                           1 = always generate lemmas,\n\
                                           2 = generate axioms for unaffected, default=2)]\n\
-            [-f true/false (use Forall in function arguments, default=true)]\n\
+            [-f true/false (use Forall in lemma pre-/post-conditions, default=true)]\n\
             [-b true/false (generate Backward translation functions, default=true)]"
         let argvList = argv |> Array.toList
         let oldPath = argvList.Item(0)
