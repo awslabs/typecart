@@ -1782,15 +1782,12 @@ module Translation =
                                 // translations from old inputs to new inputs
                                 let insOexprs, insNexprs, insT =
                                     insD.decls.getSameOrUpdate()
-                                    |> List.map (fun (ldO, ldN) ->
+                                    |> List.collect (fun (ldO, ldN) ->
                                         if specializedInputMap.ContainsKey(ldO) then
-                                            let _, _, (argT1, argT2) = tp (ldO.tp, ldN.tp)
-                                            let argO = exprOld ctxOh specializedInputMap specializedInputMap[ldO]
-                                            let argN = exprNew ctxNh specializedInputMap specializedInputMap[ldO]
-                                            argO, argN, (Condition(argT1 argO, None), Condition(argT2 argN, None))
+                                            [] // no need to require the translations for specialized inputs
                                         else
                                             localDecl2 (ldO, ldN)
-                                            |> fun (x, y, z) -> localDeclTerm x, localDeclTerm y, z)
+                                            |> fun (x, y, z) -> [localDeclTerm x, localDeclTerm y, z])
                                     |> List.unzip3
                                 let specializedInputsTranslations =
                                     if isStatic then
