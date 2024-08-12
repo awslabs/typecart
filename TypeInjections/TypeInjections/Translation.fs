@@ -518,7 +518,7 @@ module Translation =
                                     EBlock [ lemmaCall; eDefault ]
                                 with _ -> eDefault // fall back to default if there is anything wrong prepending the lemma
                             | Method _, Method _ -> eDefault
-                            | _ -> failwith "EMethodApply called without a method"
+                            | _ -> eDefault // failwith "EMethodApply called without a method"
                         else
                             eDefault
                     | EReveal exprs ->
@@ -683,9 +683,10 @@ module Translation =
         ///   case c2 => assert resultN == forward(e2);
         /// }
         ///
-        /// var x := / :| / :- df; body
+        /// var x := / :| df; body
         /// ---->
-        /// var x := / :| / :- df; assert resultN == forward(body);
+        /// var x := / :| df; assert resultN == forward(body);
+        /// (do not expand let-or-fail statement, i.e., (var x :- df; body))
         ///
         /// forall x :: cond ==> body
         /// ---->
@@ -779,7 +780,7 @@ module Translation =
                         | _ -> Some(rcE resultN dO None [])
 
                 EMatch(e, t, csT, dfltT)
-            | ELet (v, x, o, lhs, df, bd) ->
+            | ELet (v, x, o, lhs, df, bd) when not o ->
                 let bdT =
                     match eN with
                     | Some (ELet (_, xN, oN, _, _, bdN)) when xN = x && oN = o -> rcE resultN bd (Some bdN) v
