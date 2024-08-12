@@ -1134,52 +1134,35 @@ module Translation =
                             match declN with
                             | TypeDef (_, tvs_n, superN, _, _, _) ->
                                 let bd =
+                                    // try to generate a call to the translation function of the super datatype first
                                     match super, superN with
                                     | TApply (opO, argsO), TApply (opN, argsN) ->
                                         let dtO = contextO.lookupByPath opO
                                         let dtN = contextN.lookupByPath opN
                                         let dtDo = Differ.decl (dtO, dtN)
                                         match dtDo with
-                                        | Some dtD ->
+                                        | Some (Diff.Datatype _) ->
                                             let _, _, names = name2 (dtO.name, dtN.name)
                                             let ct = { path = opO.parent; tpargs = [] }
-                                            let tvsO, tvsN, tvsT =
-                                                List.unzip3 (List.map typearg2 (List.zip tvs_o tvs_n))
-                                            let typeParamsInput = Utils.listInterleave (tvsO, tvsN)
                                             let instantiatedTypeT = List.map tp (List.zip argsO argsN)
                                             let tsT =
                                                 List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", n, o, t2))) instantiatedTypeT
-
-                                            let inputs =
-                                                //((if config.generateBackwardTranslationFunctions then
-                                                //      Utils.listInterleave (List.unzip tvsT)
-                                                //  else
-                                                //      List.map fst tvsT) |> List.map localDeclTerm)
-                                                //@
-                                                (Utils.listInterleave (List.unzip tsT)) @ [ xO ]
+                                            let inputs = (Utils.listInterleave (List.unzip tsT)) @ [ xO ]
                                             Some (EMethodApply (StaticReceiver ct, opO.parent.child(fst names), [],
                                                                 inputs, false))
-                                            //let superResult = declSameOrUpdate contextO contextN (dtO, dtN) dtD
-                                            //match superResult[0] with
-                                            //| Method (_, _, _, _, _, _, _, _, bd, _, _, _, _) ->
-                                            //    bd
-                                            //| _ -> None
                                         | _ -> None
                                     | _ -> None
-                                Console.WriteLine(super.ToString())
-                                Console.WriteLine("QQQ")
                                 match bd with
                                 | Some b -> b
                                 | _ ->
                                     // otherwise, call function of supertype
                                     let _, _, superT = tp (super, superN)
-                                    Console.WriteLine(((fst superT) xO).ToString())
                                     (fst superT) xO
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     let body_back =
-                        if isJoint p then
-                            // for joint typedefs, generate identity function
+                        if isJoint p && typeParams.IsEmpty then
+                            // for joint typedefs without typeargs, generate identity function
                             xN
                         elif isNew then
                             // new types are new primitive types, so return identity map
@@ -1187,10 +1170,32 @@ module Translation =
                             ETypeConversion(xN, xtO.tp)
                         else
                             match declN with
-                            | TypeDef (_, _, superN, _, _, _) ->
-                                // otherwise, call function of supertype
-                                let _, _, superT = tp (super, superN)
-                                (snd superT) xN
+                            | TypeDef (_, tvs_n, superN, _, _, _) ->
+                                let bd =
+                                    // try to generate a call to the translation function of the super datatype first
+                                    match super, superN with
+                                    | TApply (opO, argsO), TApply (opN, argsN) ->
+                                        let dtO = contextO.lookupByPath opO
+                                        let dtN = contextN.lookupByPath opN
+                                        let dtDo = Differ.decl (dtO, dtN)
+                                        match dtDo with
+                                        | Some (Diff.Datatype _) ->
+                                            let _, _, names = name2 (dtO.name, dtN.name)
+                                            let ct = { path = opO.parent; tpargs = [] }
+                                            let instantiatedTypeT = List.map tp (List.zip argsO argsN)
+                                            let tsT =
+                                                List.map (fun (o, n, (t1, t2)) -> (abstractRel ("x", o, n, t1), abstractRel ("x", n, o, t2))) instantiatedTypeT
+                                            let inputs = (Utils.listInterleave (List.unzip tsT)) @ [ xN ]
+                                            Some (EMethodApply (StaticReceiver ct, opO.parent.child(snd names), [],
+                                                                inputs, false))
+                                        | _ -> None
+                                    | _ -> None
+                                match bd with
+                                | Some b -> b
+                                | _ ->
+                                    // otherwise, call function of supertype
+                                    let _, _, superT = tp (super, superN)
+                                    (snd superT) xN
                             | _ -> failwith "impossible" // Diff.TypeDef must go with YIL.TypeDef
 
                     let _, _, names = name p.name
