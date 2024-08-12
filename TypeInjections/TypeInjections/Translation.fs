@@ -171,6 +171,7 @@ module Translation =
                 tsO.Length = tsN.Length && List.forall isJointType (List.zip tsO tsN)
             | TFun (tsO, oO), TFun (tsN, oN) ->
                 isJointType (oO, oN) && tsO.Length = tsN.Length && List.forall isJointType (List.zip tsO tsN)
+            | TVar _, TVar _ -> false // local type argument
             | _ -> tO = tN
         /// true iff we generate a lemma for method p
         and generateLemmaFor (p: Path) : bool =
@@ -899,7 +900,7 @@ module Translation =
                 let eVars = List.map localDeclTerm vars
                 match eN with
                 | Some (EFun (_, _, outN, bodyN)) ->
-                    let _, _, (outT, _) = tp (out, outN)
+                    let _, _, (outT, _) = tp (outN, outN) // "out" has "_O" label so should not be used here
                     let outExprN = EAnonApply(resultN, eVars)
                     let outExprO = outT (EAnonApply(resultO, eVars))
                     let resultBody = EBlock [ rcE outExprN body (Some bodyN) vars ]
