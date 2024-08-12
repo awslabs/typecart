@@ -1654,17 +1654,17 @@ module Translation =
                             @ insO @ insN
 
                     // old requires clauses applied to old arguments
-                    let oldHeaderCtx =
+                    let oldInputCtx =
                         if isStatic then
-                            ctxOh
+                            ctxOi
                         else
-                            ctxOh.setThisDecl (oldInstDecl)
+                            ctxOi.setThisDecl (oldInstDecl)
 
                     let inputRequiresO =
                         ins_o.conditions
                         |> List.map
                             (fun c ->
-                                let es = exprOld oldHeaderCtx Map.empty (fst c)
+                                let es = exprOld oldInputCtx Map.empty (fst c)
                                 (es, snd c))
 
                     // new requires clauses become ensures arguments
@@ -1745,7 +1745,7 @@ module Translation =
                         OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
                     // copy the decreases clause from the old implementation
-                    let decreases = List.map (exprOld oldHeaderCtx Map.empty) decreasesO
+                    let decreases = List.map (exprOld oldInputCtx Map.empty) decreasesO
 
                     let oldBodyCtx =
                         if isStatic then
@@ -1842,7 +1842,7 @@ module Translation =
                                     ins_o.conditions
                                     |> List.map
                                         (fun c ->
-                                            let es = exprOld oldHeaderCtx specializedInputMap (fst c)
+                                            let es = exprOld oldInputCtx specializedInputMap (fst c)
                                             (es, snd c))
                                 
                                 // translations from old inputs to new inputs
@@ -1873,7 +1873,14 @@ module Translation =
                                         @ specializedInputsTranslations @ losslessAssumptions
                                     )
                                 
+                                let specializedInputEnsuresN =
+                                    ins_n.conditions
+                                    |> List.map
+                                        (fun c ->
+                                            let es = exprNew newInputCtx specializedInputMap (fst c)
+                                            (es, snd c))
                                 // the outputs
+                                // TODO: figure out the specialized outputTypeT and remove redundant typeargs
                                 let specializedResultO =
                                     EMethodApply(receiverO, pO, typeargsToTVars tvsO,
                                                  ins_o.decls |> List.map (
@@ -1891,7 +1898,7 @@ module Translation =
                                 // New inputs' ensures becomes "output spec" here because "input spec" contains requires
                                 // and "output spec" contains ensures.
                                 let outSpec =
-                                    OutputSpec([], inputEnsuresN @ [ specializedOutputsTranslation ])
+                                    OutputSpec([], specializedInputEnsuresN @ [ specializedOutputsTranslation ])
                                 
                                 // proof
                                 let specializedProof =
