@@ -88,7 +88,7 @@ module Translation =
           generateProof = true
           expandAssertions = true
           generateLemmaCalls = true
-          specializeHigherOrderLemmas = true }
+          specializeHigherOrderLemmas = false }
     let stringToBool (value: string) =
         match Boolean.TryParse(value) with
         | true, b -> b
@@ -123,10 +123,22 @@ module Translation =
                   List.item ((List.findIndex (fun s -> s = "-b") argvList) + 1) argvList |> stringToBool
               else
                   defaultConfig.generateBackwardTranslationFunctions
-          generateProof = defaultConfig.generateProof
+          generateProof =
+              if List.exists (fun s -> s = "-p") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-p") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.generateProof
           expandAssertions = defaultConfig.expandAssertions
-          generateLemmaCalls = defaultConfig.generateLemmaCalls
-          specializeHigherOrderLemmas = defaultConfig.specializeHigherOrderLemmas }
+          generateLemmaCalls =
+              if List.exists (fun s -> s = "-l") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-l") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.generateLemmaCalls
+          specializeHigherOrderLemmas = 
+              if List.exists (fun s -> s = "-h") argvList then
+                  List.item ((List.findIndex (fun s -> s = "-h") argvList) + 1) argvList |> stringToBool
+              else
+                  defaultConfig.specializeHigherOrderLemmas }
 
     /// translates a program, encapsulates global data/state for use during translation
     type Translator

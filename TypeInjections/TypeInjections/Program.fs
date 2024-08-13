@@ -20,7 +20,10 @@ module Program =
                                           1 = always generate lemmas,\n\
                                           2 = generate axioms for unaffected, default=2)]\n\
             [-f true/false (use Forall in lemma pre-/post-conditions, default=true)]\n\
-            [-b true/false (generate Backward translation functions, default=true)]"
+            [-b true/false (generate Backward translation functions, default=true)]\n\
+            [-p true/false (generate Proof sketch, default=true)]\n\
+            [-l true/false (generate Lemma calls, default=true)]\n\
+            [-h true/false (specialize Higher-order lemmas (experimental), default=false)]"
         let argvList = argv |> Array.toList
         let oldPath = argvList.Item(0)
         let newPath = argvList.Item(1)
