@@ -457,13 +457,7 @@ module Translation =
                                                   ForwardLocalDeclTranslator(newLocalDecls)
                                                       .expr (newCtx, r) ]
 
-                                    let instanceTypeArgs =
-                                        match receiver with
-                                        | StaticReceiver ct -> ct.tpargs
-                                        | ObjectReceiver (_, tp) ->
-                                            match tp with
-                                            | TApply (_, args) -> args
-                                            | _ -> []
+                                    let instanceTypeArgs = Analysis.GetTypes().get(ctx, receiver)
 
                                     let instanceTypeArgTranslationInputs =
                                         instanceTypeArgs

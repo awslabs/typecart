@@ -783,6 +783,61 @@ module Analysis =
             this.exprList(ctx, es) |> ignore
             result
 
+    /// Get the concrete type arguments used in a receiver.
+    type GetTypes() =
+        inherit Traverser.Identity()
+        
+        let mutable tps: Type list = []
+        let mutable tpvars: TypeArg list = []
+        
+        // get tps and tpvars
+        // tpvars are the TVars to be replaced
+        override this.decl(ctx: Context, d: Decl) =
+            match d with
+            | TypeDef (_, _, super, _, _, _) ->
+                // get tps
+                this.tp(ctx, super) |> ignore
+                // record tpvars
+                assert tpvars.IsEmpty
+                tpvars <- d.tpvars
+            | _ ->
+                // record tps and tpvars
+                assert tpvars.IsEmpty
+                tpvars <- d.tpvars
+                assert tps.IsEmpty
+                tps <- typeargsToTVars d.tpvars
+            [ d ]
+
+        // get tps
+        override this.tp(ctx: Context, t: Type) =
+            match t with
+            | TApply (op, args) ->
+                let d = ctx.lookupByPath op
+                // get tps and tpvars
+                this.decl(ctx, d) |> ignore
+                // substitute args
+                assert (tpvars.Length = args.Length)
+                tps <- tps |> List.map (fun (t: Type) ->
+                    match t with
+                    | TVar name -> tpvars |> List.tryFindIndex (fun (tv: TypeArg) -> name = fst tv)
+                                          |> Option.map (fun (i: int) -> args[i])
+                                          |> Option.defaultValue t
+                    | _ -> t)
+                tpvars <- List.Empty
+            | _ -> ()
+            t
+
+        member this.get(ctx: Context, t: Type) =
+            this.tp(ctx, t) |> ignore
+            tps
+
+        member this.get(ctx: Context, rcv: Receiver) =
+            match rcv with
+            | StaticReceiver ct ->
+                ct.tpargs
+            | ObjectReceiver (_, tp) ->
+                this.get(ctx, tp)
+
     /// EBlock [ exprBefore, EBlock [ exprInside ], exprAfter ] => EBlock [ exprBefore, exprInside, exprAfter ]
     /// only if exprInside and [exprBefore + exprAfter] do not share any LocalDecl with the same name.
     type RemoveRedundantEBLock() =
