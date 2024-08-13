@@ -374,7 +374,9 @@ module Translation =
                         let ld = ctx.lookupLocalDeclO(n)
                         if ld.IsSome then
                             if ldmap.ContainsKey(ld.Value) then
-                                this.expr(ctx, ldmap[ld.Value]) // translate to old
+                                // translate to old
+                                // remove this variable to avoid replacements like "a -> a.b" to occur forever
+                                PrependLemmaCalls(oldCtx, newCtx, ldmap.Remove ld.Value).expr(ctx, ldmap[ld.Value])
                             else
                                 e // locally bound variables are not translated
                         else
