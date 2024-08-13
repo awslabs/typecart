@@ -898,10 +898,14 @@ module Translation =
             | EFun (vars, cond, out, body) when config.useForallInFunctionEnsures ->
                 // return a function, should only be at top level
                 let eVars = List.map localDeclTerm vars
+                let eVarsN = List.map (
+                    fun (ld: LocalDecl) ->
+                        let _, _, (T1, _) = tp (ld.tp, ld.tp)
+                        T1 (localDeclTerm ld)) vars
                 match eN with
                 | Some (EFun (_, _, outN, bodyN)) ->
                     let _, _, (outT, _) = tp (outN, outN) // "out" has "_O" label so should not be used here
-                    let outExprN = EAnonApply(resultN, eVars)
+                    let outExprN = EAnonApply(resultN, eVarsN)
                     let outExprO = outT (EAnonApply(resultO, eVars))
                     let resultBody = EBlock [ rcE outExprN body (Some bodyN) vars ]
                     // Note: Dafny is not happy if we dump the proof directly into the ensures clause of the forall
