@@ -581,15 +581,16 @@ module Traverser =
                         |> List.forall (fun (ld, a) -> a = EVar(ld.name))
 
                     if isEtaExp then f else e
-                | EFun (lds, None, _, EMethodApply (receiver, f, tpargs, args, _)) when lds.Length = args.Length ->
-                    // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
-                    // covers when f is a function
-                    // the condition must be globally true, we only cover the case where it is omitted
-                    let isEtaExp =
-                        List.zip lds args
-                        |> List.forall (fun (ld, a) -> a = EVar(ld.name))
-
-                    if isEtaExp then EMemberRef (receiver, f, tpargs) else e
+                // Error: cannot use naked function in recursive setting. Possible solution: eta expansion.
+                // | EFun (lds, None, _, EMethodApply (receiver, f, tpargs, args, _)) when lds.Length = args.Length ->
+                //     // eta-contraction: fun x_1, ..., x_n -> f x_1 ... x_n ---> f
+                //     // covers when f is a function
+                //     // the condition must be globally true, we only cover the case where it is omitted
+                //     let isEtaExp =
+                //         List.zip lds args
+                //         |> List.forall (fun (ld, a) -> a = EVar(ld.name))
+                //
+                //     if isEtaExp then EMemberRef (receiver, f, tpargs) else e
                 | _ -> e
 
             if topOnly then
