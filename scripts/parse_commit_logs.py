@@ -23,7 +23,7 @@ def diff_files(file1, file2):
 
 
 def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, delete_output=False, use_other_combine_dfy=None):
-    # if pr_id != 44:
+    # if pr_id != 153:
     #     return
     # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':
     #     return
@@ -55,13 +55,13 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, delete_outpu
         subprocess.run(f'cp "{use_other_combine_dfy}" proofs/proofs.dfy', shell=True)
     subprocess.run(f'printf "{pr_id}, {num_files["dfy"]}, " >> result.csv', shell=True)
     if typecart_return_value.returncode == 0:
-        num_lemmas = count_strings(" lemma ", "combine/combine.dfy")
+        num_lemmas = count_strings(" lemma ", "proofs/proofs.dfy")  # includes axioms
         if num_lemmas == 0:
             subprocess.run(f'printf "0, 0, 0, 0, 0, {typecart_end - typecart_start}, 0\n" >> result.csv', shell=True)
         else:
             subprocess.run(f'printf "{num_lemmas}" >> result.csv', shell=True)
             dafny_start = time.time()
-            dafny_return_value = subprocess.run(f"dafny verify --boogie -timeLimit:20 --boogie -trace --cores:6 --isolate-assertions combine/combine.dfy > boogie.txt", shell=True)
+            dafny_return_value = subprocess.run(f"dafny verify --warn-shadowing --relax-definite-assignment=false --isolate-assertions --general-traits=datatype --boogie -proverOpt:BATCH_MODE=true --boogie -typeEncoding:a --boogie -timeLimit:300 --cores:8 proofs/proofs.dfy > boogie.txt", shell=True)
             dafny_end = time.time()
             print(f"Dafny returned {dafny_return_value}")
             subprocess.run(f"python3 countVerified.py < boogie.txt >> result.csv", shell=True)
@@ -69,14 +69,14 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, delete_outpu
             subprocess.run(f'printf ", {num_errors}, {typecart_end - typecart_start}, {dafny_end - dafny_start}\n" >> result.csv', shell=True)
             if delete_output:
                 subprocess.run(f"rm boogie.txt", shell=True)
-                subprocess.run(f"rm -r combine", shell=True)
+                subprocess.run(f"rm -r proofs", shell=True)
     else:
         subprocess.run('echo "typecart error" >> result.csv', shell=True)
     if delete_output:
         subprocess.run(f"rm -r old; rm -r new", shell=True)
 
 
-def main(run_backward=True, no_proof=False):
+def main(run_backward, no_proof):
     subprocess.run(f'printf "(PR id or commit hash)[/diff lines (ignoring white lines)], #Dafny files changed, #lemmas, #verified, #timed out, #errors, #Dafny error count, typeCart running time, Dafny running time\n" >> result.csv', shell=True)
     with open("commit_logs.txt", "r") as f:
         lines = f.readlines()
@@ -95,8 +95,8 @@ def main(run_backward=True, no_proof=False):
                 assert len(commit_hashes) >= 2
                 run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward)
                 if run_cedar:
-                    if last_pr_id == 111 or last_pr_id == 44:
-                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, use_other_combine_dfy=f'combine_{last_pr_id}_{"" if run_backward else "forward_"}{"no_proof_" if no_proof else ""}{"20231019" if last_pr_id == 44 else "20231025"}.dfy')
+                    if last_pr_id == 197 or last_pr_id == 157:
+                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}{"_no_proof" if no_proof else ""}.dfy')
                 if last_pr_id == 1:
                     return  # older histories are not the same repo for cryptools
             elif len(commit_hashes) >= 2:
@@ -117,4 +117,4 @@ def main(run_backward=True, no_proof=False):
 
 
 if __name__ == "__main__":
-    main(run_backward=False, no_proof=False)
+    main(run_backward=True, no_proof=False)
