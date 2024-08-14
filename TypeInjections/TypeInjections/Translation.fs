@@ -1894,6 +1894,7 @@ module Translation =
                                             (es, snd c))
                                 // the outputs
                                 // TODO: figure out the specialized outputTypeT and remove redundant typeargs
+                                //  (maybe similar to Analysis.GetTypes()?)
                                 let specializedResultO =
                                     EMethodApply(receiverO, pO, typeargsToTVars tvsO,
                                                  ins_o.decls |> List.map (
@@ -1910,9 +1911,12 @@ module Translation =
                                 // but that is redundant due to our highly restricted treatment of classes
                                 // New inputs' ensures becomes "output spec" here because "input spec" contains requires
                                 // and "output spec" contains ensures.
-                                let outSpec =
+                                let specializedOutSpec =
                                     OutputSpec([], specializedInputEnsuresN @ [ specializedOutputsTranslation ])
                                 
+                                // copy the decreases clause from the old implementation
+                                let specializedDecreases = List.map (exprOld oldInputCtx specializedInputMap) decreasesO
+
                                 // proof
                                 let specializedProof =
                                     if generateAxiomForMethodApply e then
@@ -1948,10 +1952,10 @@ module Translation =
                                   getSpecializedLemmaName e,
                                   typeParams,
                                   specializedInSpec,
-                                  outSpec,
+                                  specializedOutSpec,
                                   [],
                                   [],
-                                  decreases,
+                                  specializedDecreases,
                                   specializedProof,
                                   true,
                                   true,
