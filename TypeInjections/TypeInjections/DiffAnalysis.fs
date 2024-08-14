@@ -116,22 +116,23 @@ module DiffAnalysis =
             let n = declO.name
             let p = ctxO.currentDecl.child (n)
             match d with
-            | Diff.Method (nameD, tvsD, insD, outsD, bdD) when generateLemmaOrAxiomFor (p) ->
-                match declO, declN with
-                | Method(methodType = IsLemma), _
-                | Method(methodType = IsMethod), _ -> ()
-                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
-                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
-                    let ctxOh = ctxO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
-                    let ctxOi = ctxOh.add (insD.decls.getOld ())
-                    let ctxOb = ctxOi.add(outsD.namedDecls.getOld ()).enterBody ()
-                    match bodyO with
-                    | Some bd ->
-                        specializedCalls <- Analysis.GatherSpecializedLemmaCalls(generateLemmaOrAxiomForExpr)
-                                                .gather(ctxOb, bd, specializedCalls)
-                        ()
+            | Diff.Method (nameD, methodTypeD, tvsD, insD, outsD, bdD) when generateLemmaOrAxiomFor (p) ->
+                if methodTypeD.getOld.bodyIsStatement() then
+                    ()
+                else
+                    match declO, declN with
+                    | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
+                      Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
+                        let ctxOh = ctxO.enter(nameD.getOld).addTpvars (tvsD.getOld ())
+                        let ctxOi = ctxOh.add (insD.decls.getOld ())
+                        let ctxOb = ctxOi.add(outsD.namedDecls.getOld ()).enterBody ()
+                        match bodyO with
+                        | Some bd ->
+                            specializedCalls <- Analysis.GatherSpecializedLemmaCalls(generateLemmaOrAxiomForExpr)
+                                                    .gather(ctxOb, bd, specializedCalls)
+                            ()
+                        | _ -> ()
                     | _ -> ()
-                | _ -> ()
             | _ -> ()
             this.declDefault(ctxO, ctxN, declO, declN, d)
         

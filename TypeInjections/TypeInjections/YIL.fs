@@ -335,6 +335,14 @@ module YIL =
             | IsGreatestLemma -> true
             | _ -> false
 
+        member this.bodyIsStatement() =
+            match this with
+            | IsMethod
+            | IsLemma
+            | IsLeastLemma
+            | IsGreatestLemma -> true
+            | _ -> false // body is an expression
+
         override this.ToString() =
             match this with
             | IsMethod -> "method"
@@ -1302,7 +1310,6 @@ module YIL =
                    | _ -> this.ghost (g))
                 + methodType.ToString()
                 + " "
-                + (if methodType.isLemma() && b.IsNone then "{:axiom} " else "")
                 + (this.meta a)
                 + n
                 + (this.tpvars false g tpvs)
@@ -1335,11 +1342,10 @@ module YIL =
                 + (match b with
                    | None -> ""
                    | Some e -> ("\n" +
-                                match methodType with
-                                | IsLemma
-                                | IsMethod -> this.statement e methodCtx
-                                | _ -> indentedBraced (this.expr e methodCtx)
-                                )
+                                if methodType.bodyIsStatement() then
+                                    this.statement e methodCtx
+                                else
+                                    indentedBraced (this.expr e methodCtx))
                    )
             | ClassConstructor (n, tpvs, ins, outs, b, a) ->
                 "constructor "
@@ -1414,6 +1420,9 @@ module YIL =
 
         member this.exprO(eO: Expr option, sep: string, pctx: Context) : string =
             Option.defaultValue "" (Option.map (fun e -> sep + (this.expr e pctx)) eO)
+
+        member this.statementO(eO: Expr option, sep: string, pctx: Context) : string =
+            Option.defaultValue "" (Option.map (fun e -> sep + (this.statement e pctx)) eO)
 
         member this.noPrintSep(e: Expr) =
             match e with

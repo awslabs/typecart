@@ -161,7 +161,7 @@ module Diff =
         | ClassConstructor of Name * TypeArgList * InputSpec * ConditionList * ExprO
         | TypeDef of Name * TypeArgList * Type * ExprO
         | Field of Name * Type * ExprO
-        | Method of Name * TypeArgList * InputSpec * OutputSpec * ExprO
+        | Method of Name * MethodType * TypeArgList * InputSpec * OutputSpec * ExprO
         | Import of importT: YIL.ImportType
         | Export of exportT: YIL.ExportType
         | DUnimplemented
@@ -173,7 +173,7 @@ module Diff =
             | ClassConstructor (n, _, _, _, _)
             | TypeDef (n, _, _, _)
             | Field (n, _, _)
-            | Method (n, _, _, _, _) -> Some n
+            | Method (n, _, _, _, _, _) -> Some n
             | _ -> None
 
         member this.name =
@@ -184,7 +184,7 @@ module Diff =
             | ClassConstructor (n, _, _, _, _) -> n
             | TypeDef (n, _, _, _) -> n
             | Field (n, _, _) -> n
-            | Method (n, _, _, _, _) -> n
+            | Method (n, _, _, _, _, _) -> n
             // these should be impossible but it's more convenient to make the function total
             | DUnimplemented -> SameName "DUnimplemented"
             | Import _ -> SameName "IMPORT"
@@ -287,6 +287,20 @@ module Diff =
             | SameType _ -> true
             | _ -> false
 
+    /// change to a methodtype
+    and MethodType =
+        | SameMethodType of Y.MethodType
+        | UpdateMethodType of Y.MethodType * Y.MethodType
+        member this.getOld =
+            match this with
+            | SameMethodType o
+            | UpdateMethodType (o, _) -> o
+
+        member this.getNew =
+            match this with
+            | SameMethodType n
+            | UpdateMethodType (_, n) -> n
+
     // the identity diff of an object (occurrences of SameX are pushed one level down)
     let rec idDecl (d: YIL.Decl) =
         let nD = SameName d.name
@@ -306,8 +320,8 @@ module Diff =
         | YIL.TypeDef (_, _, sp, pr, _, _) ->
             TypeDef(nD, tvsD, SameType sp, SameExprO(Option.map (fun (_, e, _) -> e) pr))
         | YIL.Field (_, t, d, _, _, _, _) -> Field(nD, SameType t, SameExprO d)
-        | YIL.Method (_, _, _, ins, outs, _, _, _, bd, _, _, _, _) ->
-            Method(nD, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
+        | YIL.Method (methodType, _, _, ins, outs, _, _, _, bd, _, _, _, _) ->
+            Method(nD, SameMethodType methodType, tvsD, idInputSpec ins, idOutputSpec outs, SameExprO bd)
 
     and idList<'y, 'd> (ys: 'y list) : List<'y, 'd> = UpdateList(List.map Same ys)
 
@@ -423,7 +437,9 @@ module Diff =
                 + (this.tp t)
                 + " = "
                 + this.exprO e
-            | Method (n, tpvs, ins, outs, b) ->
+            | Method (n, methodType, tpvs, ins, outs, b) ->
+                // we do not support switching between method and functions now
+                assert (methodType.getOld.bodyIsStatement() = methodType.getNew.bodyIsStatement())
                 "method "
                 + (this.name n)
                 + (this.typeargs tpvs)
@@ -431,7 +447,10 @@ module Diff =
                 + ": "
                 + (this.outputSpec outs)
                 + " = \n"
-                + this.exprO b
+                + (if methodType.getOld.bodyIsStatement() then
+                       this.statementO b
+                   else
+                       this.exprO b)
             | Import iT -> P().decl (YIL.Import iT, YIL.Context())
             | Export eT -> P().decl (YIL.Export eT, YIL.Context())
             | DUnimplemented -> "Unimplemented"
@@ -482,6 +501,13 @@ module Diff =
             match tO with
             | SameType t -> UNC + (t.ToString())
             | UpdateType t -> UPD + (t.ToString())
+
+        member this.statementO(eO: ExprO) =
+            match eO with
+            | SameExprO e -> UNC + (YIL.printer().statementO (e, "", YIL.Context()))
+            | UpdateExpr e -> UPD + (YIL.printer().statement e (YIL.Context()))
+            | DeleteExpr _ -> DEL
+            | AddExpr e -> ADD + (YIL.printer().statement e (YIL.Context()))
 
         member this.exprO(eO: ExprO) =
             match eO with

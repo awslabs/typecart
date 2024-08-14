@@ -59,6 +59,9 @@ module DiffTraverser =
         abstract member tp : Context * Context * Diff.Type -> Diff.Type
         default this.tp(ctxO: Context, ctxN: Context, t: Diff.Type) = t
 
+        abstract member methodType : Context * Context * Diff.MethodType -> Diff.MethodType
+        default this.methodType(ctxO: Context, ctxN: Context, methodType: Diff.MethodType) = methodType
+
         abstract member typearg : Context * Context * TypeArg * TypeArg * Diff.TypeArg -> Diff.TypeArg
         default this.typearg(ctxO: Context, ctxN: Context, tO: TypeArg, tN: TypeArg, t: Diff.TypeArg) = t
 
@@ -211,7 +214,7 @@ module DiffTraverser =
                 let ctxOe = ctxO.enter (n.getOld)
                 let ctxNe = ctxN.enter (n.getNew)
                 Diff.Field(name n, this.tp (ctxOe, ctxNe, t), this.exprO (ctxOe, ctxNe, e))
-            | Diff.Method (n, ts, ins, outs, e) ->
+            | Diff.Method (n, methodType, ts, ins, outs, e) ->
                 let ctxOh =
                     ctxO.enter(n.getOld).addTpvars (ts.getOld ())
 
@@ -229,6 +232,7 @@ module DiffTraverser =
 
                 Diff.Method(
                     name n,
+                    this.methodType (ctxO, ctxN, methodType),
                     typeargs ctxOh ctxNh ts,
                     this.inputSpec (ctxOh, ctxNh, ins),
                     this.outputSpec (ctxOi, ctxNi, outs),

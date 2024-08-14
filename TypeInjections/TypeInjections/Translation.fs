@@ -1529,444 +1529,451 @@ module Translation =
                           true,
                           true,
                           false,
-                          emptyMeta
+                          (if generateLemmaFor p then emptyMeta else emptyMeta.addAttribute("axiom", []))
                       ) ]
                 | _ -> failwith "impossible" // Diff.Field must occur with YIL.Field
             | Diff.Field _ -> [] // unchanged fields produce nothing
             // Dafny functions produce lemmas; lemmas / Dafny methods produce nothing
-            | Diff.Method (nameD, tvsD, insD, outsD, bdD) when generateLemmaOrAxiomFor (p) ->
-                match declO, declN with
-                | Method(methodType = IsLemma), _
-                | Method(methodType = IsMethod), _ -> []
-                | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
-                  Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
-                    if not tvsD.isSameOrUpdated then
-                        failwith (
-                            unsupported "addition or deletion in type parameters: "
-                            + p.ToString()
-                        )
+            | Diff.Method (nameD, methodTypeD, tvsD, insD, outsD, bdD) when generateLemmaOrAxiomFor (p) ->
+                if methodTypeD.getOld.bodyIsStatement() then
+                    []
+                else
+                    match declO, declN with
+                    | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
+                      Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
+                        if not tvsD.isSameOrUpdated then
+                            failwith (
+                                unsupported "addition or deletion in type parameters: "
+                                + p.ToString()
+                            )
 
-                    let ctxOh =
-                        contextO
-                            .enter(nameD.getOld)
-                            .addTpvars (tvsD.getOld ())
+                        let ctxOh =
+                            contextO
+                                .enter(nameD.getOld)
+                                .addTpvars (tvsD.getOld ())
 
-                    let ctxNh =
-                        contextN
-                            .enter(nameD.getNew)
-                            .addTpvars (tvsD.getNew ())
+                        let ctxNh =
+                            contextN
+                                .enter(nameD.getNew)
+                                .addTpvars (tvsD.getNew ())
 
-                    let ctxOi = ctxOh.add (insD.decls.getOld ())
-                    let ctxNi = ctxNh.add (insD.decls.getNew ())
+                        let ctxOi = ctxOh.add (insD.decls.getOld ())
+                        let ctxNi = ctxNh.add (insD.decls.getNew ())
 
-                    let ctxOb =
-                        ctxOi.add(outsD.namedDecls.getOld ()).enterBody ()
+                        let ctxOb =
+                            ctxOi.add(outsD.namedDecls.getOld ()).enterBody ()
 
-                    let ctxNb =
-                        ctxNi.add(outsD.namedDecls.getNew ()).enterBody ()
-                    // we ignore changes in in/output conditions here and only compare declarations
-                    // in fact, ensures clauses (no matter if changed) are ignored entirely
-                    // we ignore changes in modifies, reads, decreases clauses
-                    //
-                    // as "methods", we only consider pure functions here
-                    // a more general approach might also generate two-state lemmas for method invocations on class instances
-                    // (i.e., calling corresponding methods with related arguments on related objects yields related values and
-                    //   leaves the (possibly changed) objects related)
-                    //
-                    // For a static method without specification:
-                    // method p<u,v>(x:a,y:u,z:u->v):B
-                    //   requires some_property(x)
-                    //   { ... }
-                    // --->
-                    // lemma p_bc<uO,uN,vO,vN>(u_forward:uO->uN, u_backward:uN->uO, v_forward:vO->vN, v_backward: vN->vO,
-                    //   xO:aO, xN:aN, yO:uO, yN:uN, zO:uO->vO, zN:uN->vN)
-                    //     requires some_property(xO)
-                    //     requires xN == a_forward(xO)
-                    //     requires yN == u_forward(yO)
-                    //     (either)  requires forall x1_N: uN :: zN(x1_N) == v_forward(zO(u_backward(x1_N))
-                    //     (or)      requires zN == ((x1_N:uN) => v_forward(zO(u_backward(x1_N))))
-                    //     ensures some_property(xN)
-                    //     ensures New.p(xN,uN)==B_forward(Old.p(xO,uO))
-                    // and accordingly for the general case. If not static, the lemma additionally quantifies over the receivers.
-                    //
-                    // We change "requires some_property(xN)" to "ensures some_property(xN)" because
-                    // we can easily prove false if we have "requires some_property(xO)", "requires some_property(xN)",
-                    // "requires xN == a_forward(xO)", and a "slightly incorrect" function "a_forward".
-                    // The function "a_forward" should be enough for proving "ensures some_property(xN)" from
-                    // the precondition "requires some_property(xN)".
-                    // The reason why we want to explicitly state this postcondition is we need to prove it when calling
-                    // New.p(xN,uN) anyway, and Dafny sometimes cannot prove the precondition of New.p(xN,uN) if we
-                    // did not state the postcondition explicitly.
-                    let parentDeclO = contextO.lookupCurrent ()
+                        let ctxNb =
+                            ctxNi.add(outsD.namedDecls.getNew ()).enterBody ()
+                        // we ignore changes in in/output conditions here and only compare declarations
+                        // in fact, ensures clauses (no matter if changed) are ignored entirely
+                        // we ignore changes in modifies, reads, decreases clauses
+                        //
+                        // as "methods", we only consider pure functions here
+                        // a more general approach might also generate two-state lemmas for method invocations on class instances
+                        // (i.e., calling corresponding methods with related arguments on related objects yields related values and
+                        //   leaves the (possibly changed) objects related)
+                        //
+                        // For a static method without specification:
+                        // method p<u,v>(x:a,y:u,z:u->v):B
+                        //   requires some_property(x)
+                        //   { ... }
+                        // --->
+                        // lemma p_bc<uO,uN,vO,vN>(u_forward:uO->uN, u_backward:uN->uO, v_forward:vO->vN, v_backward: vN->vO,
+                        //   xO:aO, xN:aN, yO:uO, yN:uN, zO:uO->vO, zN:uN->vN)
+                        //     requires some_property(xO)
+                        //     requires xN == a_forward(xO)
+                        //     requires yN == u_forward(yO)
+                        //     (either)  requires forall x1_N: uN :: zN(x1_N) == v_forward(zO(u_backward(x1_N))
+                        //     (or)      requires zN == ((x1_N:uN) => v_forward(zO(u_backward(x1_N))))
+                        //     ensures some_property(xN)
+                        //     ensures New.p(xN,uN)==B_forward(Old.p(xO,uO))
+                        // and accordingly for the general case. If not static, the lemma additionally quantifies over the receivers.
+                        //
+                        // We change "requires some_property(xN)" to "ensures some_property(xN)" because
+                        // we can easily prove false if we have "requires some_property(xO)", "requires some_property(xN)",
+                        // "requires xN == a_forward(xO)", and a "slightly incorrect" function "a_forward".
+                        // The function "a_forward" should be enough for proving "ensures some_property(xN)" from
+                        // the precondition "requires some_property(xN)".
+                        // The reason why we want to explicitly state this postcondition is we need to prove it when calling
+                        // New.p(xN,uN) anyway, and Dafny sometimes cannot prove the precondition of New.p(xN,uN) if we
+                        // did not state the postcondition explicitly.
+                        let parentDeclO = contextO.lookupCurrent ()
 
-                    let parentDeclN = contextN.lookupCurrent ()
-                    // the following are only needed if the method is not static, but it's easier to compute them in any case
-                    let parentTvs_o = parentDeclO.tpvars
-                    let parentTvs_n = parentDeclN.tpvars
-                    let parentO, parentN, parentT = path (contextO.currentDecl)
+                        let parentDeclN = contextN.lookupCurrent ()
+                        // the following are only needed if the method is not static, but it's easier to compute them in any case
+                        let parentTvs_o = parentDeclO.tpvars
+                        let parentTvs_n = parentDeclN.tpvars
+                        let parentO, parentN, parentT = path (contextO.currentDecl)
 
-                    let parentTvsO, parentTvsN, parentTvsT =
-                        List.unzip3 (List.map typearg2 (List.zip parentTvs_o parentTvs_n))
+                        let parentTvsO, parentTvsN, parentTvsT =
+                            List.unzip3 (List.map typearg2 (List.zip parentTvs_o parentTvs_n))
 
-                    let oldInstDecl, newInstDecl, instancesTranslation =
-                        let tO =
-                            TApply(contextO.currentDecl, typeargsToTVars parentTvs_o)
+                        let oldInstDecl, newInstDecl, instancesTranslation =
+                            let tO =
+                                TApply(contextO.currentDecl, typeargsToTVars parentTvs_o)
 
-                        let tN =
-                            TApply(contextN.currentDecl, typeargsToTVars parentTvs_n)
+                            let tN =
+                                TApply(contextN.currentDecl, typeargsToTVars parentTvs_n)
 
-                        localDecl2 (
-                            LocalDecl(varname parentDeclO.name, tO, false),
-                            LocalDecl(varname parentDeclN.name, tN, false)
-                        )
+                            localDecl2 (
+                                LocalDecl(varname parentDeclO.name, tO, false),
+                                LocalDecl(varname parentDeclN.name, tN, false)
+                            )
 
-                    let instanceInputs =
-                        if isStatic then
-                            []
-                        else
-                            [ oldInstDecl; newInstDecl ]
+                        let instanceInputs =
+                            if isStatic then
+                                []
+                            else
+                                [ oldInstDecl; newInstDecl ]
 
-                    let receiverO, receiverN =
-                        if isStatic then
-                            // ignores the instances above
-                            let sr p =
-                                StaticReceiver({ path = p; tpargs = [] })
+                        let receiverO, receiverN =
+                            if isStatic then
+                                // ignores the instances above
+                                let sr p =
+                                    StaticReceiver({ path = p; tpargs = [] })
 
-                            sr parentO, sr parentN
-                        else
-                            let objRec ld = ObjectReceiver(localDeclTerm ld, ld.tp)
+                                sr parentO, sr parentN
+                            else
+                                let objRec ld = ObjectReceiver(localDeclTerm ld, ld.tp)
 
-                            objRec oldInstDecl, objRec newInstDecl
-                    // the input types and arguments and the translations for the arguments
-                    // parent type parameters and instanceInputs are empty if static
-                    let tvsO, tvsN, tvsT =
-                        List.unzip3 (List.map typearg2 (List.zip tvs_o tvs_n))
+                                objRec oldInstDecl, objRec newInstDecl
+                        // the input types and arguments and the translations for the arguments
+                        // parent type parameters and instanceInputs are empty if static
+                        let tvsO, tvsN, tvsT =
+                            List.unzip3 (List.map typearg2 (List.zip tvs_o tvs_n))
 
-                    let typeParams =
-                        Utils.listInterleave (parentTvsO @ tvsO, parentTvsN @ tvsN)
-                    // old inputs and new inputs
-                    let insO, _, _ =
-                        List.unzip3 (List.map localDecl ins_o.decls)
+                        let typeParams =
+                            Utils.listInterleave (parentTvsO @ tvsO, parentTvsN @ tvsN)
+                        // old inputs and new inputs
+                        let insO, _, _ =
+                            List.unzip3 (List.map localDecl ins_o.decls)
 
-                    let _, insN, _ =
-                        List.unzip3 (List.map localDecl ins_n.decls)
-                    // translations from old inputs to new inputs
-                    let insO_translated, insN_translated, insT =
-                        List.unzip3 (List.map localDecl2 (insD.decls.getSameOrUpdate ()))
+                        let _, insN, _ =
+                            List.unzip3 (List.map localDecl ins_n.decls)
+                        // translations from old inputs to new inputs
+                        let insO_translated, insN_translated, insT =
+                            List.unzip3 (List.map localDecl2 (insD.decls.getSameOrUpdate ()))
 
-                    let inputs =
-                        instanceInputs
-                        @ (if config.generateBackwardTranslationFunctions then
-                               Utils.listInterleave (List.unzip parentTvsT)
-                           else
-                               List.map fst parentTvsT)
-                          @ (if config.generateBackwardTranslationFunctions then
-                                 Utils.listInterleave (List.unzip tvsT)
-                             else
-                                 List.map fst tvsT)
-                            @ insO @ insN
+                        let inputs =
+                            instanceInputs
+                            @ (if config.generateBackwardTranslationFunctions then
+                                   Utils.listInterleave (List.unzip parentTvsT)
+                               else
+                                   List.map fst parentTvsT)
+                              @ (if config.generateBackwardTranslationFunctions then
+                                     Utils.listInterleave (List.unzip tvsT)
+                                 else
+                                     List.map fst tvsT)
+                                @ insO @ insN
 
-                    // old requires clauses applied to old arguments
-                    let oldInputCtx =
-                        if isStatic then
-                            ctxOi
-                        else
-                            ctxOi.setThisDecl (oldInstDecl)
+                        // old requires clauses applied to old arguments
+                        let oldInputCtx =
+                            if isStatic then
+                                ctxOi
+                            else
+                                ctxOi.setThisDecl (oldInstDecl)
 
-                    let inputRequiresO =
-                        ins_o.conditions
-                        |> List.map
-                            (fun c ->
-                                let es = exprOld oldInputCtx Map.empty (fst c)
-                                (es, snd c))
+                        let inputRequiresO =
+                            ins_o.conditions
+                            |> List.map
+                                (fun c ->
+                                    let es = exprOld oldInputCtx Map.empty (fst c)
+                                    (es, snd c))
 
-                    // new requires clauses become ensures arguments
-                    let newInputCtx =
-                        if isStatic then
-                            ctxNi
-                        else
-                            ctxNi.setThisDecl (newInstDecl)
+                        // new requires clauses become ensures arguments
+                        let newInputCtx =
+                            if isStatic then
+                                ctxNi
+                            else
+                                ctxNi.setThisDecl (newInstDecl)
 
-                    let inputEnsuresN =
-                        ins_n.conditions
-                        |> List.map
-                            (fun c ->
-                                let es = exprNew newInputCtx Map.empty (fst c)
-                                (es, snd c))
+                        let inputEnsuresN =
+                            ins_n.conditions
+                            |> List.map
+                                (fun c ->
+                                    let es = exprNew newInputCtx Map.empty (fst c)
+                                    (es, snd c))
 
-                    // insT is (f1(old), f2(new))
-                    // backward compatibility: new == f1(old)
-                    let inputsTranslations =
-                        if isStatic then
-                            backward_compatible
-                                insT
-                                (List.map localDeclTerm insO_translated)
-                                (List.map localDeclTerm insN_translated)
-                        else
-                            backward_compatible
-                                (instancesTranslation :: insT)
-                                (List.map localDeclTerm (oldInstDecl :: insO_translated))
-                                (List.map localDeclTerm (newInstDecl :: insN_translated))
+                        // insT is (f1(old), f2(new))
+                        // backward compatibility: new == f1(old)
+                        let inputsTranslations =
+                            if isStatic then
+                                backward_compatible
+                                    insT
+                                    (List.map localDeclTerm insO_translated)
+                                    (List.map localDeclTerm insN_translated)
+                            else
+                                backward_compatible
+                                    (instancesTranslation :: insT)
+                                    (List.map localDeclTerm (oldInstDecl :: insO_translated))
+                                    (List.map localDeclTerm (newInstDecl :: insN_translated))
 
-                    // lossless assumptions
-                    let losslessAssumptions =
-                        if config.generateBackwardTranslationFunctions then
-                            List.map
-                                (fun (tpargO: TypeArg, tparg_o: TypeArg, tparg_n: TypeArg) ->
-                                    let _, _, tT =
-                                        tp (TVar(fst tparg_o), TVar(fst tparg_n))
+                        // lossless assumptions
+                        let losslessAssumptions =
+                            if config.generateBackwardTranslationFunctions then
+                                List.map
+                                    (fun (tpargO: TypeArg, tparg_o: TypeArg, tparg_n: TypeArg) ->
+                                        let _, _, tT =
+                                            tp (TVar(fst tparg_o), TVar(fst tparg_n))
 
-                                    lossless ctxOb (TVar(fst tpargO)) tT)
-                                (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_n @ tvs_n))
-                        else
-                            []
+                                        lossless ctxOb (TVar(fst tpargO)) tT)
+                                    (List.zip3 (parentTvsO @ tvsO) (parentTvs_o @ tvs_o) (parentTvs_n @ tvs_n))
+                            else
+                                []
 
-                    let inSpec =
-                        InputSpec(
-                            inputs,
-                            inputRequiresO
-                            @ inputsTranslations @ losslessAssumptions
-                        )
+                        let inSpec =
+                            InputSpec(
+                                inputs,
+                                inputRequiresO
+                                @ inputsTranslations @ losslessAssumptions
+                            )
 
-                    // we don't need the ensures-conditions of the method
-                    // because they can be proved from the verification of the method
-                    // but we might add them if that helps
+                        // we don't need the ensures-conditions of the method
+                        // because they can be proved from the verification of the method
+                        // but we might add them if that helps
 
-                    // the outputs and the translation function
-                    let outputTypeT, outputTypeN, canTranslateOutput =
-                        match outs_o, outs_n with
-                        | OutputSpec ([], _), OutputSpec ([], _) -> None, None, true
-                        | OutputSpec ([ hdO ], _), OutputSpec ([ hdN ], _) ->
-                            try
-                                let _, otN, otT = tp (hdO.tp, hdN.tp)
-                                Some otT, Some otN, true
-                            with _ -> None, None, false
-                        | _ -> failwith (unsupported "multiple output declarations")
+                        // the outputs and the translation function
+                        let outputTypeT, outputTypeN, canTranslateOutput =
+                            match outs_o, outs_n with
+                            | OutputSpec ([], _), OutputSpec ([], _) -> None, None, true
+                            | OutputSpec ([ hdO ], _), OutputSpec ([ hdN ], _) ->
+                                try
+                                    let _, otN, otT = tp (hdO.tp, hdN.tp)
+                                    Some otT, Some otN, true
+                                with _ -> None, None, false
+                            | _ -> failwith (unsupported "multiple output declarations")
 
-                    let resultO =
-                        EMethodApply(receiverO, pO, typeargsToTVars tvsO, List.map localDeclTerm insO, true)
+                        let resultO =
+                            EMethodApply(receiverO, pO, typeargsToTVars tvsO, List.map localDeclTerm insO, true)
 
-                    let resultN =
-                        EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
+                        let resultN =
+                            EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
 
-                    let outputsTranslation = backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput resultO resultN
-                    // in general for mutable classes, we'd also have to return that the receivers remain translated
-                    // but that is redundant due to our highly restricted treatment of classes
-                    // New inputs' ensures becomes "output spec" here because "input spec" contains requires
-                    // and "output spec" contains ensures.
-                    let outSpec =
-                        OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
+                        let outputsTranslation = backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput resultO resultN
+                        // in general for mutable classes, we'd also have to return that the receivers remain translated
+                        // but that is redundant due to our highly restricted treatment of classes
+                        // New inputs' ensures becomes "output spec" here because "input spec" contains requires
+                        // and "output spec" contains ensures.
+                        let outSpec =
+                            OutputSpec([], inputEnsuresN @ [ outputsTranslation ])
 
-                    // copy the decreases clause from the old implementation
-                    let decreases = List.map (exprOld oldInputCtx Map.empty) decreasesO
+                        // copy the decreases clause from the old implementation
+                        let decreases = List.map (exprOld oldInputCtx Map.empty) decreasesO
 
-                    let oldBodyCtx =
-                        if isStatic then
-                            ctxOb
-                        else
-                            ctxOb.setThisDecl (oldInstDecl)
+                        let oldBodyCtx =
+                            if isStatic then
+                                ctxOb
+                            else
+                                ctxOb.setThisDecl (oldInstDecl)
 
-                    let newBodyCtx =
-                        if isStatic then
-                            ctxNb
-                        else
-                            ctxNb.setThisDecl (newInstDecl)
+                        let newBodyCtx =
+                            if isStatic then
+                                ctxNb
+                            else
+                                ctxNb.setThisDecl (newInstDecl)
 
-                    // The body yields the proof of the lemma.
-                    let proofBody =
-                        if generateAxiomFor p then
-                            None // an axiom
-                        else
-                            match bdD with
-                            | Diff.SameExprO bdO ->
-                                // unchanged body: try to generate proof sketch
-                                // use oldCtx to replace "this" with old variables
-                                //
-                                // When bdO is None, both old and new functions are axioms.
-                                // So we also generate axioms (body=None) in this case.
-                                match outputTypeT with
-                                | Some ot ->
-                                    bdO
-                                    |> Option.bind
-                                        (fun b ->
-                                            proof oldBodyCtx newBodyCtx Map.empty b resultO resultN (fst ot) isOpaqueO isOpaqueN)
-                                | None -> Some(EBlock [])
-                            | _ ->
-                                // updated body: try to generate proof sketch
-                                // use oldCtx to replace "this" with old variables
-                                match bodyO with
-                                | Some bd ->
+                        // The body yields the proof of the lemma.
+                        let proofBody =
+                            if generateAxiomFor p then
+                                None // an axiom
+                            else
+                                match bdD with
+                                | Diff.SameExprO bdO ->
+                                    // unchanged body: try to generate proof sketch
+                                    // use oldCtx to replace "this" with old variables
+                                    //
+                                    // When bdO is None, both old and new functions are axioms.
+                                    // So we also generate axioms (body=None) in this case.
                                     match outputTypeT with
-                                    | Some ot -> proof oldBodyCtx newBodyCtx Map.empty bd resultO resultN (fst ot) isOpaqueO isOpaqueN
+                                    | Some ot ->
+                                        bdO
+                                        |> Option.bind
+                                            (fun b ->
+                                                proof oldBodyCtx newBodyCtx Map.empty b resultO resultN (fst ot) isOpaqueO isOpaqueN)
                                     | None -> Some(EBlock [])
-                                | None ->
-                                    // other cases: generate empty proof
-                                    Some(EBlock [])
-                    
-                    let generatedLemma = Method(
-                          IsLemma,
-                          pT.name + "_bc",
-                          typeParams,
-                          inSpec,
-                          outSpec,
-                          [],
-                          [],
-                          decreases,
-                          proofBody,
-                          true,
-                          true,
-                          false,
-                          emptyMeta
-                      )
-                    
-                    let generatedSpecializedLemmas =
-                        if config.specializeHigherOrderLemmas &&
-                                Map.containsKey ctxOh.currentDecl specializedLemmas then
-                            let invocations = Map.find ctxOh.currentDecl specializedLemmas |>
-                                              List.distinctBy getSpecializedLemmaName
-                            invocations |> List.map (fun e ->
-                                let exprs =
-                                    match e with
-                                    | EMethodApply (receiver, method, tpargs, exprs, ghost) -> exprs
-                                    | _ -> failwith "specialized lemma must come with EMethodApply"
-                                let specializedLocations = getSpecializedArgumentLocations e
-                                let filterInput ins = ins |> List.indexed |> List.filter (
-                                    fun x -> List.contains (fst x) specializedLocations |> not) |> List.map snd
-                                let specializedInputMap = ins_o.decls |> List.indexed |> List.filter (
-                                    fun x -> List.contains (fst x) specializedLocations) |> List.map (
-                                    fun (i, x) -> (x, exprs[i])) |> Map.ofList
-                                let specializedLocalDeclTerm ld =
-                                    Map.tryFind ld specializedInputMap |> Option.defaultValue (localDeclTerm ld)
-                                
-                                // inputs
-                                let specializedInputs =
-                                    instanceInputs
-                                    @ (if config.generateBackwardTranslationFunctions then
-                                           Utils.listInterleave (List.unzip parentTvsT)
-                                       else
-                                           List.map fst parentTvsT)
-                                      @ (if config.generateBackwardTranslationFunctions then
-                                             Utils.listInterleave (List.unzip tvsT)
-                                         else
-                                             List.map fst tvsT)
-                                        @ (insO |> filterInput)
-                                        @ (insN |> filterInput)
-                                let specializedInputRequiresO =
-                                    ins_o.conditions
-                                    |> List.map
-                                        (fun c ->
-                                            let es = exprOld oldInputCtx specializedInputMap (fst c)
-                                            (es, snd c))
-                                
-                                // translations from old inputs to new inputs
-                                let insOexprs, insNexprs, insT =
-                                    insD.decls.getSameOrUpdate()
-                                    |> List.collect (fun (ldO, ldN) ->
-                                        if specializedInputMap.ContainsKey(ldO) then
-                                            [] // no need to require the translations for specialized inputs
-                                        else
-                                            localDecl2 (ldO, ldN)
-                                            |> fun (x, y, z) -> [localDeclTerm x, localDeclTerm y, z])
-                                    |> List.unzip3
-                                let specializedInputsTranslations =
-                                    if isStatic then
-                                        backward_compatible
-                                            insT
-                                            insOexprs
-                                            insNexprs
-                                    else
-                                        backward_compatible
-                                            (instancesTranslation :: insT)
-                                            (localDeclTerm oldInstDecl :: insOexprs)
-                                            (localDeclTerm newInstDecl :: insNexprs)
-                                let specializedInSpec =
-                                    InputSpec(
-                                        specializedInputs,
-                                        specializedInputRequiresO
-                                        @ specializedInputsTranslations @ losslessAssumptions
-                                    )
-                                
-                                let specializedInputEnsuresN =
-                                    ins_n.conditions
-                                    |> List.map
-                                        (fun c ->
-                                            let es = exprNew newInputCtx specializedInputMap (fst c)
-                                            (es, snd c))
-                                // the outputs
-                                // TODO: figure out the specialized outputTypeT and remove redundant typeargs
-                                //  (maybe similar to Analysis.GetTypes()?)
-                                let specializedResultO =
-                                    EMethodApply(receiverO, pO, typeargsToTVars tvsO,
-                                                 ins_o.decls |> List.map (
-                                                     fun ld -> exprOld ctxOh specializedInputMap (specializedLocalDeclTerm ld)), true)
-
-                                let specializedResultN =
-                                    EMethodApply(receiverN, pN, typeargsToTVars tvsN,
-                                                 ins_n.decls |> List.map (
-                                                     fun ld -> exprNew ctxNh specializedInputMap (specializedLocalDeclTerm ld)), true)
-
-                                let specializedOutputsTranslation =
-                                    backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput specializedResultO specializedResultN
-                                // in general for mutable classes, we'd also have to return that the receivers remain translated
-                                // but that is redundant due to our highly restricted treatment of classes
-                                // New inputs' ensures becomes "output spec" here because "input spec" contains requires
-                                // and "output spec" contains ensures.
-                                let specializedOutSpec =
-                                    OutputSpec([], specializedInputEnsuresN @ [ specializedOutputsTranslation ])
-                                
-                                // copy the decreases clause from the old implementation
-                                let specializedDecreases = List.map (exprOld oldInputCtx specializedInputMap) decreasesO
-
-                                // proof
-                                let specializedProof =
-                                    if generateAxiomForMethodApply e then
-                                        None // an axiom
-                                    else
-                                        match bdD with
-                                        | Diff.SameExprO bdO ->
-                                            // unchanged body: try to generate proof sketch
-                                            // use oldCtx to replace "this" with old variables
-                                            //
-                                            // When bdO is None, both old and new functions are axioms.
-                                            // So we also generate axioms (body=None) in this case.
-                                            match outputTypeT with
-                                            | Some ot ->
-                                                bdO
-                                                |> Option.bind
-                                                    (fun b ->
-                                                        proof oldBodyCtx newBodyCtx specializedInputMap b specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN)
-                                            | None -> Some(EBlock [])
-                                        | _ ->
-                                            // updated body: try to generate proof sketch
-                                            // use oldCtx to replace "this" with old variables
-                                            match bodyO with
-                                            | Some bd ->
-                                                match outputTypeT with
-                                                | Some ot -> proof oldBodyCtx newBodyCtx specializedInputMap bd specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN
-                                                | None -> Some(EBlock [])
-                                            | None ->
-                                                // other cases: generate empty proof
-                                                Some(EBlock [])
-                                Method(
-                                  IsLemma,
-                                  getSpecializedLemmaName e,
-                                  typeParams,
-                                  specializedInSpec,
-                                  specializedOutSpec,
-                                  [],
-                                  [],
-                                  specializedDecreases,
-                                  specializedProof,
-                                  true,
-                                  true,
-                                  false,
+                                | _ ->
+                                    // updated body: try to generate proof sketch
+                                    // use oldCtx to replace "this" with old variables
+                                    match bodyO with
+                                    | Some bd ->
+                                        match outputTypeT with
+                                        | Some ot -> proof oldBodyCtx newBodyCtx Map.empty bd resultO resultN (fst ot) isOpaqueO isOpaqueN
+                                        | None -> Some(EBlock [])
+                                    | None ->
+                                        // other cases: generate empty proof
+                                        Some(EBlock [])
+                        
+                        let generatedLemma = Method(
+                              IsLemma,
+                              pT.name + "_bc",
+                              typeParams,
+                              inSpec,
+                              outSpec,
+                              [],
+                              [],
+                              decreases,
+                              proofBody,
+                              true,
+                              true,
+                              false,
+                              if proofBody.IsNone then
+                                  emptyMeta.addAttribute("axiom", [])
+                              else
                                   emptyMeta
-                                ))
-                        else
-                            []
+                          )
+                        
+                        let generatedSpecializedLemmas =
+                            if config.specializeHigherOrderLemmas &&
+                                    Map.containsKey ctxOh.currentDecl specializedLemmas then
+                                let invocations = Map.find ctxOh.currentDecl specializedLemmas |>
+                                                  List.distinctBy getSpecializedLemmaName
+                                invocations |> List.map (fun e ->
+                                    let exprs =
+                                        match e with
+                                        | EMethodApply (receiver, method, tpargs, exprs, ghost) -> exprs
+                                        | _ -> failwith "specialized lemma must come with EMethodApply"
+                                    let specializedLocations = getSpecializedArgumentLocations e
+                                    let filterInput ins = ins |> List.indexed |> List.filter (
+                                        fun x -> List.contains (fst x) specializedLocations |> not) |> List.map snd
+                                    let specializedInputMap = ins_o.decls |> List.indexed |> List.filter (
+                                        fun x -> List.contains (fst x) specializedLocations) |> List.map (
+                                        fun (i, x) -> (x, exprs[i])) |> Map.ofList
+                                    let specializedLocalDeclTerm ld =
+                                        Map.tryFind ld specializedInputMap |> Option.defaultValue (localDeclTerm ld)
+                                    
+                                    // inputs
+                                    let specializedInputs =
+                                        instanceInputs
+                                        @ (if config.generateBackwardTranslationFunctions then
+                                               Utils.listInterleave (List.unzip parentTvsT)
+                                           else
+                                               List.map fst parentTvsT)
+                                          @ (if config.generateBackwardTranslationFunctions then
+                                                 Utils.listInterleave (List.unzip tvsT)
+                                             else
+                                                 List.map fst tvsT)
+                                            @ (insO |> filterInput)
+                                            @ (insN |> filterInput)
+                                    let specializedInputRequiresO =
+                                        ins_o.conditions
+                                        |> List.map
+                                            (fun c ->
+                                                let es = exprOld oldInputCtx specializedInputMap (fst c)
+                                                (es, snd c))
+                                    
+                                    // translations from old inputs to new inputs
+                                    let insOexprs, insNexprs, insT =
+                                        insD.decls.getSameOrUpdate()
+                                        |> List.collect (fun (ldO, ldN) ->
+                                            if specializedInputMap.ContainsKey(ldO) then
+                                                [] // no need to require the translations for specialized inputs
+                                            else
+                                                localDecl2 (ldO, ldN)
+                                                |> fun (x, y, z) -> [localDeclTerm x, localDeclTerm y, z])
+                                        |> List.unzip3
+                                    let specializedInputsTranslations =
+                                        if isStatic then
+                                            backward_compatible
+                                                insT
+                                                insOexprs
+                                                insNexprs
+                                        else
+                                            backward_compatible
+                                                (instancesTranslation :: insT)
+                                                (localDeclTerm oldInstDecl :: insOexprs)
+                                                (localDeclTerm newInstDecl :: insNexprs)
+                                    let specializedInSpec =
+                                        InputSpec(
+                                            specializedInputs,
+                                            specializedInputRequiresO
+                                            @ specializedInputsTranslations @ losslessAssumptions
+                                        )
+                                    
+                                    let specializedInputEnsuresN =
+                                        ins_n.conditions
+                                        |> List.map
+                                            (fun c ->
+                                                let es = exprNew newInputCtx specializedInputMap (fst c)
+                                                (es, snd c))
+                                    // the outputs
+                                    // TODO: figure out the specialized outputTypeT and remove redundant typeargs
+                                    //  (maybe similar to Analysis.GetTypes()?)
+                                    let specializedResultO =
+                                        EMethodApply(receiverO, pO, typeargsToTVars tvsO,
+                                                     ins_o.decls |> List.map (
+                                                         fun ld -> exprOld ctxOh specializedInputMap (specializedLocalDeclTerm ld)), true)
 
-                    generatedLemma :: generatedSpecializedLemmas
-                | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
+                                    let specializedResultN =
+                                        EMethodApply(receiverN, pN, typeargsToTVars tvsN,
+                                                     ins_n.decls |> List.map (
+                                                         fun ld -> exprNew ctxNh specializedInputMap (specializedLocalDeclTerm ld)), true)
+
+                                    let specializedOutputsTranslation =
+                                        backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput specializedResultO specializedResultN
+                                    // in general for mutable classes, we'd also have to return that the receivers remain translated
+                                    // but that is redundant due to our highly restricted treatment of classes
+                                    // New inputs' ensures becomes "output spec" here because "input spec" contains requires
+                                    // and "output spec" contains ensures.
+                                    let specializedOutSpec =
+                                        OutputSpec([], specializedInputEnsuresN @ [ specializedOutputsTranslation ])
+                                    
+                                    // copy the decreases clause from the old implementation
+                                    let specializedDecreases = List.map (exprOld oldInputCtx specializedInputMap) decreasesO
+
+                                    // proof
+                                    let specializedProof =
+                                        if generateAxiomForMethodApply e then
+                                            None // an axiom
+                                        else
+                                            match bdD with
+                                            | Diff.SameExprO bdO ->
+                                                // unchanged body: try to generate proof sketch
+                                                // use oldCtx to replace "this" with old variables
+                                                //
+                                                // When bdO is None, both old and new functions are axioms.
+                                                // So we also generate axioms (body=None) in this case.
+                                                match outputTypeT with
+                                                | Some ot ->
+                                                    bdO
+                                                    |> Option.bind
+                                                        (fun b ->
+                                                            proof oldBodyCtx newBodyCtx specializedInputMap b specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN)
+                                                | None -> Some(EBlock [])
+                                            | _ ->
+                                                // updated body: try to generate proof sketch
+                                                // use oldCtx to replace "this" with old variables
+                                                match bodyO with
+                                                | Some bd ->
+                                                    match outputTypeT with
+                                                    | Some ot -> proof oldBodyCtx newBodyCtx specializedInputMap bd specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN
+                                                    | None -> Some(EBlock [])
+                                                | None ->
+                                                    // other cases: generate empty proof
+                                                    Some(EBlock [])
+                                    Method(
+                                      IsLemma,
+                                      getSpecializedLemmaName e,
+                                      typeParams,
+                                      specializedInSpec,
+                                      specializedOutSpec,
+                                      [],
+                                      [],
+                                      specializedDecreases,
+                                      specializedProof,
+                                      true,
+                                      true,
+                                      false,
+                                      if specializedProof.IsNone then
+                                          emptyMeta.addAttribute("axiom", [])
+                                      else
+                                          emptyMeta
+                                    ))
+                            else
+                                []
+
+                        generatedLemma :: generatedSpecializedLemmas
+                    | _ -> failwith ("impossible") // Diff.Method must occur with YIL.Method
             | Diff.Method _ -> [] // unchanged methods produce nothing
         /// generates the header info (types, specs) of the translation functions for a type declaration
         and typeDeclHeader (p: Path, dO: Decl, dN: Decl) =

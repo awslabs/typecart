@@ -1,5 +1,6 @@
 namespace TypeInjections
 
+open TypeInjections.Diff
 open TypeInjections.YIL
 
 /// diffs two YIL AST items and returns the corresponding AST item in Diff._
@@ -99,6 +100,12 @@ module Differ =
         else
             Diff.Rename(old, nw)
 
+    and methodTp (old: MethodType, nw: MethodType) : Diff.MethodType =
+        if old = nw then
+            Diff.SameMethodType(old)
+        else
+            Diff.UpdateMethodType(old, nw)
+
     /// diff between two programs
     and prog (old: Program, nw: Program) : Diff.Program =
         let n = name (old.name, nw.name)
@@ -173,7 +180,7 @@ module Differ =
             && sO = sN
             && qO = qN ->
             Some(
-                Diff.Method(name (nO, nN), typeargs (tsO, tsN), inputSpec (iO, iN), outputSpec (oO, oN), exprO (bO, bN))
+                Diff.Method(name (nO, nN), methodTp (lO, lN), typeargs (tsO, tsN), inputSpec (iO, iN), outputSpec (oO, oN), exprO (bO, bN))
             )
         | TypeDef (nO, tsO, spO, prO, isNO, _), TypeDef (nN, tsN, spN, prN, isNN, _) when
             // changing variable name (fst pr) not supported
