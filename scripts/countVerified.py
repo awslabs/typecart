@@ -7,27 +7,18 @@ def process_dafny_output(lines):
     current_category = None
 
     for line in lines:
-        if "Verifying " in line:
-            parts = line.split(' ', 2)
-            current_function = parts[1]
-            current_category = parts[2].strip("() ...")
-            if current_function.endswith("_bc"):
-                functions.setdefault(current_function, {})[current_category] = 'unverified'
-        elif "verified" in line and current_function and current_category:
-            if current_function.endswith("_bc"):
-                functions[current_function][current_category] = 'verified'
-            current_function = None
-            current_category = None
-        elif "error" in line and current_function and current_category:
-            if current_function.endswith("_bc"):
-                functions[current_function][current_category] = 'error'
-            current_function = None
-            current_category = None
-        elif "timed out" in line and current_function and current_category:
-            if current_function.endswith("_bc"):
-                functions[current_function][current_category] = 'timed out'
-            current_function = None
-            current_category = None
+        result = line.split(',')
+        parts = result[0].split(' ', 1)
+        if not parts[0].endswith("_bc"):
+            continue
+        current_function = parts[0]
+        current_category = parts[1]
+        if result[1] == "Passed":
+            functions.setdefault(current_function, {})[current_category] = 'verified'
+        elif result[1] == "Failed":
+            functions.setdefault(current_function, {})[current_category] = 'error'
+        else:
+            print(f'Unknown result: {result[1]}')
 
     verified_functions = {k: [c for c, v in categories.items() if v == 'verified'] for k, categories in functions.items() if all(v == 'verified' for v in categories.values())}
     unverified_functions = {k: [c for c, v in categories.items() if v == 'error'] for k, categories in functions.items() if any(v == 'error' for v in categories.values())}
@@ -73,7 +64,8 @@ def main():
             print(f"Number of unverified instances: {len(unverified)}")
             print(f"Total instances: {total_functions}")
     else:
-        print(f', {len(verified)}, {len(timed_out)}, {len(unverified)}', end='')
+        print(f', {len(verified)}/{len(verified) + len(unverified)}', end='')
+        # print(f', {len(verified)}, {len(timed_out)}, {len(unverified)}', end='')
 
 if __name__ == "__main__":
     main()
