@@ -311,6 +311,7 @@ module Translation =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
                     let _, pN, _ = path p
+                    ctx.lookupByPath p |> ignore // make sure it exists in the new codebase
                     pN
 
                 override this.expr(ctx: Context, e: Expr) =
