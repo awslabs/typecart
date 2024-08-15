@@ -199,7 +199,7 @@ module Translation =
         /// true iff e is a method and we generate a lemma or axiom for e
         and generateLemmaOrAxiomForExpr (e: Expr) : bool =
             match e with
-            | EMemberRef (_, m, _) -> generateLemmaOrAxiomFor m
+            | EMemberRef (StaticReceiver _, m, _) -> generateLemmaOrAxiomFor m
             | _ -> false
         /// true iff e is a method call such that we generate an axiom for the method and we generate an axiom
         /// for each argument we generate a lemma or axiom in the method call
@@ -1832,9 +1832,9 @@ module Translation =
                                 let invocations = Map.find ctxOh.currentDecl specializedLemmas |>
                                                   List.distinctBy getSpecializedLemmaName
                                 invocations |> List.map (fun e ->
-                                    let exprs =
+                                    let method, exprs =
                                         match e with
-                                        | EMethodApply (receiver, method, tpargs, exprs, ghost) -> exprs
+                                        | EMethodApply (receiver, method, tpargs, exprs, ghost) -> method, exprs
                                         | _ -> failwith "specialized lemma must come with EMethodApply"
                                     let specializedLocations = getSpecializedArgumentLocations e
                                     let filterInput ins = ins |> List.indexed |> List.filter (
@@ -1954,9 +1954,10 @@ module Translation =
                                                 | None ->
                                                     // other cases: generate empty proof
                                                     Some(EBlock [])
+                                    let lemmaName = getSpecializedLemmaName e
                                     Method(
                                       IsLemma,
-                                      getSpecializedLemmaName e,
+                                      lemmaName,
                                       typeParams,
                                       specializedInSpec,
                                       specializedOutSpec,
