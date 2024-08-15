@@ -318,7 +318,7 @@ module DafnyToYIL =
               "tailrecursion" ]
         let args = fromIList attr.Args
         if List.contains attr.Name attributes then
-            let v = if args.IsEmpty then [] else (List.map (_.ToString()) args)
+            let v = if args.IsEmpty then [] else (List.map (fun f -> f.ToString()) args)
             e.updateMeta(e.meta.addAttribute(attr.Name, v))
         else
             match e with
