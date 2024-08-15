@@ -502,7 +502,9 @@ module Translation =
                                                          List.filter (generateLemmaOrAxiomForExpr >> not)
                                                          else id) |>
                                                List.map (fun e ->
-                                                   ForwardLocalDeclTranslator(newLocalDecls, false).expr (newCtx, e))
+                                                   // make sure that the new symbols exists, i.e., we do not generate
+                                                   // lemma calls that does not type check
+                                                   ForwardLocalDeclTranslator(newLocalDecls, true).expr (newCtx, e))
 
                                     let inputs =
                                         instanceInputs
@@ -1845,6 +1847,7 @@ module Translation =
                                     let specializedLocalDeclTerm ld =
                                         Map.tryFind ld specializedInputMap |> Option.defaultValue (localDeclTerm ld)
                                     
+                                    // TODO: fix typeargs
                                     // inputs
                                     let specializedInputs =
                                         instanceInputs
