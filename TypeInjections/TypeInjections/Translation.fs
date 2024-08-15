@@ -307,11 +307,12 @@ module Translation =
                     | _ -> this.tpDefault (ctx, t) }
         /// translate non-local variables a -> a_N
         /// translate local variables (a:A) -> A_forward(a)
-        and ForwardLocalDeclTranslator (lds: LocalDecl list) =
+        and ForwardLocalDeclTranslator (lds: LocalDecl list, strict: bool) =
             { new Traverser.Identity() with
                 override this.path(ctx: Context, p: Path) =
                     let _, pN, _ = path p
-                    ctx.lookupByPath p |> ignore // make sure it exists in the new codebase
+                    if strict && not (isJoint p) then
+                        ctx.lookupByPath p |> ignore // make sure it exists in the new codebase
                     pN
 
                 override this.expr(ctx: Context, e: Expr) =
@@ -421,11 +422,9 @@ module Translation =
                            && methodDeclO.IsSome
                            && methodDeclN.IsSome then
                             match methodDeclO.Value, methodDeclN.Value with
-                            | Method(methodType = IsLemma), _
-                            | Method(methodType = IsMethod), _ -> eDefault
-                            | Method (_, _, _, insO, _, _, _, _, _, _, isStatic, _, _),
+                            | Method (methodType, _, _, insO, _, _, _, _, _, _, isStatic, _, _),
                               Method (_, _, _, insN, _, _, _, _, _, _, _, _, _) when
-                                insO.decls.Length = insN.decls.Length ->
+                                insO.decls.Length = insN.decls.Length && not (methodType.bodyIsStatement()) ->
                                 try
                                     // Equivalent to (if we have not generated specializedLemmas before)
                                     // let specializedLemma = config.specializeHigherOrderLemmas &&
@@ -455,7 +454,9 @@ module Translation =
                                             | StaticReceiver _ -> failwith "unexpected static receiver"
                                             | ObjectReceiver (r, _) ->
                                                 [ NameTranslator(true, Map.empty).expr (oldNameCtx, r)
-                                                  ForwardLocalDeclTranslator(newLocalDecls)
+                                                  // make sure that the new symbols exists, i.e., we do not generate
+                                                  // lemma calls that does not type check
+                                                  ForwardLocalDeclTranslator(newLocalDecls, true)
                                                       .expr (newCtx, r) ]
 
                                     let instanceTypeArgs = Analysis.GetTypes().get(ctx, receiver)
@@ -499,7 +500,7 @@ module Translation =
                                                          List.filter (generateLemmaOrAxiomForExpr >> not)
                                                          else id) |>
                                                List.map (fun e ->
-                                                   ForwardLocalDeclTranslator(newLocalDecls).expr (newCtx, e))
+                                                   ForwardLocalDeclTranslator(newLocalDecls, false).expr (newCtx, e))
 
                                     let inputs =
                                         instanceInputs
@@ -818,7 +819,7 @@ module Translation =
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), ensures the new body is true; label=None
                         // Do not use exprNew because it adds the new suffix but we want forward translation
-                        [ ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN), None ]
+                        [ ForwardLocalDeclTranslator(ld, false).expr (ctxN, bodyN), None ]
                     | _ -> []
 
                 let newEnsuresNot =
@@ -826,7 +827,7 @@ module Translation =
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), ensures the new body is false; label=None
                         // Do not use exprNew because it adds the new suffix but we want forward translation
-                        [ notExpr (ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN)), None ]
+                        [ notExpr (ForwardLocalDeclTranslator(ld, false).expr (ctxN, bodyN)), None ]
                     | _ -> []
 
                 let newAssert =
@@ -834,7 +835,7 @@ module Translation =
                     | Some (EQuant (quantN, _, _, _, bodyN)) when quantN = quant ->
                         // match (ignoring condition), assert the new body is true; label=None
                         // Do not use exprNew because it adds the new suffix but we want forward translation
-                        EAssert(ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN), Some eBody, None)
+                        EAssert(ForwardLocalDeclTranslator(ld, false).expr (ctxN, bodyN), Some eBody, None)
                     | _ -> eBody
 
                 let newAssertNot =
@@ -844,7 +845,7 @@ module Translation =
                         // Do not use exprNew because it adds the new suffix but we want forward translation
                         Some(
                             EAssert(
-                                notExpr (ForwardLocalDeclTranslator(ld).expr (ctxN, bodyN)),
+                                notExpr (ForwardLocalDeclTranslator(ld, false).expr (ctxN, bodyN)),
                                 Some eBody,
                                 None
                             )
