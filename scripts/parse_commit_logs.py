@@ -23,7 +23,7 @@ def diff_files(file1, file2):
 
 
 def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_args = "", delete_output=False, use_other_combine_dfy=None):
-    # if pr_id != 197:
+    # if pr_id != 57:
     #     return 0
     # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':
     #     return
@@ -59,22 +59,38 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
         num_lemmas = count_strings(" lemma ", "proofs/proofs.dfy")  # includes axioms
         num_axioms = count_strings(" {:axiom} ", "proofs/proofs.dfy")
         if num_lemmas == 0:
-            subprocess.run(f'printf "0, 0, 0, {typecart_end - typecart_start}, 0\n" >> result.csv', shell=True)
+            subprocess.run(f'printf "0, 0, 0/0, 0/0, {typecart_end - typecart_start}, 0\n" >> result.csv', shell=True)
         else:
             subprocess.run(f'printf "{num_lemmas}, {num_axioms}" >> result.csv', shell=True)
             dafny_start = time.time()
-            dafny_return_value = subprocess.run(f"dafny verify --warn-shadowing --relax-definite-assignment=false --isolate-assertions --general-traits=datatype --boogie -proverOpt:BATCH_MODE=true --boogie -typeEncoding:a --boogie -timeLimit:1 --boogie -trace --log-format:csv --cores:8 proofs/proofs.dfy > boogie.txt", shell=True)
+            dafny_return_value = subprocess.run(f"dafny verify --warn-shadowing --relax-definite-assignment=false --isolate-assertions --general-traits=datatype --boogie -proverOpt:BATCH_MODE=true --boogie -typeEncoding:a --boogie -timeLimit:1 --boogie -trace --log-format:csv --progress --cores:8 proofs/proofs.dfy > boogie.txt", shell=True)
             dafny_end = time.time()
             print(f"Dafny returned {dafny_return_value}")
             with open('boogie.txt') as f:
+                second_to_last_line = ""
+                last_line = ""
                 for line in f:
-                    pass
-                results_filename = line.split(":", 1)[1].strip()
+                    second_to_last_line = last_line
+                    last_line = line
+                results_filename = last_line.split(":", 1)[1].strip()
+            print(second_to_last_line)
             print(results_filename)
+            # e.g., 12 resolution/type errors detected in proofs.dfy
             # e.g., Results File: /Volumes/workplace/typecart/examples/tmp/TestResults/2024-08-13_17_20_27-0.csv
-            subprocess.run(f"python3 countVerified.py < {results_filename} >> result.csv", shell=True)
-            # num_errors = count_strings(": Error: ", "boogie.txt")
-            subprocess.run(f'printf ", {typecart_end - typecart_start}, {dafny_end - dafny_start}\n" >> result.csv', shell=True)
+            if second_to_last_line.split(" ", 1)[-1].split(" ")[0] == "resolution/type":
+                subprocess.run('echo ", resolution/type error" >> result.csv', shell=True)
+            else:
+                subprocess.run(f"python3 countVerified.py < {results_filename} >> result.csv", shell=True) # raw numbers
+                subprocess.run(f"python3 countVerified.py < {results_filename} > tmp.txt", shell=True)
+                with open('tmp.txt', 'r') as f:
+                    verified = int(f.readline().split('/')[0])
+                    total = int(f.readline().split('/')[1])
+                subprocess.run('rm tmp.txt', shell=True)
+                additional_lemmas = num_lemmas - total
+                total += additional_lemmas
+                verified += additional_lemmas # these are automatically true, no need to verify
+                # num_errors = count_strings(": Error: ", "boogie.txt")
+                subprocess.run(f'printf ", {verified}/{total}, {typecart_end - typecart_start:.02f}, {dafny_end - dafny_start:.02f}\n" >> result.csv', shell=True)
             if delete_output:
                 subprocess.run(f"rm boogie.txt", shell=True)
                 subprocess.run(f"rm -r proofs", shell=True)
@@ -93,7 +109,7 @@ def run_pr_with_multiple_config(pr_id, hash_before, hash_after, num_files, run_b
 
 
 def main(run_backward, typecart_args_list):
-    subprocess.run(f'printf "(PR id or commit hash)[/diff lines (ignoring white lines)], typecart args, #Dafny files changed, #lemmas (including axioms), #axioms, #verified, typeCart running time, Dafny running time\n" >> result.csv', shell=True)
+    subprocess.run(f'printf "(PR id or commit hash)[/diff lines (ignoring white lines)], typecart args, #Dafny files changed, #lemmas (including axioms), #axioms, #verified/#attempted to verify, #verified/#total lemmas, typeCart running time, Dafny running time\n" >> result.csv', shell=True)
     with open("commit_logs.txt", "r") as f:
         lines = f.readlines()
     commit_hashes = []
