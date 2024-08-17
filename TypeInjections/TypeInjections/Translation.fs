@@ -321,7 +321,19 @@ module Translation =
                     match e with
                     | EVar n ->
                         if ctx.lookupLocalDeclO(n).IsSome then
-                            e // locally bound variables in the new context are not translated
+                            let ld = ctx.lookupLocalDeclO(n).Value
+                            match ld.tp with
+                            | TApply (op, _) ->
+                                if op.getprefix() = "Old" then
+                                    // generate forward translation
+                                    let ldtp = RemovePrefix.tp(ctx, ld.tp)
+
+                                    let _, _, (tT1, _) = tp (ldtp, ldtp)
+                                    tT1 e
+                                else
+                                    e
+                            | _ ->
+                                e // locally bound variables in the new context are not translated
                         elif List.exists (fun (x: LocalDecl) -> x.name = n) lds then
                             // generate forward translation
                             let ld =
