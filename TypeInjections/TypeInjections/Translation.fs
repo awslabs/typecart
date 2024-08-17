@@ -747,7 +747,9 @@ module Translation =
         /// ----> (only when config.useForallInFunctionEnsures is also true)
         /// forall x
         ///   ensures resultN(x) == body(x)
-        ///   {}
+        /// {
+        ///   assert resultN(x) == body(funArgs=x);
+        /// }
         and insertAssertionsAtResults
             (
                 resultO: Expr,
@@ -758,18 +760,18 @@ module Translation =
                 ctxN: Context,
                 eN: Expr option
             ) =
-            let rcE (resultN: Expr) (e: Expr) (eN: Expr option) (ld: LocalDecl list) =
+            let rcE (resultOTranslation: Expr -> Expr) (resultN: Expr) (e: Expr) (eN: Expr option) (ld: LocalDecl list) =
                 insertAssertionsAtResults (resultO, resultN, resultOTranslation, ctx.add (ld), e, ctxN.add (ld), eN)
+            let rcEsimple = rcE resultOTranslation resultN
 
-            let rcEb (e: Expr) (eN: Expr option) = EBlock [ rcE resultN e eN [] ]
+            let rcEb (e: Expr) (eN: Expr option) = EBlock [ rcEsimple e eN [] ]
 
             let rcEbo (eO: Expr option) (eN: Expr option) =
                 match eO with
                 | Some e -> Some(rcEb e eN)
                 | None -> None
 
-            let eDefault =
-                EAssert(EEqual(resultN, reduce (resultOTranslation e)), None, None)
+            let eDefault = EAssert(EEqual(resultN, reduce (resultOTranslation e)), None, None)
 
             match e with
             | EIf (c, t, e) ->
@@ -778,7 +780,7 @@ module Translation =
                 | _ -> // mismatch in new implementation, ignore new implementation
                     EIf(c, rcEb t None, rcEbo e None)
             | EBlock exprs when exprs.Length > 0 ->
-                EBlock (exprs[..exprs.Length - 2] @ [ rcE resultN exprs[exprs.Length - 1] (
+                EBlock (exprs[..exprs.Length - 2] @ [ rcEsimple exprs[exprs.Length - 1] (
                     match eN with
                     | Some (EBlock esN) when esN.Length > 0 ->
                         Some esN[esN.Length - 1]
@@ -786,7 +788,7 @@ module Translation =
             | EMatch (e, t, cases, d) ->
                 let rcCase (case: Case) (caseN: Case option) =
                     let bodyT =
-                        rcE resultN case.body (Option.map (fun c -> c.body) caseN) case.vars
+                        rcEsimple case.body (Option.map (fun c -> c.body) caseN) case.vars
 
                     { vars = case.vars
                       patterns = case.patterns
@@ -803,15 +805,15 @@ module Translation =
                     | None -> None
                     | Some dO ->
                         match eN with
-                        | Some (EMatch (_, _, _, dN)) -> Some(rcE resultN dO dN [])
-                        | _ -> Some(rcE resultN dO None [])
+                        | Some (EMatch (_, _, _, dN)) -> Some(rcEsimple dO dN [])
+                        | _ -> Some(rcEsimple dO None [])
 
                 EMatch(e, t, csT, dfltT)
             | ELet (v, x, o, lhs, df, bd) when not o ->
                 let bdT =
                     match eN with
-                    | Some (ELet (_, xN, oN, _, _, bdN)) when xN = x && oN = o -> rcE resultN bd (Some bdN) v
-                    | _ -> rcE resultN bd None v
+                    | Some (ELet (_, xN, oN, _, _, bdN)) when xN = x && oN = o -> rcEsimple bd (Some bdN) v
+                    | _ -> rcEsimple bd None v
 
                 ELet(v, x, o, lhs, df, bdT)
             | EQuant (quant, ld, cond, ens, body) ->
@@ -909,13 +911,13 @@ module Translation =
                         match eNarg2 with
                         | Some (EQuant _) -> eNarg2
                         | _ -> None
-                    let trueBranch = EBlock [rcE resultN arg2 eNtrueBranch []]
+                    let trueBranch = EBlock [rcEsimple arg2 eNtrueBranch []]
                     let eNfalseBranch =
                         match eNarg2 with
                         | Some (EQuant (quantN, ldN, condN, ensN, bodyN)) ->
                             Some (EQuant (quantN.negate(), ldN, condN, ensN, notExpr bodyN))
                         | _ -> None
-                    let falseBranch = EBlock [rcE resultN (EQuant (quant.negate(), ld, cond, ens, notExpr body)) eNfalseBranch []]
+                    let falseBranch = EBlock [rcEsimple (EQuant (quant.negate(), ld, cond, ens, notExpr body)) eNfalseBranch []]
                     if op = "EqCommon" then
                         EIf (arg1, trueBranch, Some falseBranch)
                     else
@@ -924,16 +926,17 @@ module Translation =
             | EFun (vars, cond, out, body) when config.useForallInFunctionEnsures ->
                 // return a function, should only be at top level
                 let eVars = List.map localDeclTerm vars
-                let eVarsN = List.map (
+                let eVarsN = vars |> List.map (
                     fun (ld: LocalDecl) ->
-                        let _, _, (T1, _) = tp (ld.tp, ld.tp)
-                        T1 (localDeclTerm ld)) vars
+                        let ldtp = RemovePrefix.tp(ctx, ld.tp)
+                        let _, _, (T1, _) = tp (ldtp, ldtp)
+                        T1 (localDeclTerm ld))
                 match eN with
                 | Some (EFun (_, _, outN, bodyN)) ->
                     let _, _, (outT, _) = tp (outN, outN) // "out" has "_O" label so should not be used here
                     let outExprN = EAnonApply(resultN, eVarsN)
                     let outExprO = outT (EAnonApply(resultO, eVars))
-                    let resultBody = EBlock [ rcE outExprN body (Some bodyN) vars ]
+                    let resultBody = EBlock [ rcE outT outExprN body (Some bodyN) vars] // update the resultOTranslation
                     // Note: Dafny is not happy if we dump the proof directly into the ensures clause of the forall
                     // statement. We need to keep the proof in the forall body.
                     EQuant (Quantifier.Forall, vars, Option.map fst cond, [ EEqual (outExprN, outExprO), None ], resultBody)
