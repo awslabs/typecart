@@ -23,7 +23,7 @@ def diff_files(file1, file2):
 
 
 def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_args = "", delete_output=False, use_other_combine_dfy=None):
-    # if pr_id != 57:
+    # if pr_id != 153:
     #     return 0
     # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':
     #     return
@@ -44,6 +44,10 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
     subprocess.run(f"rsync -av --progress {repo_name} old --exclude .git", shell=True)
     subprocess.run(f"cd {repo_name}; git checkout {hash_after if run_backward else hash_before}", shell=True)
     subprocess.run(f"rsync -av --progress {repo_name} new --exclude .git", shell=True)
+    subprocess.run(f'printf "{pr_id}, {typecart_args}, {num_files["dfy"]}, " >> result.csv', shell=True)
+    if num_files["dfy"] == 0:
+        subprocess.run(f'printf "0, 0, 0/0, 0/0, 0, 0\n" >> result.csv', shell=True)
+        return 0
     typecart_start = time.time()
     typecart_return_value = subprocess.run(f"../TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections old new proofs {typecart_args}", shell=True)
     # subprocess.run(f"../TypeInjections/TypeInjections/bin/Debug/net6.0/TypeInjections old/{repo_name}/StandardLibrary/src new/{repo_name}/StandardLibrary/src combine", shell=True)
@@ -53,17 +57,16 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
         print(f'Use "{use_other_combine_dfy}" as proofs.dfy.')
         pr_id = str(pr_id) + '/' + str(diff_files('proofs/proofs.dfy', use_other_combine_dfy))
         subprocess.run(f'cp "{use_other_combine_dfy}" proofs/proofs.dfy', shell=True)
-    subprocess.run(f'printf "{pr_id}, {typecart_args}, {num_files["dfy"]}, " >> result.csv', shell=True)
     num_lemmas = 0
     if typecart_return_value.returncode == 0:
         num_lemmas = count_strings(" lemma ", "proofs/proofs.dfy")  # includes axioms
         num_axioms = count_strings(" {:axiom} ", "proofs/proofs.dfy")
-        if num_lemmas == 0:
-            subprocess.run(f'printf "0, 0, 0/0, 0/0, {typecart_end - typecart_start}, 0\n" >> result.csv', shell=True)
+        if num_lemmas == 0 or typecart_args == "-a 1 -p false": # do not run Dafny for this case
+            subprocess.run(f'printf "{num_lemmas}, {num_axioms}, 0/0, 0/0, {typecart_end - typecart_start:.02f}, 0\n" >> result.csv', shell=True)
         else:
             subprocess.run(f'printf "{num_lemmas}, {num_axioms}" >> result.csv', shell=True)
             dafny_start = time.time()
-            dafny_return_value = subprocess.run(f"dafny verify --warn-shadowing --relax-definite-assignment=false --isolate-assertions --general-traits=datatype --boogie -proverOpt:BATCH_MODE=true --boogie -typeEncoding:a --boogie -timeLimit:1 --boogie -trace --log-format:csv --progress --cores:8 proofs/proofs.dfy > boogie.txt", shell=True)
+            dafny_return_value = subprocess.run(f"dafny verify --warn-shadowing --relax-definite-assignment=false --isolate-assertions --general-traits=datatype --boogie -proverOpt:BATCH_MODE=true --boogie -typeEncoding:a --boogie -timeLimit:20 --boogie -trace --log-format:csv --progress --cores:8 proofs/proofs.dfy > boogie.txt", shell=True)
             dafny_end = time.time()
             print(f"Dafny returned {dafny_return_value}")
             with open('boogie.txt') as f:
@@ -83,8 +86,9 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
                 subprocess.run(f"python3 countVerified.py < {results_filename} >> result.csv", shell=True) # raw numbers
                 subprocess.run(f"python3 countVerified.py < {results_filename} > tmp.txt", shell=True)
                 with open('tmp.txt', 'r') as f:
-                    verified = int(f.readline().split('/')[0])
-                    total = int(f.readline().split('/')[1])
+                    line = f.readline()
+                    verified = int(line.split('/')[0].split(' ')[-1])
+                    total = int(line.split('/')[1])
                 subprocess.run('rm tmp.txt', shell=True)
                 additional_lemmas = num_lemmas - total
                 total += additional_lemmas
@@ -127,9 +131,8 @@ def main(run_backward, typecart_args_list):
                 assert len(commit_hashes) >= 2
                 run_pr_with_multiple_config(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, typecart_args_list)
                 if run_cedar:
-                    pass
-                    # if last_pr_id == 197 or last_pr_id == 157:
-                    #     run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}{"_no_proof" if no_proof else ""}.dfy')
+                    if last_pr_id == 157 or last_pr_id == 163 or last_pr_id == 197:
+                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}.dfy')
                 if last_pr_id == 1:
                     return  # older histories are not the same repo for cryptools
             elif len(commit_hashes) >= 2:
@@ -150,4 +153,4 @@ def main(run_backward, typecart_args_list):
 
 
 if __name__ == "__main__":
-    main(run_backward=True, typecart_args_list=["", "-a 1 -p false", "-p false", "-l false", "-f false", "-h true"])
+    main(run_backward=True, typecart_args_list=["-a 1 -p false", "-p false", "-f false", "-l false", "-h true", ""])  # "-a 1 -p false"

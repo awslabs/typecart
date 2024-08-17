@@ -1,0 +1,147 @@
+--- proofs/proofs.dfy	2024-08-16 15:51:43
++++ proofs_163.dfy	2024-08-16 15:51:12
+@@ -480,7 +480,7 @@
+         requires fn_N == fn_O
+         requires forall x_O: F_O :: F_backward(F_forward(x_O)) == x_O
+         ensures New.difftest.helpers.deserializerAcceptsSubterms(New.difftest.main.attrTypesFromProdJsonObject, j_N)
+-        ensures New.difftest.helpers.deserializeField(j_N, fn_N, New.difftest.main.attrTypesFromProdJsonObject) == FromProdResult_forward(F_forward, F_backward, Old.difftest.helpers.deserializeField(j_O, fn_O, Old.difftest.main.attrTypesFromProdJsonObject))
++        ensures New.difftest.helpers.deserializeField(j_N, fn_N, New.difftest.main.attrTypesFromProdJsonObject) == FromProdResult_forward((x: map<Joint.def.core.Attr,Joint.validation.types.AttrType>) => x, (x: map<Joint.def.core.Attr,Joint.validation.types.AttrType>) => x, Old.difftest.helpers.deserializeField(j_O, fn_O, Old.difftest.main.attrTypesFromProdJsonObject))
+ 
+       lemma {:axiom} deserializeField_2_difftest_main_applySpecFromProdJson_bc<F_O, F_N>(F_forward: F_O->F_N, F_backward: F_N->F_O, j_O: Old.difftest.helpers.Json, fn_O: string, j_N: New.difftest.helpers.Json, fn_N: string)
+         decreases j_O, fn_O
+@@ -489,7 +489,7 @@
+         requires fn_N == fn_O
+         requires forall x_O: F_O :: F_backward(F_forward(x_O)) == x_O
+         ensures New.difftest.helpers.deserializerAcceptsSubterms(New.difftest.main.applySpecFromProdJson, j_N)
+-        ensures New.difftest.helpers.deserializeField(j_N, fn_N, New.difftest.main.applySpecFromProdJson) == FromProdResult_forward(F_forward, F_backward, Old.difftest.helpers.deserializeField(j_O, fn_O, Old.difftest.main.applySpecFromProdJson))
++        ensures New.difftest.helpers.deserializeField(j_N, fn_N, New.difftest.main.applySpecFromProdJson) == FromProdResult_forward((x: Joint.validation.validator.TypecheckerApplySpec) => x, (x: Joint.validation.validator.TypecheckerApplySpec) => x, Old.difftest.helpers.deserializeField(j_O, fn_O, Old.difftest.main.applySpecFromProdJson))
+ 
+       lemma {:axiom} deserializeTuple2Elts_bc<T_O, T_N, E1_O, E1_N, E2_O, E2_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, E1_forward: E1_O->E1_N, E1_backward: E1_N->E1_O, E2_forward: E2_O->E2_N, E2_backward: E2_N->E2_O, j_O: Old.difftest.helpers.Json, ed1_O: Old.difftest.helpers.PartialDeserializer<E1_O>, ed2_O: Old.difftest.helpers.PartialDeserializer<E2_O>, cons_O: (E1_O,E2_O)->Old.difftest.helpers.FromProdResult<T_O>, j_N: New.difftest.helpers.Json, ed1_N: New.difftest.helpers.PartialDeserializer<E1_N>, ed2_N: New.difftest.helpers.PartialDeserializer<E2_N>, cons_N: (E1_N,E2_N)->New.difftest.helpers.FromProdResult<T_N>)
+         decreases j_O
+@@ -504,12 +504,12 @@
+         ensures New.difftest.helpers.deserializerAcceptsSubterms(ed1_N, j_N) && New.difftest.helpers.deserializerAcceptsSubterms(ed2_N, j_N)
+         ensures New.difftest.helpers.deserializeTuple2Elts(j_N, ed1_N, ed2_N, cons_N) == FromProdResult_forward(T_forward, T_backward, Old.difftest.helpers.deserializeTuple2Elts(j_O, ed1_O, ed2_O, cons_O))
+ 
+-      lemma {:axiom} deserializeTuple2Elts_1_difftest_main_entityUIDFromProdJson_bc<T_O, T_N, E1_O, E1_N, E2_O, E2_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, E1_forward: E1_O->E1_N, E1_backward: E1_N->E1_O, E2_forward: E2_O->E2_N, E2_backward: E2_N->E2_O, j_O: Old.difftest.helpers.Json, ed2_O: Old.difftest.helpers.PartialDeserializer<E2_O>, cons_O: (E1_O,E2_O)->Old.difftest.helpers.FromProdResult<T_O>, j_N: New.difftest.helpers.Json, ed2_N: New.difftest.helpers.PartialDeserializer<E2_N>, cons_N: (E1_N,E2_N)->New.difftest.helpers.FromProdResult<T_N>)
++      lemma {:axiom} deserializeTuple2Elts_1_difftest_main_entityUIDFromProdJson_bc<T_O, T_N, E1_O, E1_N, E2_O, E2_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, E1_forward: E1_O->E1_N, E1_backward: E1_N->E1_O, E2_forward: E2_O->E2_N, E2_backward: E2_N->E2_O, j_O: Old.difftest.helpers.Json, ed2_O: Old.difftest.helpers.PartialDeserializer<E2_O>, cons_O: (Joint.def.core.EntityUID,E2_O)->Old.difftest.helpers.FromProdResult<T_O>, j_N: New.difftest.helpers.Json, ed2_N: New.difftest.helpers.PartialDeserializer<E2_N>, cons_N: (Joint.def.core.EntityUID,E2_N)->New.difftest.helpers.FromProdResult<T_N>)
+         decreases j_O
+         requires Old.difftest.helpers.deserializerAcceptsSubterms(Old.difftest.main.entityUIDFromProdJson, j_O) && Old.difftest.helpers.deserializerAcceptsSubterms(ed2_O, j_O)
+         requires j_N == Json_forward(j_O)
+-        requires ed2_N == PartialDeserializer_forward(E2_forward, E2_backward, ed2_O)
+-        requires forall x1_N: E1_N, x2_N: E2_N :: cons_N(x1_N, x2_N) == FromProdResult_forward(T_forward, T_backward, cons_O(E1_backward(x1_N), E2_backward(x2_N)))
++        //requires forall j: Old.difftest.helpers.Json :: ed2_O(j).Ok? ==> ed2_N(Json_forward(j)) == FromProdResult_forward(E2_forward, E2_backward, ed2_O(j)) //requires ed2_N == PartialDeserializer_forward(E2_forward, E2_backward, ed2_O)
++        requires forall x1_N: Joint.def.core.EntityUID, x2_N: E2_N :: cons_N(x1_N, x2_N) == FromProdResult_forward(T_forward, T_backward, cons_O(x1_N, E2_backward(x2_N)))
+         requires forall x_O: T_O :: T_backward(T_forward(x_O)) == x_O
+         requires forall x_O: E1_O :: E1_backward(E1_forward(x_O)) == x_O
+         requires forall x_O: E2_O :: E2_backward(E2_forward(x_O)) == x_O
+@@ -523,9 +523,23 @@
+ 
+       lemma {:axiom} setDeserializer_0_difftest_main_entityUIDFromProdJson_bc<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O)
+         requires forall x_O: T_O :: T_backward(T_forward(x_O)) == x_O
+-        ensures New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson) == Deserializer_forward((x: set<T_O>) => Translations.MapBuiltinTypes.Set(T_forward, x), (x: set<T_N>) => Translations.MapBuiltinTypes.Set(T_backward, x), Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson))
++        ensures New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson) == Deserializer_forward((x: set<Joint.def.core.EntityUID>) => x, (x: set<Joint.def.core.EntityUID>) => x, Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson))
+ 
+       import opened def.std
++
++      function Seq_Json_forward(J_O: Old.difftest.helpers.Json, a_O: seq<Old.difftest.helpers.Json>): seq<New.difftest.helpers.Json>
++        requires forall i :: 0 <= i < |a_O| ==> a_O[i] < J_O
++        decreases J_O, a_O
++      {
++        if a_O == [] then [] else [Json_forward(a_O[0])] + Seq_Json_forward(J_O, a_O[1..])
++      }
++
++      function Map_Json_forward(J_O: Old.difftest.helpers.Json, e: map<string, Old.difftest.helpers.Json>): map<string, New.difftest.helpers.Json>
++        requires forall a :: a in e.Keys ==> e[a] < J_O
++        decreases J_O, e
++      {
++        map a | a in e.Keys :: Json_forward(e[a])
++      }
+ 
+       function Json_forward(J_O: Old.difftest.helpers.Json): New.difftest.helpers.Json
+       {
+@@ -539,10 +553,24 @@
+           case JsonString(s_O) =>
+             /* unchanged constructor */ New.difftest.helpers.Json.JsonString(s_O)
+           case JsonArray(a_O) =>
+-            /* unchanged constructor */ New.difftest.helpers.Json.JsonArray(Translations.MapBuiltinTypes.Seq((sq: Old.difftest.helpers.Json) => Json_forward(sq), a_O))
++            /* unchanged constructor */ New.difftest.helpers.Json.JsonArray(Seq_Json_forward(J_O, a_O))
+           case JsonObject(o_O) =>
+-            /* unchanged constructor */ New.difftest.helpers.Json.JsonObject(Translations.MapBuiltinTypes.Map((mp: string) => mp, (mp: string) => mp, (mp: Old.difftest.helpers.Json) => Json_forward(mp), o_O))
++            /* unchanged constructor */ New.difftest.helpers.Json.JsonObject(Map_Json_forward(J_O, o_O))
+         }
++      }
++
++      function Seq_Json_backward(J_N: New.difftest.helpers.Json, a_N: seq<New.difftest.helpers.Json>): seq<Old.difftest.helpers.Json>
++        requires forall i :: 0 <= i < |a_N| ==> a_N[i] < J_N
++        decreases J_N, a_N
++      {
++        if a_N == [] then [] else [Json_backward(a_N[0])] + Seq_Json_backward(J_N, a_N[1..])
++      }
++
++      function Map_Json_backward(J_N: New.difftest.helpers.Json, e: map<string, New.difftest.helpers.Json>): map<string, Old.difftest.helpers.Json>
++        requires forall a :: a in e.Keys ==> e[a] < J_N
++        decreases J_N, e
++      {
++        map a | a in e.Keys :: Json_backward(e[a])
+       }
+ 
+       function Json_backward(J_N: New.difftest.helpers.Json): Old.difftest.helpers.Json
+@@ -557,9 +585,9 @@
+           case JsonString(s_N) =>
+             /* unchanged constructor */ Old.difftest.helpers.Json.JsonString(s_N)
+           case JsonArray(a_N) =>
+-            /* unchanged constructor */ Old.difftest.helpers.Json.JsonArray(Translations.MapBuiltinTypes.Seq((sq: New.difftest.helpers.Json) => Json_backward(sq), a_N))
++            /* unchanged constructor */ Old.difftest.helpers.Json.JsonArray(Seq_Json_backward(J_N, a_N))
+           case JsonObject(o_N) =>
+-            /* unchanged constructor */ Old.difftest.helpers.Json.JsonObject(Translations.MapBuiltinTypes.Map((mp: string) => mp, (mp: string) => mp, (mp: New.difftest.helpers.Json) => Json_backward(mp), o_N))
++            /* unchanged constructor */ Old.difftest.helpers.Json.JsonObject(Map_Json_backward(J_N, o_N))
+         }
+       }
+ 
+@@ -641,25 +669,31 @@
+         requires j_N == Json_forward(j_O)
+         ensures New.difftest.main.actionIdPairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), Old.difftest.main.actionIdPairFromProdJson(j_O))
+       {
+-        deserializeTuple2Elts_1_difftest_main_entityUIDFromProdJson_bc((x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: Joint.def.core.EntityUID) => x, (x: Joint.def.core.EntityUID) => x, (x: Joint.validation.validator.TypecheckerActionId) => x, (x: Joint.validation.validator.TypecheckerActionId) => x, j_O, (data: Old.difftest.helpers.Json) => var appliesTo :- Old.difftest.helpers.deserializeField(data, "appliesTo", Old.difftest.main.applySpecFromProdJson);
++        var ed2_O := (data: Old.difftest.helpers.Json) => var appliesTo :- Old.difftest.helpers.deserializeField(data, "appliesTo", Old.difftest.main.applySpecFromProdJson);
+         var descendants :- Old.difftest.helpers.deserializeField(data, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson));
+         var context :- Old.difftest.helpers.getJsonField(data, "context");
+         var context1 :- Old.difftest.helpers.deserializeField(context, "attrs", Old.difftest.main.attrTypesFromProdJsonObject);
+-        Joint.def.std.Result.Ok(Joint.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, context1)), (uid: Joint.def.core.EntityUID, act: Joint.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act)), j_N, (data: New.difftest.helpers.Json) => var appliesTo :- New.difftest.helpers.deserializeField(data, "appliesTo", New.difftest.main.applySpecFromProdJson);
++        Joint.def.std.Result.Ok(Joint.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, context1));
++
++        var ed2_N := (data: New.difftest.helpers.Json) => var appliesTo :- New.difftest.helpers.deserializeField(data, "appliesTo", New.difftest.main.applySpecFromProdJson);
+         var descendants :- New.difftest.helpers.deserializeField(data, "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson));
+-        var context :- New.difftest.helpers.getJsonField(data, "context");
+-        var context1 :- New.difftest.helpers.deserializeField(context, "attrs", New.difftest.main.attrTypesFromProdJsonObject);
+-        Joint.def.std.Result.Ok(Joint.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, context1)), (uid: Joint.def.core.EntityUID, act: Joint.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act)));
+-        assert New.difftest.main.actionIdPairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), Old.difftest.helpers.deserializeTuple2Elts(j_O, Old.difftest.main.entityUIDFromProdJson, (data: Old.difftest.helpers.Json) => var appliesTo :- (deserializeField_2_difftest_main_applySpecFromProdJson_bc((x: Joint.validation.validator.TypecheckerApplySpec) => x, (x: Joint.validation.validator.TypecheckerApplySpec) => x, data, "appliesTo", Json_forward(data), "appliesTo");
+-        Old.difftest.helpers.deserializeField(data, "appliesTo", Old.difftest.main.applySpecFromProdJson));
+-        var descendants :- (deserializeField_bc((x: set<Joint.def.core.EntityUID>) => x, (x: set<Joint.def.core.EntityUID>) => x, data, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson), Json_forward(data), "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson));
+-        Old.difftest.helpers.deserializeField(data, "descendants", setDeserializer_0_difftest_main_entityUIDFromProdJson_bc((x: Joint.def.core.EntityUID) => x, (x: Joint.def.core.EntityUID) => x);
+-        Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson)));
+-        var context :- (getJsonField_bc(data, "context", Json_forward(data), "context");
+-        Old.difftest.helpers.getJsonField(data, "context"));
+-        var context1 :- (deserializeField_2_difftest_main_attrTypesFromProdJsonObject_bc((x: map<Joint.def.core.Attr,Joint.validation.types.AttrType>) => x, (x: map<Joint.def.core.Attr,Joint.validation.types.AttrType>) => x, context, "attrs", Json_forward(context), "attrs");
+-        Old.difftest.helpers.deserializeField(context, "attrs", Old.difftest.main.attrTypesFromProdJsonObject));
+-        Joint.def.std.Result.Ok(Joint.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, context1)), (uid: Joint.def.core.EntityUID, act: Joint.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act))));
++        var context :- New.difftest.helpers.deserializeField(data, "context", New.difftest.main.typeFromProdJson);
++        match context {
++          case Record(rty) =>
++            Joint.def.std.Result.Ok(Joint.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, rty.attrs))
++          case _ =>
++            Joint.def.std.Result.Err({New.difftest.helpers.FromProdErr.UnexpectedFromProdErr("context should be record-typed")})
++        };
++        /*forall j: Old.difftest.helpers.Json | ed2_O(j).Ok?
++          ensures true // leave nothing in the context
++        {
++          deserializeField_bc((x: set<Joint.def.core.EntityUID>) => x, (x: set<Joint.def.core.EntityUID>) => x, j, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson), Json_forward(j), "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson));
++          // Should be a precondition of this Lemma, but hard to formalize in Lemma precondition
++          // Move the following Lemma precondition manually here because "forall" pollutes the context
++          assert ed2_N(Json_forward(j)) == FromProdResult_forward((x: Joint.validation.validator.TypecheckerActionId) => x, (x: Joint.validation.validator.TypecheckerActionId) => x, ed2_O(j));
++        }*/  // once proved, but brittle
++        deserializeTuple2Elts_1_difftest_main_entityUIDFromProdJson_bc((x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: Joint.def.core.EntityUID) => x, (x: Joint.def.core.EntityUID) => x, (x: Joint.validation.validator.TypecheckerActionId) => x, (x: Joint.validation.validator.TypecheckerActionId) => x, j_O, ed2_O, (uid: Joint.def.core.EntityUID, act: Joint.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act)), j_N, ed2_N, (uid: Joint.def.core.EntityUID, act: Joint.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act)));
++        assert New.difftest.main.actionIdPairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), (x: (Joint.def.core.EntityUID,Joint.validation.validator.TypecheckerActionId)) => (x.0, x.1), Old.difftest.main.actionIdPairFromProdJson(j_O));
+       }
+ 
+       import opened def.base
