@@ -44,8 +44,8 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
     subprocess.run(f"rsync -av --progress {repo_name} old --exclude .git", shell=True)
     subprocess.run(f"cd {repo_name}; git checkout {hash_after if run_backward else hash_before}", shell=True)
     subprocess.run(f"rsync -av --progress {repo_name} new --exclude .git", shell=True)
-    subprocess.run(f'printf "{pr_id}, {typecart_args}, {num_files["dfy"]}, " >> result.csv', shell=True)
     if num_files["dfy"] == 0:
+        subprocess.run(f'printf "{pr_id}, {typecart_args}, {num_files["dfy"]}, " >> result.csv', shell=True)
         subprocess.run(f'printf "0, 0, 0/0, 0/0, 0, 0\n" >> result.csv', shell=True)
         return 0
     typecart_start = time.time()
@@ -57,12 +57,13 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
         print(f'Use "{use_other_combine_dfy}" as proofs.dfy.')
         pr_id = str(pr_id) + '/' + str(diff_files('proofs/proofs.dfy', use_other_combine_dfy))
         subprocess.run(f'cp "{use_other_combine_dfy}" proofs/proofs.dfy', shell=True)
+    subprocess.run(f'printf "{pr_id}, {typecart_args}, {num_files["dfy"]}, " >> result.csv', shell=True)
     num_lemmas = 0
     if typecart_return_value.returncode == 0:
         num_lemmas = count_strings(" lemma ", "proofs/proofs.dfy")  # includes axioms
         num_axioms = count_strings(" {:axiom} ", "proofs/proofs.dfy")
         if num_lemmas == 0 or typecart_args == "-a 1 -p false": # do not run Dafny for this case
-            subprocess.run(f'printf "{num_lemmas}, {num_axioms}, 0/0, 0/0, {typecart_end - typecart_start:.02f}, 0\n" >> result.csv', shell=True)
+            subprocess.run(f'printf "{num_lemmas}, {num_axioms}, 0/0, 0/{num_lemmas}, {typecart_end - typecart_start:.02f}, 0\n" >> result.csv', shell=True)
         else:
             subprocess.run(f'printf "{num_lemmas}, {num_axioms}" >> result.csv', shell=True)
             dafny_start = time.time()
