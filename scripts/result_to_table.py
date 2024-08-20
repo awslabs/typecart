@@ -20,7 +20,7 @@ def main():
     for i in natsorted(verified.keys()):
         if total_lemmas[i]['-a 1 -p false'] == 0:
             continue
-        print(f"{i} & {total_lemmas[i]['-a 1 -p false']} & {total_lemmas[i]['']} & {verified[i]['-p false']} & {verified[i]['']} \\\\")
+        print(f"{i[:7]} & {total_lemmas[i]['-a 1 -p false']} & {total_lemmas[i]['']} & {verified[i]['-p false']} & {verified[i]['']} \\\\")
 
 if __name__ == '__main__':
     main()
