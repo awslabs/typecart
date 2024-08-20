@@ -1795,7 +1795,7 @@ module Translation =
 
                         // The body yields the proof of the lemma.
                         let proofBody =
-                            if generateAxiomFor p then
+                            if generateAxiomFor p && config.generateProof then
                                 None // an axiom
                             else
                                 match bdD with
@@ -1944,7 +1944,7 @@ module Translation =
 
                                     // proof
                                     let specializedProof =
-                                        if generateAxiomForMethodApply e then
+                                        if generateAxiomForMethodApply e && config.generateProof then
                                             None // an axiom
                                         else
                                             match bdD with
