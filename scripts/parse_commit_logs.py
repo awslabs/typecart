@@ -1,10 +1,18 @@
+import argparse
 import subprocess
 import time
 
 from collections import defaultdict
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-r', "--repo",)    
+
+args = parser.parse_args()
+repo = args.repo
 run_cedar = True
+if repo != 'cedar':
+    run_cedar = False
 
 def count_strings(str, file_name):
     subprocess.run(f'grep -c "{str}" {file_name} > tmp.txt', shell=True)
@@ -23,13 +31,17 @@ def diff_files(file1, file2):
 
 
 def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_args = "", delete_output=False, use_other_combine_dfy=None):
-    # if pr_id != 153:
-    #     return 0
-    # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':
-    #     return
-    # Reverted commits:
-    if hash_after == 'ed7f93d24b6cff8ce6a48bab4dfa8296a833bb17' or hash_after == '5de720f23e6592fa1452ab22bf9626c8fc5c54c2':
-        return 0
+    if run_cedar:
+        # if pr_id != 153:
+        #     return 0
+        # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':
+        #     return
+        # Reverted commits:
+        if hash_after == 'ed7f93d24b6cff8ce6a48bab4dfa8296a833bb17' or hash_after == '5de720f23e6592fa1452ab22bf9626c8fc5c54c2':
+            return 0
+    else:
+        if pr_id != 60:  # only run 1 PR for cryptotools
+            return 0
     if pr_id == -1:
         pr_id = hash_after  # use the hash string
         print(f"Running typeCart for commit {pr_id}...")
