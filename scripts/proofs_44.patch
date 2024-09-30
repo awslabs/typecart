@@ -1,0 +1,78 @@
+--- proofs_44_origin.dfy	2024-09-28 18:31:03
++++ proofs_44.dfy	2024-09-28 18:41:04
+@@ -409,7 +409,7 @@
+         ensures New.validation.subtyping.subtyRecordType(rt1_N, rt2_N) == Old.validation.subtyping.subtyRecordType(rt1_O, rt2_O)
+       {
+         assert New.validation.subtyping.subtyRecordType(rt1_N, rt2_N) == (rt2_O.Keys <= rt1_O.Keys && (forall k: string :: k in rt2_O.Keys ==>
+-          (subtyAttrType_bc(rt1_O[k], rt2_O[k], rt1_N[k], rt2_N[k]);
++          (subtyAttrType_bc(rt1_O[k], rt2_O[k], rt1_N.attrs[k], rt2_N.attrs[k]);
+           Old.validation.subtyping.subtyAttrType(rt1_O[k], rt2_O[k]))));
+       }
+ 
+@@ -481,9 +481,9 @@
+         requires rt2_N == RecordType_forward(rt2_O)
+         ensures New.validation.subtyping.lubRecordType(rt1_N, rt2_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.subtyping.lubRecordType(rt1_O, rt2_O))
+       {
+-        Ok_bc((x: map<string,Old.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: string) => mp, (mp: string) => mp, (mp: Old.validation.types.AttrType) => AttrType_forward(mp), x), (x: map<string,New.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: string) => mp, (mp: string) => mp, (mp: New.validation.types.AttrType) => AttrType_backward(mp), x), map k: string | k in rt1_O.Keys && k in rt2_O.Keys && Old.validation.subtyping.lubOpt(rt1_O[k].ty, rt2_O[k].ty).Ok? :: Old.validation.subtyping.lubAttrType(rt1_O[k], rt2_O[k]), map k: string | k in rt1_N.Keys && k in rt2_N.Keys && New.validation.subtyping.lubOpt(rt1_N[k].ty, rt2_N[k].ty).Ok? :: New.validation.subtyping.lubAttrType(rt1_N[k], rt2_N[k]));
+-        assert New.validation.subtyping.lubRecordType(rt1_N, rt2_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Ok(map k: string | k in rt1_O.Keys && k in rt2_O.Keys && (lubOpt_bc(rt1_O[k].ty, rt2_O[k].ty, rt1_N[k].ty, rt2_N[k].ty);
+-        Old.validation.subtyping.lubOpt(rt1_O[k].ty, rt2_O[k].ty)).Ok? :: lubAttrType_bc(rt1_O[k], rt2_O[k], rt1_N[k], rt2_N[k]);
++        Ok_bc((x: map<string,Old.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: string) => mp, (mp: string) => mp, (mp: Old.validation.types.AttrType) => AttrType_forward(mp), x), (x: map<string,New.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: string) => mp, (mp: string) => mp, (mp: New.validation.types.AttrType) => AttrType_backward(mp), x), map k: string | k in rt1_O.Keys && k in rt2_O.Keys && Old.validation.subtyping.lubOpt(rt1_O[k].ty, rt2_O[k].ty).Ok? :: Old.validation.subtyping.lubAttrType(rt1_O[k], rt2_O[k]), map k: string | k in rt1_N.attrs.Keys && k in rt2_N.attrs.Keys && New.validation.subtyping.lubOpt(rt1_N.attrs[k].ty, rt2_N.attrs[k].ty).Ok? :: New.validation.subtyping.lubAttrType(rt1_N.attrs[k], rt2_N.attrs[k]));
++        assert New.validation.subtyping.lubRecordType(rt1_N, rt2_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Ok(map k: string | k in rt1_O.Keys && k in rt2_O.Keys && (lubOpt_bc(rt1_O[k].ty, rt2_O[k].ty, rt1_N.attrs[k].ty, rt2_N.attrs[k].ty);
++        Old.validation.subtyping.lubOpt(rt1_O[k].ty, rt2_O[k].ty)).Ok? :: lubAttrType_bc(rt1_O[k], rt2_O[k], rt1_N.attrs[k], rt2_N.attrs[k]);
+         Old.validation.subtyping.lubAttrType(rt1_O[k], rt2_O[k])));
+       }
+ 
+@@ -496,7 +496,7 @@
+           assert New.validation.subtyping.lubRecordTypeSeq(rts_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.EmptyLUB()));
+         } else {
+           if (|rts_O| == 1) {
+-            Ok_bc((x: map<Joint.def.core.Attr,Old.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: Joint.def.core.Attr) => mp, (mp: Joint.def.core.Attr) => mp, (mp: Old.validation.types.AttrType) => AttrType_forward(mp), x), (x: map<Joint.def.core.Attr,New.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: Joint.def.core.Attr) => mp, (mp: Joint.def.core.Attr) => mp, (mp: New.validation.types.AttrType) => AttrType_backward(mp), x), rts_O[0], rts_N[0]);
++            Ok_bc((x: map<Joint.def.core.Attr,Old.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: Joint.def.core.Attr) => mp, (mp: Joint.def.core.Attr) => mp, (mp: Old.validation.types.AttrType) => AttrType_forward(mp), x), (x: map<Joint.def.core.Attr,New.validation.types.AttrType>) => Translations.MapBuiltinTypes.Map((mp: Joint.def.core.Attr) => mp, (mp: Joint.def.core.Attr) => mp, (mp: New.validation.types.AttrType) => AttrType_backward(mp), x), rts_O[0], rts_N[0].attrs);
+             assert New.validation.subtyping.lubRecordTypeSeq(rts_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Ok(rts_O[0]));
+           } else {
+             assert New.validation.subtyping.lubRecordTypeSeq(rts_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), var res :- (lubRecordTypeSeq_bc(rts_O[1..], rts_N[1..]);
+@@ -1483,7 +1483,7 @@
+           case Record(rt) =>
+             if k_O in rt && (rt[k_O].isRequired || (Effects_contains_bc(effs_O, effs_N, e_O, k_O, e_N, k_N);
+             effs_O.contains(e_O, k_O))) then
+-              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), rt[k_O].ty, RecordType_forward(rt)[k_N].ty);
++              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), rt[k_O].ty, RecordType_forward(rt).attrs[k_N].ty);
+               Old.validation.types.Ok(rt[k_O].ty)
+             else
+               Old.validation.types.Err(Old.validation.types.TypeError.AttrNotFound(Old.validation.types.Type.Record(rt), k_O))
+@@ -1492,7 +1492,7 @@
+             T_O.ets.getLubRecordType(lub));
+             if k_O in rt && (rt[k_O].isRequired || (Effects_contains_bc(effs_O, effs_N, e_O, k_O, e_N, k_N);
+             effs_O.contains(e_O, k_O))) then
+-              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), rt[k_O].ty, RecordType_forward(rt)[k_N].ty);
++              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), rt[k_O].ty, RecordType_forward(rt).attrs[k_N].ty);
+               Old.validation.types.Ok(rt[k_O].ty)
+             else
+               Old.validation.types.Err(Old.validation.types.TypeError.AttrNotFound(Old.validation.types.Type.Entity(lub), k_O))
+@@ -1926,7 +1926,7 @@
+             assert S_N.unify(actual_N, expected_N) == Result_forward((x: ()) => (), (x: ()) => (), S_O.unify(ty1, ty2));
+           case (Record(rty1), Record(rty2)) =>
+             if (rty1.Keys == rty2.Keys && (forall k: string :: k in rty1.Keys ==>
+-              (StrictTypechecker_unify_bc(S_O, S_N, rty1[k].ty, rty2[k].ty, RecordType_forward(rty1)[k].ty, RecordType_forward(rty2)[k].ty);
++              (StrictTypechecker_unify_bc(S_O, S_N, rty1[k].ty, rty2[k].ty, RecordType_forward(rty1).attrs[k].ty, RecordType_forward(rty2).attrs[k].ty);
+               S_O.unify(rty1[k].ty, rty2[k].ty)).Ok? && rty1[k].isRequired == rty2[k].isRequired)) {
+               assert S_N.unify(actual_N, expected_N) == Result_forward((x: ()) => (), (x: ()) => (), Joint.def.std.Result.Ok(()));
+             } else {
+@@ -2378,7 +2378,7 @@
+           ensures New.validation.thm.base.InstanceOfRecordType(r_N, rt_N) == Old.validation.thm.base.InstanceOfRecordType(r_O, rt_O)
+         {
+           assert New.validation.thm.base.InstanceOfRecordType(r_N, rt_N) == ((forall k: string :: k in r_O ==>
+-            k in rt_O && (InstanceOfType_bc(r_O[k], rt_O[k].ty, r_N[k], rt_N[k].ty);
++            k in rt_O && (InstanceOfType_bc(r_O[k], rt_O[k].ty, r_N[k], rt_N.attrs[k].ty);
+             Old.validation.thm.base.InstanceOfType(r_O[k], rt_O[k].ty))) && (forall k: string :: k in rt_O && rt_O[k].isRequired ==> k in r_O));
+         }
+ 
+@@ -2479,7 +2479,7 @@
+               }
+             case (Record(r), Record(rt)) =>
+               assert New.validation.thm.base.InstanceOfType(v_N, ty_N) == ((forall k: string :: k in rt && k in r ==>
+-                (InstanceOfType_bc(r[k], rt[k].ty, r[k], RecordType_forward(rt)[k].ty);
++                (InstanceOfType_bc(r[k], rt[k].ty, r[k], RecordType_forward(rt).attrs[k].ty);
+                 Old.validation.thm.base.InstanceOfType(r[k], rt[k].ty))) && (forall k: string :: k in rt && rt[k].isRequired ==> k in r));
+             case (Extension(Decimal(_)), _) =>
+               assert New.validation.thm.base.InstanceOfType(v_N, ty_N) == (ty_O == Old.validation.types.Type.Extension(Joint.def.base.Name.fromStr("decimal")));

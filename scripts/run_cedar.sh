@@ -11,4 +11,4 @@ git fetch origin
 git checkout c519e0f7722673e21f86479cff8f4c2a68c1c8a6
 git log --raw > ../commit_logs.txt
 cd ..
-python3 parse_commit_logs.py
+python3 parse_commit_logs.py -r cedar

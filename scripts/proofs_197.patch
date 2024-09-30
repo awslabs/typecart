@@ -1,0 +1,200 @@
+--- proofs/proofs.dfy	2024-08-12 14:42:45
++++ proofs_197.dfy	2024-08-12 14:42:14
+@@ -97,22 +97,22 @@
+ 
+       function Result_forward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_O: Joint.validation.types.Result<T_O>): Joint.validation.types.Result<T_N>
+       {
+-        R_O
++        match R_O {
++          case Ok(b) =>
++            Joint.validation.types.Ok(T_forward(b))
++          case Err(e) =>
++            Joint.validation.types.Err(e)
++        }
+       }
+ 
+       function Result_backward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_N: Joint.validation.types.Result<T_N>): Joint.validation.types.Result<T_O>
+       {
+-        R_N
+-      }
+-
+-      function Option_forward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, O_O: Joint.validation.types.Option<T_O>): Joint.validation.types.Option<T_N>
+-      {
+-        O_O
+-      }
+-
+-      function Option_backward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, O_N: Joint.validation.types.Option<T_N>): Joint.validation.types.Option<T_O>
+-      {
+-        O_N
++        match R_N {
++          case Ok(b) =>
++            Joint.validation.types.Ok(T_backward(b))
++          case Err(e) =>
++            Joint.validation.types.Err(e)
++        }
+       }
+     }
+ 
+@@ -397,16 +397,6 @@
+         import opened base
+ 
+         import opened ext
+-
+-        function Result_forward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_O: Joint.validation.thm.soundness.Result<T_O>): Joint.validation.thm.soundness.Result<T_N>
+-        {
+-          R_O
+-        }
+-
+-        function Result_backward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_N: Joint.validation.thm.soundness.Result<T_N>): Joint.validation.thm.soundness.Result<T_O>
+-        {
+-          R_N
+-        }
+       }
+     }
+   }
+@@ -745,32 +728,6 @@
+ 
+         import opened parseDecimal
+ 
+-        function Coercions_forward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, C_O: Joint.def.ext.decimal.Coercions<T_O>): Joint.def.ext.decimal.Coercions<T_N>
+-        {
+-          C_O
+-        }
+-
+-        function Coercions_backward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, C_N: Joint.def.ext.decimal.Coercions<T_N>): Joint.def.ext.decimal.Coercions<T_O>
+-        {
+-          C_N
+-        }
+-
+-        function DecimalFunctions_forward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, D_O: Joint.def.ext.decimal.DecimalFunctions<T_O>): Joint.def.ext.decimal.DecimalFunctions<T_N>
+-        {
+-          match D_O {
+-            case DecimalFunctions(coerce_O) =>
+-              /* unchanged constructor */ Joint.def.ext.decimal.DecimalFunctions.DecimalFunctions(coerce_O)
+-          }
+-        }
+-
+-        function DecimalFunctions_backward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, D_N: Joint.def.ext.decimal.DecimalFunctions<T_N>): Joint.def.ext.decimal.DecimalFunctions<T_O>
+-        {
+-          match D_N {
+-            case DecimalFunctions(coerce_N) =>
+-              /* unchanged constructor */ Joint.def.ext.decimal.DecimalFunctions.DecimalFunctions(coerce_N)
+-          }
+-        }
+-
+         module core {
+           import Joint
+ 
+@@ -815,32 +772,6 @@
+ 
+         import opened parseIPAddr
+ 
+-        function Coercions_forward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, C_O: Joint.def.ext.ipaddr.Coercions<T_O>): Joint.def.ext.ipaddr.Coercions<T_N>
+-        {
+-          C_O
+-        }
+-
+-        function Coercions_backward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, C_N: Joint.def.ext.ipaddr.Coercions<T_N>): Joint.def.ext.ipaddr.Coercions<T_O>
+-        {
+-          C_N
+-        }
+-
+-        function IPAddrFunctions_forward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, I_O: Joint.def.ext.ipaddr.IPAddrFunctions<T_O>): Joint.def.ext.ipaddr.IPAddrFunctions<T_N>
+-        {
+-          match I_O {
+-            case IPAddrFunctions(coerce_O) =>
+-              /* unchanged constructor */ Joint.def.ext.ipaddr.IPAddrFunctions.IPAddrFunctions(coerce_O)
+-          }
+-        }
+-
+-        function IPAddrFunctions_backward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, I_N: Joint.def.ext.ipaddr.IPAddrFunctions<T_N>): Joint.def.ext.ipaddr.IPAddrFunctions<T_O>
+-        {
+-          match I_N {
+-            case IPAddrFunctions(coerce_N) =>
+-              /* unchanged constructor */ Joint.def.ext.ipaddr.IPAddrFunctions.IPAddrFunctions(coerce_N)
+-          }
+-        }
+-
+         module core {
+           import Joint
+ 
+@@ -878,38 +809,6 @@
+         import Translations
+ 
+         import opened base
+-
+-        function ExtFun_forward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, E_O: Joint.def.ext.fun.ExtFun<T_O>): Joint.def.ext.fun.ExtFun<T_N>
+-        {
+-          match E_O {
+-            case ExtFun(fun_O) =>
+-              /* unchanged constructor */ Joint.def.ext.fun.ExtFun.ExtFun((x1_N: seq<T_N>) => fun_O(x1_N))
+-          }
+-        }
+-
+-        function ExtFun_backward<T_O(==)(!new), T_N(==)(!new)>(T_forward: T_O->T_N, T_backward: T_N->T_O, E_N: Joint.def.ext.fun.ExtFun<T_N>): Joint.def.ext.fun.ExtFun<T_O>
+-        {
+-          match E_N {
+-            case ExtFun(fun_N) =>
+-              /* unchanged constructor */ Joint.def.ext.fun.ExtFun.ExtFun((x1_O: seq<T_O>) => fun_N(x1_O))
+-          }
+-        }
+-
+-        function Coercions_forward<E_O(==)(!new), E_N(==)(!new), T_O(==)(!new), T_N(==)(!new)>(E_forward: E_O->E_N, E_backward: E_N->E_O, T_forward: T_O->T_N, T_backward: T_N->T_O, C_O: Joint.def.ext.fun.Coercions<E_O,T_O>): Joint.def.ext.fun.Coercions<E_N,T_N>
+-        {
+-          match C_O {
+-            case Coercions(Bool_O, Int_O, String_O, Ext_O) =>
+-              /* unchanged constructor */ Joint.def.ext.fun.Coercions.Coercions(Bool_O, Int_O, String_O, Ext_O)
+-          }
+-        }
+-
+-        function Coercions_backward<E_O(==)(!new), E_N(==)(!new), T_O(==)(!new), T_N(==)(!new)>(E_forward: E_O->E_N, E_backward: E_N->E_O, T_forward: T_O->T_N, T_backward: T_N->T_O, C_N: Joint.def.ext.fun.Coercions<E_N,T_N>): Joint.def.ext.fun.Coercions<E_O,T_O>
+-        {
+-          match C_N {
+-            case Coercions(Bool_N, Int_N, String_N, Ext_N) =>
+-              /* unchanged constructor */ Joint.def.ext.fun.Coercions.Coercions(Bool_N, Int_N, String_N, Ext_N)
+-          }
+-        }
+       }
+ 
+       module utils {
+@@ -948,29 +847,23 @@
+ 
+       function Result_forward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_O: Joint.def.base.Result<T_O>): Joint.def.base.Result<T_N>
+       {
+-        R_O
++        match R_O {
++          case Ok(b) =>
++            Joint.def.base.Ok(T_forward(b))
++          case Err(e) =>
++            Joint.def.base.Err(e)
++        }
+       }
+ 
+       function Result_backward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_N: Joint.def.base.Result<T_N>): Joint.def.base.Result<T_O>
+       {
+-        R_N
+-      }
+-
+-      function Coerce_forward<Base_O(==)(!new), Base_N(==)(!new), Wrapper_O(==)(!new), Wrapper_N(==)(!new)>(Base_forward: Base_O->Base_N, Base_backward: Base_N->Base_O, Wrapper_forward: Wrapper_O->Wrapper_N, Wrapper_backward: Wrapper_N->Wrapper_O, C_O: Joint.def.base.Coerce<Base_O,Wrapper_O>): Joint.def.base.Coerce<Base_N,Wrapper_N>
+-      {
+-        match C_O {
+-          case Coerce(wrap_O, unwrap_O) =>
+-            /* unchanged constructor */ Joint.def.base.Coerce.Coerce((x1_N: Base_N) => Wrapper_forward(wrap_O(Base_backward(x1_N))), (x1_N: Wrapper_N) => unwrap_O(Wrapper_backward(x1_N)))
++        match R_N {
++          case Ok(b) =>
++            Joint.def.base.Ok(T_backward(b))
++          case Err(e) =>
++            Joint.def.base.Err(e)
+         }
+       }
+-
+-      function Coerce_backward<Base_O(==)(!new), Base_N(==)(!new), Wrapper_O(==)(!new), Wrapper_N(==)(!new)>(Base_forward: Base_O->Base_N, Base_backward: Base_N->Base_O, Wrapper_forward: Wrapper_O->Wrapper_N, Wrapper_backward: Wrapper_N->Wrapper_O, C_N: Joint.def.base.Coerce<Base_N,Wrapper_N>): Joint.def.base.Coerce<Base_O,Wrapper_O>
+-      {
+-        match C_N {
+-          case Coerce(wrap_N, unwrap_N) =>
+-            /* unchanged constructor */ Joint.def.base.Coerce.Coerce((x1_O: Base_O) => Wrapper_backward(wrap_N(Base_forward(x1_O))), (x1_O: Wrapper_O) => unwrap_N(Wrapper_forward(x1_O)))
+-        }
+-      }
+     }
+ 
+     module engine {

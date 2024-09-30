@@ -1,0 +1,79 @@
+--- proofs_111_no_proof_origin.dfy	2024-09-29 18:46:53
++++ proofs_111_no_proof.dfy	2024-09-29 18:48:22
+@@ -1128,6 +1128,23 @@
+       }
+     }
+ 
++    module strict {
++      import Old
++      import New
++      import opened types
++      function StrictTypeError_to_TypeError(x: Old.validation.strict.StrictTypeError): New.validation.types.TypeError
++      {
++        match x {
++          case TypeError(t) => TypeError_forward(t)
++          case _ => assume false; New.validation.types.EmptyLUB()
++        }
++      }
++      function Result_forward<T_O, T_N>(T_forward: T_O->T_N, T_backward: T_N->T_O, R_O: Old.validation.strict.Result<T_O>): New.validation.types.Result<T_N>
++      {
++        R_O.MapErr(StrictTypeError_to_TypeError).Map(T_forward)
++      }
++    }
++
+     module validator {
+       import Joint
+ 
+@@ -1147,6 +1164,8 @@
+ 
+       import opened util
+ 
++      import strict
++
+       function Schema_forward(S_O: Old.validation.validator.Schema): New.validation.validator.Schema
+       {
+         match S_O {
+@@ -1246,6 +1265,22 @@
+             /* unchanged constructor */ Old.validation.validator.ValidationError.AllFalse()
+           case TypeError(x0_N) =>
+             /* deleted constructor */ Translations.Utils.???()
++        }
++      }
++
++      function ValidationMode_forward(V_O: Old.validation.validator.ValidationMode): New.validation.types.ValidationMode
++      {
++        match V_O {
++          case Permissive() => New.validation.types.Permissive()
++          case Strict() => New.validation.types.Strict()
++        }
++      }
++
++      function ValidationMode_backward(V_N: New.validation.types.ValidationMode): Old.validation.validator.ValidationMode
++      {
++        match V_N {
++          case Permissive() => Old.validation.validator.Permissive()
++          case Strict() => Old.validation.validator.Strict()
+         }
+       }
+ 
+@@ -1265,6 +1300,11 @@
+         }
+       }
+ 
++      function TypeError_back_to_StrictTypeError(x: New.validation.types.TypeError): Old.validation.strict.StrictTypeError
++      {
++        Old.validation.strict.TypeError(TypeError_backward(x))
++      }
++
+       lemma Validator_Typecheck_bc(V_O: Old.validation.validator.Validator, V_N: New.validation.validator.Validator, e_O: Joint.def.core.Expr, ets_O: Old.validation.typechecker.EntityTypeStore, acts_O: Old.validation.typechecker.ActionStore, reqty_O: Old.validation.typechecker.RequestType, e_N: Joint.def.core.Expr, ets_N: New.validation.typechecker.EntityTypeStore, acts_N: New.validation.typechecker.ActionStore, reqty_N: New.validation.typechecker.RequestType)
+         decreases V_O, e_O, ets_O, acts_O, reqty_O
+         requires V_N == Validator_forward(V_O)
+@@ -1691,6 +1731,8 @@
+               /* unchanged constructor */ Old.validation.thm.soundness.SemanticSoundnessProof.SSP(RequestType_backward(reqty_N), EntityTypeStore_backward(ets_N), ActionStore_backward(acts_N), r_N, s_N)
+           }
+         }
++
++        import strict
+ 
+         lemma SemanticSoundnessProof_WellTyped_bc(S_O: Old.validation.thm.soundness.SemanticSoundnessProof, S_N: New.validation.thm.soundness.SemanticSoundnessProof, e_O: Joint.def.core.Expr, effs_O: Old.validation.typechecker.Effects, e_N: Joint.def.core.Expr, effs_N: New.validation.typechecker.Effects)
+           decreases S_O, e_O, effs_O
