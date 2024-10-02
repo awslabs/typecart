@@ -3057,7 +3057,7 @@ module Proofs {
         requires j_N == Json_forward(j_O)
         requires ed1_N == PartialDeserializer_forward(E1_forward, E1_backward, ed1_O)
         requires ed2_N == PartialDeserializer_forward(E2_forward, E2_backward, ed2_O)
-        requires forall x1_N: E1_N, x2_N: E2_N :: cons_N(x1_N, x2_N) == FromProdResult_forward(T_forward, T_backward, cons_O(E1_backward(x1_N), E2_backward(x2_N)))
+        requires forall x1_O: E1_O, x2_O: E2_O :: cons_N(E1_forward(x1_O), E2_forward(x2_O)) == FromProdResult_forward(T_forward, T_backward, cons_O(x1_O, x2_O))
         requires forall x_O: T_O :: T_backward(T_forward(x_O)) == x_O
         requires forall x_O: E1_O :: E1_backward(E1_forward(x_O)) == x_O
         requires forall x_O: E2_O :: E2_backward(E2_forward(x_O)) == x_O

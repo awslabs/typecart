@@ -1844,7 +1844,7 @@ module Proofs {
       lemma mapSeq_bc<A_O, A_N, B_O, B_N>(A_forward: A_O->A_N, A_backward: A_N->A_O, B_forward: B_O->B_N, B_backward: B_N->B_O, f_O: A_O->B_O, s_O: seq<A_O>, f_N: A_N->B_N, s_N: seq<A_N>)
         decreases s_O
         requires forall i: int :: 0 <= i && i < |s_O| ==> f_O.requires(s_O[i])
-        requires forall x1_N: A_N :: f_N(x1_N) == B_forward(f_O(A_backward(x1_N)))
+        requires forall x1_O: A_O :: f_N(A_forward(x1_O)) == B_forward(f_O(x1_O))
         requires s_N == Translations.MapBuiltinTypes.Seq(A_forward, s_O)
         requires forall x_O: A_O :: A_backward(A_forward(x_O)) == x_O
         requires forall x_O: B_O :: B_backward(B_forward(x_O)) == x_O
@@ -1898,7 +1898,7 @@ module Proofs {
         requires fd2_N == Deserializer_forward(F2_forward, F2_backward, fd2_O)
         requires fn3_N == fn3_O
         requires fd3_N == Deserializer_forward(F3_forward, F3_backward, fd3_O)
-        requires forall x1_N: F1_N, x2_N: F2_N, x3_N: F3_N :: cons_N(x1_N, x2_N, x3_N) == FromProdResult_forward(T_forward, T_backward, cons_O(F1_backward(x1_N), F2_backward(x2_N), F3_backward(x3_N)))
+        requires forall x1_O: F1_O, x2_O: F2_O, x3_O: F3_O :: cons_N(F1_forward(x1_O), F2_forward(x2_O), F3_forward(x3_O)) == FromProdResult_forward(T_forward, T_backward, cons_O(x1_O, x2_O, x3_O))
         requires forall x_O: T_O :: T_backward(T_forward(x_O)) == x_O
         requires forall x_O: F1_O :: F1_backward(F1_forward(x_O)) == x_O
         requires forall x_O: F2_O :: F2_backward(F2_forward(x_O)) == x_O
@@ -1912,7 +1912,7 @@ module Proofs {
         requires j_N == Json_forward(j_O)
         requires ed1_N == PartialDeserializer_forward(E1_forward, E1_backward, ed1_O)
         requires ed2_N == PartialDeserializer_forward(E2_forward, E2_backward, ed2_O)
-        requires forall x1_N: E1_N, x2_N: E2_N :: cons_N(x1_N, x2_N) == FromProdResult_forward(T_forward, T_backward, cons_O(E1_backward(x1_N), E2_backward(x2_N)))
+        requires forall x1_O: E1_O, x2_O: E2_O :: cons_N(E1_forward(x1_O), E2_forward(x2_O)) == FromProdResult_forward(T_forward, T_backward, cons_O(x1_O, x2_O))
         requires forall x_O: T_O :: T_backward(T_forward(x_O)) == x_O
         requires forall x_O: E1_O :: E1_backward(E1_forward(x_O)) == x_O
         requires forall x_O: E2_O :: E2_backward(E2_forward(x_O)) == x_O

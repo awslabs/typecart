@@ -1,5 +1,5 @@
---- proofs_44_origin.dfy	2024-09-28 18:31:03
-+++ proofs_44.dfy	2024-09-28 18:41:04
+--- proofs_44_origin.dfy	2024-10-01 20:46:44
++++ proofs_44.dfy	2024-10-01 20:47:15
 @@ -409,7 +409,7 @@
          ensures New.validation.subtyping.subtyRecordType(rt1_N, rt2_N) == Old.validation.subtyping.subtyRecordType(rt1_O, rt2_O)
        {

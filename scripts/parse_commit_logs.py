@@ -168,4 +168,4 @@ def main(run_backward, typecart_args_list):
 
 
 if __name__ == "__main__":
-    main(run_backward=True, typecart_args_list=["-p false"])
+    main(run_backward=True, typecart_args_list=["-a 1 -p false", "-p false", "", "-h true -p false", "-h true"])

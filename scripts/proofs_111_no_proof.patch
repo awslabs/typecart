@@ -1,5 +1,5 @@
---- proofs_111_no_proof_origin.dfy	2024-09-29 18:46:53
-+++ proofs_111_no_proof.dfy	2024-09-29 18:48:22
+--- proofs_111_no_proof_origin.dfy	2024-10-01 20:43:49
++++ proofs_111_no_proof.dfy	2024-10-01 20:44:29
 @@ -1128,6 +1128,23 @@
        }
      }
