@@ -55,11 +55,11 @@ module Translation =
 
           // If we want to expand all function arguments' requirements by one level from lambda expressions
           // to forall expressions.
-          useForallInFunctionRequires: bool
+          useForallInFunctionRequires: int
 
           // If we want to expand all ensure statements of function return values by one level from function
           // equivalence to forall expressions.
-          useForallInFunctionEnsures: bool
+          useForallInFunctionEnsures: int
 
           // Set this variable to false only when no function types (higher-order functions) are used
           // to reduce the number of functions and variables that Dafny must consider.
@@ -82,8 +82,8 @@ module Translation =
     let defaultConfig =
         { alwaysGenerateLemmas = false
           generateAxiomsForUnchanged = true
-          useForallInFunctionRequires = true
-          useForallInFunctionEnsures = true
+          useForallInFunctionRequires = 2
+          useForallInFunctionEnsures = 2
           generateBackwardTranslationFunctions = true
           generateProof = true
           expandAssertions = true
@@ -93,6 +93,10 @@ module Translation =
         match Boolean.TryParse(value) with
         | true, b -> b
         | _ -> failwith "expected \"true\" or \"false\""
+    let stringToInt (value: string) =
+        match Int32.TryParse(value) with
+        | true, b -> b
+        | _ -> failwith "expected 32-bit integer"
     let parseConfig (argvList: string list) =
         { alwaysGenerateLemmas =
               if List.exists (fun s -> s = "-a") argvList then
@@ -110,12 +114,12 @@ module Translation =
                   defaultConfig.generateAxiomsForUnchanged
           useForallInFunctionRequires =
               if List.exists (fun s -> s = "-f") argvList then
-                  List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToBool
+                  List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToInt
               else
                   defaultConfig.useForallInFunctionRequires
           useForallInFunctionEnsures =
               if List.exists (fun s -> s = "-f") argvList then
-                  List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToBool
+                  List.item ((List.findIndex (fun s -> s = "-f") argvList) + 1) argvList |> stringToInt
               else
                   defaultConfig.useForallInFunctionEnsures
           generateBackwardTranslationFunctions =
@@ -744,7 +748,7 @@ module Translation =
         /// }
         ///
         /// x => body(x)
-        /// ----> (only when config.useForallInFunctionEnsures is also true)
+        /// ----> (only when config.useForallInFunctionEnsures > 0)
         /// forall x
         ///   ensures resultN(x) == body(x)
         /// {
@@ -923,19 +927,25 @@ module Translation =
                     else
                         EIf (arg1, falseBranch, Some trueBranch)
                 | _ -> eDefault  // not EQuant, use the default case
-            | EFun (vars, cond, out, body) when config.useForallInFunctionEnsures ->
+            | EFun (vars, cond, out, body) when config.useForallInFunctionEnsures > 0 ->
                 // return a function, should only be at top level
-                let eVars = List.map localDeclTerm vars
-                let eVarsN = vars |> List.map (
-                    fun (ld: LocalDecl) ->
+                let varsN =
+                    match eN with
+                    | Some (EFun (vars_n, _, _, _)) ->
+                        vars_n
+                    | _ -> vars
+                let eVarsO = List.map localDeclTerm vars
+                let eVarsOT = List.zip vars varsN |> List.map (
+                    fun (ld: LocalDecl, ldN: LocalDecl) ->
                         let ldtp = RemovePrefix.tp(ctx, ld.tp)
-                        let _, _, (T1, _) = tp (ldtp, ldtp)
+                        let ldNtp = RemovePrefix.tp(ctx, ldN.tp)
+                        let _, _, (T1, _) = tp (ldtp, ldNtp)
                         T1 (localDeclTerm ld))
                 match eN with
                 | Some (EFun (_, _, outN, bodyN)) ->
-                    let _, _, (outT, _) = tp (outN, outN) // "out" has "_O" label so should not be used here
-                    let outExprN = EAnonApply(resultN, eVarsN)
-                    let outExprO = outT (EAnonApply(resultO, eVars))
+                    let _, _, (outT, _) = tp (out, outN)
+                    let outExprN = EAnonApply(resultN, eVarsOT)
+                    let outExprO = outT (EAnonApply(resultO, eVarsO))
                     let resultBody = EBlock [ rcE outT outExprN body (Some bodyN) vars] // update the resultOTranslation
                     // Note: Dafny is not happy if we dump the proof directly into the ensures clause of the forall
                     // statement. We need to keep the proof in the forall body.
@@ -949,22 +959,41 @@ module Translation =
             (insN: Expr list)
             : Condition list =
             let translationCondition (oldToNew: Expr) (newToOld: Expr) (inO: Expr) (inN: Expr) =
-                if not config.useForallInFunctionRequires then
+                if config.useForallInFunctionRequires = 0 then
                     // x_N == forward(x_O)
                     EEqual(inN, oldToNew)
                 else
                     match oldToNew with
                     | EFun (vars, cond, _, body) ->
-                        // function f: A -> B
-                        // oldToNew is (a_N: A_N) => B_forward(f_O(A_backward(a_N)))
-                        // forall a_N: A_N :: f_N(A_N) == B_forward(f_O(A_backward(a_O)))
-                        EQuant(
-                            Forall,
-                            vars,
-                            Option.map fst cond,
-                            [],
-                            EEqual(EAnonApply(inN, List.map localDeclTerm vars), body)
-                        )
+                        if config.useForallInFunctionRequires = 1 then
+                            // function f: A -> B
+                            // oldToNew is (a_N: A_N) => B_forward(f_O(A_backward(a_N)))
+                            // forall a_N: A_N :: f_N(a_N) == B_forward(f_O(A_backward(a_N)))
+                            EQuant(
+                                Forall,
+                                vars,
+                                Option.map fst cond,
+                                [],
+                                EEqual(EAnonApply(inN, List.map localDeclTerm vars), body)
+                            )
+                        else
+                            assert (config.useForallInFunctionRequires = 2)
+                            // function f: A -> B
+                            // oldToNew is (a_O: A_O) => B_forward(f_O(a_O))
+                            // newToOld is (a_O: A_O) => f_N(A_forward(a_O))
+                            // forall a_O: A_O :: f_N(A_forward(a_O)) == B_forward(f_O(a_O))
+                            match newToOld with
+                            | EFun (_, _, _, body2) ->
+                                EQuant(
+                                    Forall,
+                                    vars,
+                                    Option.map fst cond,
+                                    [],
+                                    EEqual(body2, body))
+                            | _ ->
+                                // new type is not a function
+                                // x_N == forward(x_O)
+                                EEqual(inN, oldToNew)
                     | _ ->
                         // not a function
                         // x_N == forward(x_O)
@@ -983,36 +1012,67 @@ module Translation =
         /// output translation for backward compatibility lemmas
         and backward_compatible_ensures
             (outputTypeT: ((Expr -> Expr) * (Expr -> Expr)) option)
+            (outputTypeO: Type option)
             (outputTypeN: Type option)
             (canTranslateOutput: bool)
             (resultO: Expr)
             (resultN: Expr)
             : Condition =
-            match outputTypeT, outputTypeN, canTranslateOutput with
-            | Some otT, Some otN, true ->
+            match outputTypeT, outputTypeO, outputTypeN, canTranslateOutput with
+            | Some otT, Some otO, Some otN, true ->
                 let resultOTranslated = reduce ((fst otT) resultO)
-                if not config.useForallInFunctionEnsures then
+                if config.useForallInFunctionEnsures = 0 then
                     EEqual(resultN, resultOTranslated), None
-                else
+                elif config.useForallInFunctionEnsures = 1 then
                     match otN with
                     | TFun (ts_n, u_n) ->
+                            // x1:t1, ..., xn:tn
+                            let lds_n =
+                                List.indexed ts_n
+                                |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+                            // f is the return value of the function 
+                            // function f: (t1, ..., tn) -> u
+                            // forall (new) x1:t1, ..., xn:tn :: New.f(x1, ..., xn) == f_forward(Old.f)(x1, ..., xn)
+                            EQuant(
+                                Forall,
+                                lds_n,
+                                None,
+                                [],
+                                EEqual(EAnonApply(resultN, List.map localDeclTerm lds_n),
+                                       EAnonApply(resultOTranslated, List.map localDeclTerm lds_n))
+                            ), None
+                    | _ -> EEqual(resultN, resultOTranslated), None
+                else
+                    assert (config.useForallInFunctionEnsures = 2)
+                    match otO, otN with
+                    | TFun (ts_o, u_o), TFun (ts_n, u_n) ->
                         // x1:t1, ..., xn:tn
-                        let lds_n =
-                            List.indexed ts_n
+                        let lds_o =
+                            List.indexed ts_o
                             |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+                        // forward(x1), ..., forward(xn)
+                        let lds_oT = List.zip lds_o ts_n |> List.map (fun (ld, tN) ->
+                            let ldtp = RemovePrefix.tp(ctxO, ld.tp)
+                            let tpN = RemovePrefix.tp(ctxN, tN)
+                            let _, _, (ldT1, _) = tp (ldtp, tpN)
+                            ldT1 (localDeclTerm ld))
+                        // u_forward
+                        let uotp = RemovePrefix.tp(ctxO, u_o)
+                        let untp = RemovePrefix.tp(ctxN, u_n)
+                        let _, _, (uT1, _) = tp (uotp, untp)
                         // f is the return value of the function 
                         // function f: (t1, ..., tn) -> u
-                        // forall x1:t1, ..., xn:tn :: New.f(x1, ..., xn) == f_forward(Old.f)(x1, ..., xn)
+                        // forall (old) x1:t1, ..., xn:tn :: New.f(forward(x1), ..., forward(xn)) == forward(Old.f(x1, ..., xn))
                         EQuant(
                             Forall,
-                            lds_n,
+                            lds_o,
                             None,
                             [],
-                            EEqual(EAnonApply(resultN, List.map localDeclTerm lds_n),
-                                   EAnonApply(resultOTranslated, List.map localDeclTerm lds_n))
+                            EEqual(EAnonApply(resultN, lds_oT),
+                                   uT1 (EAnonApply(resultO, List.map localDeclTerm lds_o)))
                         ), None
                     | _ -> EEqual(resultN, resultOTranslated), None
-            | None, None, true -> EBool true, None
+            | None, None, None, true -> EBool true, None
             | _ -> ECommented("cannot translate output type", EBool false), None
         /// generate proof for backward compatibility theorem
         and proof
@@ -1020,6 +1080,7 @@ module Translation =
             (newCtx: Context)
             (ldmap: Map<LocalDecl, Expr>)
             (e: Expr)
+            (eN: Expr option)
             (resultO: Expr)
             (resultN: Expr)
             (resultOTranslation: Expr -> Expr)
@@ -1056,7 +1117,7 @@ module Translation =
             // (foo_bc(x_O); Old.foo(x_O))
             let eAssertion =
                 if config.expandAssertions then
-                    insertAssertionsAtResults (resultO, resultN, resultOTranslation, oldCtx, eO, newCtxWithSuffix, Some e)
+                    insertAssertionsAtResults (resultO, resultN, resultOTranslation, oldCtx, eO, newCtxWithSuffix, eN)
                 else
                     EAssert(EEqual(resultN, reduce (resultOTranslation eO)), None, None)
             // eAssertion is the proof sketch, e.g.,
@@ -1560,7 +1621,7 @@ module Translation =
                 else
                     match declO, declN with
                     | Method (_, _, tvs_o, ins_o, outs_o, modifiesO, readsO, decreasesO, bodyO, _, isStatic, isOpaqueO, _),
-                      Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, _, _, _, isOpaqueN, _) ->
+                      Method (_, _, tvs_n, ins_n, outs_n, modifiesN, readsN, decreasesN, bodyN, _, _, isOpaqueN, _) ->
                         if not tvsD.isSameOrUpdated then
                             failwith (
                                 unsupported "addition or deletion in type parameters: "
@@ -1673,7 +1734,7 @@ module Translation =
                             List.unzip3 (List.map localDecl ins_n.decls)
                         // translations from old inputs to new inputs
                         let insO_translated, insN_translated, insT =
-                            List.unzip3 (List.map localDecl2 (insD.decls.getSameOrUpdate ()))
+                            List.unzip3 (List.map localDecl2fn (insD.decls.getSameOrUpdate ()))
 
                         let inputs =
                             instanceInputs
@@ -1754,14 +1815,14 @@ module Translation =
                         // but we might add them if that helps
 
                         // the outputs and the translation function
-                        let outputTypeT, outputTypeN, canTranslateOutput =
+                        let outputTypeT, outputTypeO, outputTypeN, canTranslateOutput =
                             match outs_o, outs_n with
-                            | OutputSpec ([], _), OutputSpec ([], _) -> None, None, true
+                            | OutputSpec ([], _), OutputSpec ([], _) -> None, None, None, true
                             | OutputSpec ([ hdO ], _), OutputSpec ([ hdN ], _) ->
                                 try
-                                    let _, otN, otT = tp (hdO.tp, hdN.tp)
-                                    Some otT, Some otN, true
-                                with _ -> None, None, false
+                                    let otO, otN, otT = tp (hdO.tp, hdN.tp)
+                                    Some otT, Some otO, Some otN, true
+                                with _ -> None, None, None, false
                             | _ -> failwith (unsupported "multiple output declarations")
 
                         let resultO =
@@ -1770,7 +1831,7 @@ module Translation =
                         let resultN =
                             EMethodApply(receiverN, pN, typeargsToTVars tvsN, List.map localDeclTerm insN, true)
 
-                        let outputsTranslation = backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput resultO resultN
+                        let outputsTranslation = backward_compatible_ensures outputTypeT outputTypeO outputTypeN canTranslateOutput resultO resultN
                         // in general for mutable classes, we'd also have to return that the receivers remain translated
                         // but that is redundant due to our highly restricted treatment of classes
                         // New inputs' ensures becomes "output spec" here because "input spec" contains requires
@@ -1810,7 +1871,7 @@ module Translation =
                                         bdO
                                         |> Option.bind
                                             (fun b ->
-                                                proof oldBodyCtx newBodyCtx Map.empty b resultO resultN (fst ot) isOpaqueO isOpaqueN)
+                                                proof oldBodyCtx newBodyCtx Map.empty b (Some b) resultO resultN (fst ot) isOpaqueO isOpaqueN)
                                     | None -> Some(EBlock [])
                                 | _ ->
                                     // updated body: try to generate proof sketch
@@ -1818,7 +1879,7 @@ module Translation =
                                     match bodyO with
                                     | Some bd ->
                                         match outputTypeT with
-                                        | Some ot -> proof oldBodyCtx newBodyCtx Map.empty bd resultO resultN (fst ot) isOpaqueO isOpaqueN
+                                        | Some ot -> proof oldBodyCtx newBodyCtx Map.empty bd bodyN resultO resultN (fst ot) isOpaqueO isOpaqueN
                                         | None -> Some(EBlock [])
                                     | None ->
                                         // other cases: generate empty proof
@@ -1931,7 +1992,7 @@ module Translation =
                                                          fun ld -> exprNew ctxNh specializedInputMap (specializedLocalDeclTerm ld)), true)
 
                                     let specializedOutputsTranslation =
-                                        backward_compatible_ensures outputTypeT outputTypeN canTranslateOutput specializedResultO specializedResultN
+                                        backward_compatible_ensures outputTypeT outputTypeO outputTypeN canTranslateOutput specializedResultO specializedResultN
                                     // in general for mutable classes, we'd also have to return that the receivers remain translated
                                     // but that is redundant due to our highly restricted treatment of classes
                                     // New inputs' ensures becomes "output spec" here because "input spec" contains requires
@@ -1959,7 +2020,7 @@ module Translation =
                                                     bdO
                                                     |> Option.bind
                                                         (fun b ->
-                                                            proof oldBodyCtx newBodyCtx specializedInputMap b specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN)
+                                                            proof oldBodyCtx newBodyCtx specializedInputMap b (Some b) specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN)
                                                 | None -> Some(EBlock [])
                                             | _ ->
                                                 // updated body: try to generate proof sketch
@@ -1967,7 +2028,7 @@ module Translation =
                                                 match bodyO with
                                                 | Some bd ->
                                                     match outputTypeT with
-                                                    | Some ot -> proof oldBodyCtx newBodyCtx specializedInputMap bd specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN
+                                                    | Some ot -> proof oldBodyCtx newBodyCtx specializedInputMap bd bodyN specializedResultO specializedResultN (fst ot) isOpaqueO isOpaqueN
                                                     | None -> Some(EBlock [])
                                                 | None ->
                                                     // other cases: generate empty proof
@@ -2059,6 +2120,17 @@ module Translation =
         and localDecl2 (ldO: LocalDecl, ldN: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
             let nO, nN, _ = name2 (ldO.name, ldN.name)
             let tO, tN, tT = tp (ldO.tp, ldN.tp)
+            LocalDecl(nO, tO, ldO.ghost),
+            LocalDecl(nN, tN, ldN.ghost),
+            (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
+        // specialized version for function arguments
+        and localDecl2fn (ldO: LocalDecl, ldN: LocalDecl) : LocalDecl * LocalDecl * (Condition * Condition) =
+            let nO, nN, _ = name2 (ldO.name, ldN.name)
+            let tO, tN, tT =
+                if config.useForallInFunctionRequires = 2 then
+                    tpFn (ldO.tp, ldN.tp)
+                else
+                    tp (ldO.tp, ldN.tp)
             LocalDecl(nO, tO, ldO.ghost),
             LocalDecl(nN, tN, ldN.ghost),
             (((fst tT) (EVar nO), None), ((snd tT) (EVar nN), None))
@@ -2255,6 +2327,7 @@ module Translation =
                     let outputTypeO, outputTypeN, (outputT1, outputT2) = tp (u_o, u_n)
                     // To translate fO(xO) to fN(xN), we need to translate xN to xO, apply fO,
                     // then translate the result to outputTypeN
+                    // xN -> forward(fO(backward(xN))
                     let funsTranslation1 fO =
                         let varsN = inputsN
                         let varsO = T2 varsN
@@ -2371,6 +2444,66 @@ module Translation =
         and tpAbstracted (x: string, t_o: Type, t_n: Type) =
             let tO, tN, tT = tp (t_o, t_n)
             tO, tN, (abstractRel (x, tO, tN, (fst tT)), abstractRel (x, tN, tO, (snd tT)))
+        /// For function types fO/fN, return a different pair of translation functions:
+        /// xO -> forward(fO(xO)), xO -> fN(forward(xO))
+        /// (instead of xN -> forward(fO(backward(xN)), xO -> backward(fN(forward(xO)))
+        /// For other types, return the same as tp
+        and tpFn (tO: Type, tN: Type) : Type * Type * ((Expr -> Expr) * (Expr -> Expr)) =
+            match tO with
+            | TFun (ts_o, u_o) ->
+                match tN with
+                | TFun (ts_n, u_n) ->
+                    // translate functions
+                    // x1:t1, ..., xn:tn
+                    let lds_o =
+                        List.indexed ts_o
+                        |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+
+                    let lds_n =
+                        List.indexed ts_n
+                        |> List.map (fun (i, t) -> LocalDecl("x" + (i + 1).ToString(), t, false))
+                    // ldsO = x1O:t1O, ..., xnO:tnO
+                    // ldsN = x1N:t1N, ..., xnN:tnN
+                    // ldsT = t1-translations(x1O,x1N), ..., tN-translations(xnO,xnN)
+                    let ldsO, ldsN, ldsT =
+                        List.unzip3 (List.map localDecl2fn (List.zip lds_o lds_n))
+
+                    let inputTypesO = List.map localDeclType ldsO
+                    let inputTypesN = List.map localDeclType ldsN
+                    let inputsO = List.map localDeclTerm ldsO
+                    let inputsN = List.map localDeclTerm ldsN
+                    // input type translation functions
+                    let tsO, tsN, tsT =
+                        List.unzip3 (List.map tp (List.zip ts_o ts_n))
+
+                    let its = List.indexed tsT
+
+                    let T1 x =
+                        List.map (fun ((t1, _), x) -> t1 x) (List.zip tsT x)
+
+                    // output type translation functions
+                    let outputTypeO, outputTypeN, (outputT1, outputT2) = tp (u_o, u_n)
+                    let funsTranslation1 fO =
+                        let varsO = inputsO
+                        let bodyO = EAnonApply(fO, varsO)
+                        let bodyN = outputT1 bodyO
+                        EFun(ldsO, None, outputTypeN, bodyN)
+
+                    let funsTranslation2 fN =
+                        let varsO = inputsO
+                        let varsN = T1 varsO
+                        let bodyN = EAnonApply(fN, varsN)
+                        EFun(ldsO, None, outputTypeN, bodyN)
+
+                    TFun(inputTypesO, outputTypeO), TFun(inputTypesN, outputTypeN), (funsTranslation1, funsTranslation2)
+                | _ ->
+                    failwith (
+                        unsupported "trying to translate "
+                        + tO.ToString()
+                        + " to another type: "
+                        + tN.ToString()
+                    )
+            | _ -> tp (tO, tN)
         /// inductively extends the translation of paths to expressions, returning the OLD expression
         and exprOld (exprCtx: Context) (ldmap: Map<LocalDecl, Expr>) (e: Expr) : Expr =
             NameTranslator(true, ldmap)

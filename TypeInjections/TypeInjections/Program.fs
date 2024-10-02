@@ -19,7 +19,10 @@ module Program =
             [-a 0/1/2 (affected analysis: 0 = do not generate anything for unaffected,\n\
                                           1 = always generate lemmas,\n\
                                           2 = generate axioms for unaffected, default=2)]\n\
-            [-f true/false (use Forall in lemma pre-/post-conditions, default=true)]\n\
+            [-f 0/1/2 (use Forall in lemma pre-/post-conditions for function argument/return value f:\n\
+                       0 = (no forall) New.f == forward(Old.f),\n\
+                       1 = forall xN :: New.f(xN) == forward(Old.f)(xN),\n\
+                       2 = forall xO :: New.f(forward(xO)) == forward(Old.f(xO)), default=2)]\n\
             [-b true/false (generate Backward translation functions, default=true)]\n\
             [-p true/false (generate Proof sketch, default=true)]\n\
             [-l true/false (generate Lemma calls, default=true)]\n\
