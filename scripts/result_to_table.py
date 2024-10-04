@@ -18,7 +18,7 @@ def main():
             total_lemmas[parts[0].strip()][parts[1].strip()] = int(current_verified[1].strip())
             verified[parts[0].strip()][parts[1].strip()] = int(current_verified[0].strip())
     for i in natsorted(verified.keys()):
-        if total_lemmas[i]['-a 1 -p false'] == 0:
+        if total_lemmas[i]['-a 1 -p false'] == 0 and ('/' not in i or int(i.split('/')[0]) not in [44, 111]):
             continue
         print(f"{i[:7]} & {total_lemmas[i]['-a 1 -p false']} & {total_lemmas[i]['']} & {verified[i]['-p false']} & {verified[i]['']} \\\\")
 

@@ -88,13 +88,13 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
                 for line in f:
                     second_to_last_line = last_line
                     last_line = line
-                    if line.contains("Error: Internal error occurred during verification"):
+                    if "Error: Internal error occurred during verification" in line:
                         break
-                if not last_line.contains("Error: Internal error occurred during verification"):
+                if "Error: Internal error occurred during verification" not in line:
                     results_filename = last_line.split(":", 1)[1].strip()
             print(second_to_last_line)
             print(last_line)
-            if last_line.contains("Error: Internal error occurred during verification"):
+            if "Error: Internal error occurred during verification" in last_line:
                 # e.g., proofs/proofs.dfy(2737,12): Error: Internal error occurred during verification: The operation has timed out.
                 subprocess.run('echo ", Dafny internal error" >> result.csv', shell=True)
             elif second_to_last_line.split(" ", 1)[-1].split(" ")[0] == "resolution/type":
