@@ -88,14 +88,20 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
                 for line in f:
                     second_to_last_line = last_line
                     last_line = line
-                results_filename = last_line.split(":", 1)[1].strip()
+                    if line.contains("Error: Internal error occurred during verification"):
+                        break
+                if not last_line.contains("Error: Internal error occurred during verification"):
+                    results_filename = last_line.split(":", 1)[1].strip()
             print(second_to_last_line)
-            print(results_filename)
-            # e.g., 12 resolution/type errors detected in proofs.dfy
-            # e.g., Results File: /Volumes/workplace/typecart/examples/tmp/TestResults/2024-08-13_17_20_27-0.csv
-            if second_to_last_line.split(" ", 1)[-1].split(" ")[0] == "resolution/type":
+            print(last_line)
+            if last_line.contains("Error: Internal error occurred during verification"):
+                # e.g., proofs/proofs.dfy(2737,12): Error: Internal error occurred during verification: The operation has timed out.
+                subprocess.run('echo ", Dafny internal error" >> result.csv', shell=True)
+            elif second_to_last_line.split(" ", 1)[-1].split(" ")[0] == "resolution/type":
+                # e.g., 12 resolution/type errors detected in proofs.dfy
                 subprocess.run('echo ", resolution/type error" >> result.csv', shell=True)
             else:
+                # e.g., Results File: /Volumes/workplace/typecart/examples/tmp/TestResults/2024-08-13_17_20_27-0.csv
                 subprocess.run(f"python3 countVerified.py < {results_filename} >> result.csv", shell=True) # raw numbers
                 subprocess.run(f"python3 countVerified.py < {results_filename} > tmp.txt", shell=True)
                 with open('tmp.txt', 'r') as f:
