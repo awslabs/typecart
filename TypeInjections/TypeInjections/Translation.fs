@@ -784,7 +784,16 @@ module Translation =
             | EIf (c, t, e) ->
                 match eN with
                 | Some (EIf (cN, tN, eN)) -> EIf(c, rcEb t (Some tN), rcEbo e eN)
-                | _ -> // mismatch in new implementation, ignore new implementation
+                | Some (EBinOpApply ("EqCommon", cN, arg2)) ->
+                    // special case:
+                    // if c then A else B
+                    // ---->
+                    // c == X
+                    //
+                    // A ~ X, B ~ !X
+                    EIf(c, rcEb t (Some arg2), rcEbo e (Some (reduce (notExpr arg2))))
+                | _ ->
+                    // mismatch in new implementation, ignore new implementation
                     EIf(c, rcEb t None, rcEbo e None)
             | EBlock exprs when exprs.Length > 0 ->
                 EBlock (exprs[..exprs.Length - 2] @ [ rcEsimple exprs[exprs.Length - 1] (
@@ -853,6 +862,9 @@ module Translation =
                         // match (ignoring condition), ensures the new body is false; label=None
                         // Do not use exprNew because it adds the new suffix but we want forward translation
                         [ notExpr (ForwardLocalDeclTranslator(ld, false).expr (ctxN, bodyN)), None ]
+                    | Some (EUnOpApply ("Not", EQuant (quantN, _, _, _, bodyN))) when quantN <> quant ->
+                        // !exists = forall, !forall = exists
+                        [ notExpr (ForwardLocalDeclTranslator(ld, false).expr (ctxN, notExpr bodyN)), None ]
                     | _ -> []
 
                 let newAssert =
@@ -861,6 +873,9 @@ module Translation =
                         // match (ignoring condition), assert the new body is true; label=None
                         // Do not use exprNew because it adds the new suffix but we want forward translation
                         EAssert(ForwardLocalDeclTranslator(ld, false).expr (ctxN, bodyN), Some eBody, None)
+                    | Some (EUnOpApply ("Not", EQuant (quantN, _, _, _, bodyN))) when quantN <> quant ->
+                        // !exists = forall, !forall = exists
+                        EAssert(ForwardLocalDeclTranslator(ld, false).expr (ctxN, notExpr bodyN), Some eBody, None)
                     | _ -> eBody
 
                 let newAssertNot =
