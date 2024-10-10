@@ -23,7 +23,7 @@ module Program =
                        0 = (no forall) New.f == forward(Old.f),\n\
                        1 = forall xN :: New.f(xN) == forward(Old.f)(xN),\n\
                        2 = forall xO :: New.f(forward(xO)) == forward(Old.f(xO)), default=2)]\n\
-            [-b true/false (generate Backward translation functions, default=true)]\n\
+            [-b true/false (generate Backward translation functions, default=false)]\n\
             [-p true/false (generate Proof sketch, default=true)]\n\
             [-l true/false (generate Lemma calls, default=true)]\n\
             [-h true/false (specialize Higher-order lemmas (experimental), default=false)]"
