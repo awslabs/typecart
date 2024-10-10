@@ -318,7 +318,10 @@ module Translation =
                 override this.path(ctx: Context, p: Path) =
                     let _, pN, _ = path p
                     if strict && not (isJoint p) then
-                        ctx.lookupByPath p |> ignore // make sure it exists in the new codebase
+                        // make sure it exists in the new codebase
+                        if (ctx.lookupByPathOption p).IsNone then
+                            // if not a decl, then should be a datatype constructor
+                            lookupConstructor (ctx.prog, p) |> ignore
                     pN
 
                 override this.expr(ctx: Context, e: Expr) =
