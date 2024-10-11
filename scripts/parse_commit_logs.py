@@ -32,6 +32,8 @@ def diff_files(file1, file2):
 
 def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_args = "", delete_output=False, use_other_combine_dfy=None):
     if run_cedar:
+        if pr_id in [44, 111]:
+            typecart_args += " -b true"  # generate backward translation functions
         # if pr_id != 111:
         #     return 0
         # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':

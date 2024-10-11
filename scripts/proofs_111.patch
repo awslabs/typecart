@@ -1,6 +1,6 @@
---- proofs_111_origin.dfy	2024-10-01 20:40:29
-+++ proofs_111.dfy	2024-10-01 20:42:15
-@@ -1861,6 +1861,23 @@
+--- proofs_111_original.dfy	2024-10-11 08:52:49
++++ proofs/proofs.dfy	2024-10-11 08:52:58
+@@ -1970,6 +1970,23 @@
        }
      }
  
@@ -24,7 +24,7 @@
      module validator {
        import Joint
  
-@@ -1880,6 +1897,8 @@
+@@ -1989,6 +2006,8 @@
  
        import opened util
  
@@ -33,7 +33,7 @@
        function Schema_forward(S_O: Old.validation.validator.Schema): New.validation.validator.Schema
        {
          match S_O {
-@@ -1985,6 +2004,22 @@
+@@ -2094,6 +2113,22 @@
              /* unchanged constructor */ Old.validation.validator.ValidationError.AllFalse()
            case TypeError(x0_N) =>
              /* deleted constructor */ Translations.Utils.???()
@@ -56,7 +56,7 @@
          }
        }
  
-@@ -2004,6 +2039,11 @@
+@@ -2113,6 +2148,11 @@
          }
        }
  
@@ -68,7 +68,7 @@
        lemma Validator_Typecheck_bc(V_O: Old.validation.validator.Validator, V_N: New.validation.validator.Validator, e_O: Joint.def.core.Expr, ets_O: Old.validation.typechecker.EntityTypeStore, acts_O: Old.validation.typechecker.ActionStore, reqty_O: Old.validation.typechecker.RequestType, e_N: Joint.def.core.Expr, ets_N: New.validation.typechecker.EntityTypeStore, acts_N: New.validation.typechecker.ActionStore, reqty_N: New.validation.typechecker.RequestType)
          decreases V_O, e_O, ets_O, acts_O, reqty_O
          requires V_N == Validator_forward(V_O)
-@@ -2571,6 +2611,8 @@
+@@ -2689,6 +2729,8 @@
          {
            var typechecker := Old.validation.strict.StrictTypechecker.StrictTypechecker(schema_O.ets, schema_O.acts, schema_O.reqty); assert New.validation.thm.toplevel.strictTypecheck(pid_N, policies_N, schema_N) == strict.Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), typechecker.typecheck(policies_O.policies[pid_O].toExpr(), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
          }

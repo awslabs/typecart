@@ -584,6 +584,7 @@ module Proofs {
         ensures New.validation.subtyping.lubRecordTypeSeq(rts_N, m_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.subtyping.lubRecordTypeSeq(rts_O))
       {
         if (rts_O == []) {
+          Err_bc((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.TypeError.EmptyLUB(), New.validation.types.TypeError.EmptyLUB());
           assert New.validation.subtyping.lubRecordTypeSeq(rts_N, m_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.EmptyLUB()));
         } else {
           if (|rts_O| == 1) {
@@ -610,26 +611,33 @@ module Proofs {
             Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), t1_O, t1_N);
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(t1_O));
           case (String(), String()) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.String(), New.validation.types.Type.String());
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.String()));
           case (Int(), Int()) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Int(), New.validation.types.Type.Int());
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Int()));
           case (Bool(b1), Bool(b2)) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.subtyping.lubBool(b1, b2)), New.validation.types.Type.Bool(New.validation.subtyping.lubBool(BoolType_forward(b1), BoolType_forward(b2))));
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Bool(lubBool_bc(b1, b2, BoolType_forward(b1), BoolType_forward(b2));
             Old.validation.subtyping.lubBool(b1, b2))));
           case (Entity(lub1), Entity(lub2)) =>
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.subtyping.lubEntity(lub1, lub2))));
           case (Set(t11), Set(t12)) =>
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), var t :- Old.validation.subtyping.lubOpt(t11, t12);
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Set(t), New.validation.types.Type.Set(Type_forward(t)));
             Old.validation.types.Ok(Old.validation.types.Type.Set(t)));
           case (Record(rt1), Record(rt2)) =>
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Record(Old.validation.subtyping.lubRecordType(rt1, rt2))));
           case (Extension(e1), Extension(e2)) =>
             if (e1 == e2) {
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Extension(e1), New.validation.types.Type.Extension(e1));
               assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Extension(e1)));
             } else {
+              Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.LubErr(t1_O, t2_O), New.validation.types.TypeError.LubErr(t1_N, t2_N));
               assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.LubErr(t1_O, t2_O)));
             }
           case _ =>
+            Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.LubErr(t1_O, t2_O), New.validation.types.TypeError.LubErr(t1_N, t2_N));
             assert New.validation.subtyping.lubOpt(t1_N, t2_N, m_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.LubErr(t1_O, t2_O)));
         }
       }
@@ -750,12 +758,14 @@ module Proofs {
         if (lub_O.AnyEntity? || (exists et: Old.validation.types.EntityType ::
           et in lub_O.tys && (isAction_bc(et, types.EntityType_forward(et));
           Old.validation.types.isAction(et)))) {
+          Ok_bc((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.RecordType.RecordType(map [], Old.validation.types.AttrsTag.OpenAttributes()), New.validation.types.RecordType.RecordType(map [], New.validation.types.AttrsTag.OpenAttributes()));
           assert E_N.getLubRecordType(lub_N, m_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Ok(Old.validation.types.RecordType.RecordType(map [], Old.validation.types.AttrsTag.OpenAttributes())));
         } else {
           if (forall et: Joint.def.core.EntityType :: et in lub_O.tys ==> et in E_O.types) {
             Joint.def.util.EntityTypeLeqIsTotalOrder();
             var lubSeq := Joint.def.util.SetToSortedSeq(lub_O.tys, Joint.def.util.EntityTypeLeq); assert E_N.getLubRecordType(lub_N, m_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.subtyping.lubRecordTypeSeq(seq(|lubSeq|, (i: int) requires 0 <= i && i < |lubSeq| => E_O.types[lubSeq[i]])));
           } else {
+            Err_bc((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.TypeError.UnknownEntities(set et: Joint.def.core.EntityType | et in lub_O.tys && et !in E_O.types :: et), New.validation.types.TypeError.UnknownEntities(set et: Joint.def.core.EntityType | et in lub_N.tys && et !in E_N.types :: et));
             assert E_N.getLubRecordType(lub_N, m_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.UnknownEntities(set et: Joint.def.core.EntityType | et in lub_O.tys && et !in E_O.types :: et)));
           }
         }
@@ -890,6 +900,7 @@ module Proofs {
           Ok_bc((x: ()) => (), (x: ()) => (), (), ());
           assert T_N.ensureSubty(t1_N, t2_N) == Result_forward((x: ()) => (), (x: ()) => (), Old.validation.types.Ok(()));
         } else {
+          Err_bc((x: ()) => (), (x: ()) => (), Old.validation.types.TypeError.SubtyErr(t1_O, t2_O), New.validation.types.TypeError.SubtyErr(t1_N, t2_N));
           assert T_N.ensureSubty(t1_N, t2_N) == Result_forward((x: ()) => (), (x: ()) => (), Old.validation.types.Err(Old.validation.types.TypeError.SubtyErr(t1_O, t2_O)));
         }
       }
@@ -908,6 +919,7 @@ module Proofs {
             Ok_bc((x: ()) => (), (x: ()) => (), (), ());
             Old.validation.types.Ok(())
           case _ =>
+            Err_bc((x: ()) => (), (x: ()) => (), Old.validation.types.TypeError.UnexpectedType(t), New.validation.types.TypeError.UnexpectedType(Type_forward(t)));
             Old.validation.types.Err(Old.validation.types.TypeError.UnexpectedType(t))
         });
       }
@@ -926,6 +938,7 @@ module Proofs {
             Ok_bc((x: ()) => (), (x: ()) => (), (), ());
             Old.validation.types.Ok(())
           case _ =>
+            Err_bc((x: ()) => (), (x: ()) => (), Old.validation.types.TypeError.UnexpectedType(t), New.validation.types.TypeError.UnexpectedType(Type_forward(t)));
             Old.validation.types.Err(Old.validation.types.TypeError.UnexpectedType(t))
         });
       }
@@ -954,18 +967,24 @@ module Proofs {
       {
         match p_O {
           case Bool(true) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
             assert T_N.inferPrim(p_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())));
           case Bool(false) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
             assert T_N.inferPrim(p_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())));
           case Int(_) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Int(), New.validation.types.Type.Int());
             assert T_N.inferPrim(p_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Int()));
           case String(_) =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.String(), New.validation.types.Type.String());
             assert T_N.inferPrim(p_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.String()));
           case EntityUID(u) =>
             if (u.ty in T_O.ets.types || (isAction_bc(u.ty, u.ty);
             Old.validation.types.isAction(u.ty))) {
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({u.ty})), New.validation.types.Type.Entity(New.validation.types.EntityLUB.EntityLUB({u.ty})));
               assert T_N.inferPrim(p_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({u.ty}))));
             } else {
+              Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.UnknownEntities({u.ty}), New.validation.types.TypeError.UnknownEntities({u.ty}));
               assert T_N.inferPrim(p_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.UnknownEntities({u.ty})));
             }
         }
@@ -980,18 +999,24 @@ module Proofs {
         match x_O {
           case Principal() =>
             if (T_O.reqty.principal.None?) {
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.AnyEntity()), New.validation.types.Type.Entity(New.validation.types.EntityLUB.AnyEntity()));
               assert T_N.inferVar(x_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.AnyEntity())));
             } else {
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({T_O.reqty.principal.value})), New.validation.types.Type.Entity(New.validation.types.EntityLUB.EntityLUB({T_N.reqty.principal.value})));
               assert T_N.inferVar(x_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({T_O.reqty.principal.value}))));
             }
           case Context() =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Record(T_O.reqty.context), New.validation.types.Type.Record(T_N.reqty.context));
             assert T_N.inferVar(x_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Record(T_O.reqty.context)));
           case Action() =>
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({T_O.reqty.action.ty})), New.validation.types.Type.Entity(New.validation.types.EntityLUB.EntityLUB({T_N.reqty.action.ty})));
             assert T_N.inferVar(x_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({T_O.reqty.action.ty}))));
           case Resource() =>
             if (T_O.reqty.resource.None?) {
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.AnyEntity()), New.validation.types.Type.Entity(New.validation.types.EntityLUB.AnyEntity()));
               assert T_N.inferVar(x_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.AnyEntity())));
             } else {
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({T_O.reqty.resource.value})), New.validation.types.Type.Entity(New.validation.types.EntityLUB.EntityLUB({T_N.reqty.resource.value})));
               assert T_N.inferVar(x_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Entity(Old.validation.types.EntityLUB.EntityLUB({T_O.reqty.resource.value}))));
             }
         }
@@ -1011,6 +1036,7 @@ module Proofs {
             Ok_bc((x: (Old.validation.types.BoolType,Old.validation.typechecker.Effects)) => (BoolType_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.BoolType,New.validation.typechecker.Effects)) => (BoolType_backward(x.0), Effects_backward(x.1)), (bt, effs1), (BoolType_forward(bt), Effects_forward(effs1)));
             Old.validation.types.Ok((bt, effs1))
           case _ =>
+            Err_bc((x: (Old.validation.types.BoolType,Old.validation.typechecker.Effects)) => (BoolType_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.BoolType,New.validation.typechecker.Effects)) => (BoolType_backward(x.0), Effects_backward(x.1)), Old.validation.types.TypeError.UnexpectedType(t), New.validation.types.TypeError.UnexpectedType(Type_forward(t)));
             Old.validation.types.Err(Old.validation.types.TypeError.UnexpectedType(t))
         });
       }
@@ -1029,6 +1055,7 @@ module Proofs {
             Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), t1, Type_forward(t1));
             Old.validation.types.Ok(t1)
           case _ =>
+            Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.UnexpectedType(t), New.validation.types.TypeError.UnexpectedType(Type_forward(t)));
             Old.validation.types.Err(Old.validation.types.TypeError.UnexpectedType(t))
         });
       }
@@ -1044,10 +1071,13 @@ module Proofs {
         T_O.infer(e_O, effs_O));
         match t {
           case Record(rt) =>
+            Ok_bc((x: Old.validation.types.RecordEntityType) => RecordEntityType_forward(x), (x: New.validation.types.RecordEntityType) => RecordEntityType_backward(x), Old.validation.types.RecordEntityType.Record(rt), New.validation.types.RecordEntityType.Record(RecordType_forward(rt)));
             Old.validation.types.Ok(Old.validation.types.RecordEntityType.Record(rt))
           case Entity(lub) =>
+            Ok_bc((x: Old.validation.types.RecordEntityType) => RecordEntityType_forward(x), (x: New.validation.types.RecordEntityType) => RecordEntityType_backward(x), Old.validation.types.RecordEntityType.Entity(lub), New.validation.types.RecordEntityType.Entity(EntityLUB_forward(lub)));
             Old.validation.types.Ok(Old.validation.types.RecordEntityType.Entity(lub))
           case _ =>
+            Err_bc((x: Old.validation.types.RecordEntityType) => RecordEntityType_forward(x), (x: New.validation.types.RecordEntityType) => RecordEntityType_backward(x), Old.validation.types.TypeError.UnexpectedType(t), New.validation.types.TypeError.UnexpectedType(Type_forward(t)));
             Old.validation.types.Err(Old.validation.types.TypeError.UnexpectedType(t))
         });
       }
@@ -1100,18 +1130,24 @@ module Proofs {
         T_O.inferBoolType(e1_O, effs_O));
         match bt1 {
           case False() =>
-            T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())))
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.False())));
+            T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+            Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())))
           case _ =>
             var (bt2, effs2) :- (Typechecker_inferBoolType_bc(T_O, T_N, e2_O, effs_O.union(effs1), e2_N, effs_N.union(Effects_forward(effs1)));
             T_O.inferBoolType(e2_O, Effects_union_bc(effs_O, effs_N, effs1, Effects_forward(effs1));
             effs_O.union(effs1)));
             match bt2 {
               case False() =>
-                T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())))
+                Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.False())));
+                T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+                Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())))
               case True() =>
+                Ok_bc((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), (Old.validation.types.Type.Bool(bt1), effs1.union(effs2)), (New.validation.types.Type.Bool(BoolType_forward(bt1)), Effects_forward(effs1).union(Effects_forward(effs2))));
                 Old.validation.types.Ok((Old.validation.types.Type.Bool(bt1), Effects_union_bc(effs1, Effects_forward(effs1), effs2, Effects_forward(effs2));
                 effs1.union(effs2)))
               case _ =>
+                Ok_bc((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), (Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), effs1.union(effs2)), (New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()), Effects_forward(effs1).union(Effects_forward(effs2))));
                 Old.validation.types.Ok((Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), Effects_union_bc(effs1, Effects_forward(effs1), effs2, Effects_forward(effs2));
                 effs1.union(effs2)))
             }
@@ -1130,20 +1166,27 @@ module Proofs {
         T_O.inferBoolType(e1_O, effs_O));
         match bt1 {
           case True() =>
-            T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())))
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.True())));
+            T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
+            Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())))
           case False() =>
             var (bt2, effs2) :- (Typechecker_inferBoolType_bc(T_O, T_N, e2_O, effs_O, e2_N, effs_N);
             T_O.inferBoolType(e2_O, effs_O));
+            Ok_bc((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), (Old.validation.types.Type.Bool(bt2), effs2), (New.validation.types.Type.Bool(BoolType_forward(bt2)), Effects_forward(effs2)));
             Old.validation.types.Ok((Old.validation.types.Type.Bool(bt2), effs2))
           case _ =>
             var (bt2, effs2) :- (Typechecker_inferBoolType_bc(T_O, T_N, e2_O, effs_O, e2_N, effs_N);
             T_O.inferBoolType(e2_O, effs_O));
             match bt2 {
               case True() =>
-                T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())))
+                Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.True())));
+                T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
+                Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())))
               case False() =>
+                Ok_bc((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), (Old.validation.types.Type.Bool(bt1), effs1), (New.validation.types.Type.Bool(BoolType_forward(bt1)), Effects_forward(effs1)));
                 Old.validation.types.Ok((Old.validation.types.Type.Bool(bt1), effs1))
               case _ =>
+                Ok_bc((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), (Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), effs1.intersect(effs2)), (New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()), Effects_forward(effs1).intersect(Effects_forward(effs2))));
                 Old.validation.types.Ok((Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), Effects_intersect_bc(effs1, Effects_forward(effs1), effs2, Effects_forward(effs2));
                 effs1.intersect(effs2)))
             }
@@ -1159,6 +1202,7 @@ module Proofs {
       {
         assert T_N.inferNot(e_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), var (bt, _) :- (Typechecker_inferBoolType_bc(T_O, T_N, e_O, effs_O, e_N, effs_N);
         T_O.inferBoolType(e_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(bt.not()), New.validation.types.Type.Bool(BoolType_forward(bt).not()));
         Old.validation.types.Ok(Old.validation.types.Type.Bool(BoolType_not_bc(bt, BoolType_forward(bt));
         bt.not())));
       }
@@ -1177,16 +1221,24 @@ module Proofs {
         T_O.infer(e2_O, effs_O));
         if t1.Entity? && t2.Entity? && (EntityLUB_disjoint_bc(t1.lub, Type_forward(t1).lub, t2.lub, Type_forward(t2).lub);
         t1.lub.disjoint(t2.lub)) then
+          Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
           Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
         else
           if T_O.isUnspecifiedVar(e1_O) && t2.Entity? && (EntityLUB_specified_bc(t2.lub, Type_forward(t2).lub);
           t2.lub.specified()) then
+            Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
             Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
           else
             match (e1_O, e2_O) {
               case (PrimitiveLit(EntityUID(u1)), PrimitiveLit(EntityUID(u2))) =>
-                if u1 == u2 then Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())) else Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
+                if u1 == u2 then
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
+                  Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()))
+                else
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+                  Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
               case _ =>
+                Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
                 Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
             });
       }
@@ -1206,6 +1258,7 @@ module Proofs {
         T_O.ensureIntType(e1_O, effs_O));
         var _ :- (Typechecker_ensureIntType_bc(T_O, T_N, e2_O, effs_O, e2_N, effs_N);
         T_O.ensureIntType(e2_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
         Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
       }
 
@@ -1281,17 +1334,24 @@ module Proofs {
           case Set(Never()) =>
             false
         } then
+          Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
           Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
         else
           match (e1_O, e2_O) {
             case (Var(Action()), _) =>
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
               Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
             case (Var(v), PrimitiveLit(EntityUID(u))) =>
               var et := (Typechecker_getPrincipalOrResource_bc(T_O, T_N, v, v);
               T_O.getPrincipalOrResource(v));
               var b := et.None? || (EntityTypeStore_possibleDescendantOf_bc(T_O.ets, T_N.ets, et.value, u.ty, Option_forward((x: Joint.def.core.EntityType) => x, (x: Joint.def.core.EntityType) => x, et).value, u.ty);
               T_O.ets.possibleDescendantOf(et.value, u.ty));
-              if b then Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())) else Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
+              if b then
+                Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
+                Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
+              else
+                Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+                Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
             case (Var(v), Set(_)) =>
               var et := (Typechecker_getPrincipalOrResource_bc(T_O, T_N, v, v);
               T_O.getPrincipalOrResource(v));
@@ -1301,8 +1361,14 @@ module Proofs {
                   var es := set euid: Joint.def.core.EntityUID | euid in euids :: euid.ty;
                   var b := et.None? || (EntityTypeStore_possibleDescendantOfSet_bc(T_O.ets, T_N.ets, et.value, es, Option_forward((x: Joint.def.core.EntityType) => x, (x: Joint.def.core.EntityType) => x, et).value, es);
                   T_O.ets.possibleDescendantOfSet(et.value, es));
-                  if b then Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())) else Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
+                  if b then
+                    Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
+                    Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
+                  else
+                    Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+                    Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
                 case None() =>
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
                   Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
               }
             case (PrimitiveLit(EntityUID(u1)), PrimitiveLit(EntityUID(u2))) =>
@@ -1310,13 +1376,20 @@ module Proofs {
               Old.validation.types.isAction(u1.ty) then
                 if ActionStore_descendantOf_bc(T_O.acts, T_N.acts, u1, u2, u1, u2);
                 T_O.acts.descendantOf(u1, u2) then
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
                   Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
                 else
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
                   Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
               else
                 var b := (EntityTypeStore_possibleDescendantOf_bc(T_O.ets, T_N.ets, u1.ty, u2.ty, u1.ty, u2.ty);
                 T_O.ets.possibleDescendantOf(u1.ty, u2.ty));
-                if b then Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())) else Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
+                if b then
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
+                  Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
+                else
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+                  Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
             case (PrimitiveLit(EntityUID(u)), Set(_)) =>
               match (Typechecker_tryGetEUIDs_bc(T_O, T_N, e2_O, e2_N);
               T_O.tryGetEUIDs(e2_O)) {
@@ -1325,18 +1398,27 @@ module Proofs {
                   Old.validation.types.isAction(u.ty) then
                     if ActionStore_descendantOfSet_bc(T_O.acts, T_N.acts, u, euids, u, euids);
                     T_O.acts.descendantOfSet(u, euids) then
+                      Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
                       Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
                     else
+                      Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
                       Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
                   else
                     var es := set euid: Joint.def.core.EntityUID | euid in euids :: euid.ty;
                     var b := (EntityTypeStore_possibleDescendantOfSet_bc(T_O.ets, T_N.ets, u.ty, es, u.ty, es);
                     T_O.ets.possibleDescendantOfSet(u.ty, es));
-                    if b then Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())) else Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
+                    if b then
+                      Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
+                      Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
+                    else
+                      Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+                      Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))
                 case None() =>
+                  Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
                   Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
               }
             case _ =>
+              Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
               Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))
           });
       }
@@ -1356,6 +1438,7 @@ module Proofs {
         T_O.inferSetType(e1_O, effs_O));
         var s2 :- (Typechecker_inferSetType_bc(T_O, T_N, e2_O, effs_O, e2_N, effs_N);
         T_O.inferSetType(e2_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
         Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
       }
 
@@ -1371,6 +1454,7 @@ module Proofs {
         T_O.inferSetType(e1_O, effs_O));
         var t :- (Typechecker_infer_bc(T_O, T_N, e2_O, effs_O, e2_N, effs_N);
         T_O.infer(e2_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
         Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
       }
 
@@ -1387,6 +1471,7 @@ module Proofs {
         reveal T_O.inferRecord();
         reveal T_N.inferRecord();
         if (r_O == []) {
+          Ok_bc((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.RecordType.RecordType(map [], Old.validation.types.AttrsTag.ClosedAttributes()), New.validation.types.RecordType.RecordType(map [], New.validation.types.AttrsTag.ClosedAttributes()));
           assert T_N.inferRecord(e_N, r_N, effs_N) == Result_forward((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.Ok(Old.validation.types.RecordType.RecordType(map [], Old.validation.types.AttrsTag.ClosedAttributes())));
         } else {
           var k := r_O[0].0;
@@ -1395,6 +1480,7 @@ module Proofs {
           assert r_O[0] < e_O;
           var m :- (Typechecker_inferRecord_bc(T_O, T_N, e_O, r_O[1..], effs_O, e_N, r_N[1..], effs_N);
           T_O.inferRecord(e_O, r_O[1..], effs_O));
+          Ok_bc((x: Old.validation.types.RecordType) => RecordType_forward(x), (x: New.validation.types.RecordType) => RecordType_backward(x), Old.validation.types.RecordType.RecordType(if k in m.attrs.Keys then m.attrs else m.attrs[k := Old.validation.types.AttrType.AttrType(t, true)], Old.validation.types.AttrsTag.ClosedAttributes()), New.validation.types.RecordType.RecordType(if k in RecordType_forward(m).attrs.Keys then RecordType_forward(m).attrs else RecordType_forward(m).attrs[k := New.validation.types.AttrType.AttrType(Type_forward(t), true)], New.validation.types.AttrsTag.ClosedAttributes()));
           Old.validation.types.Ok(Old.validation.types.RecordType.RecordType(if k in m.attrs.Keys then m.attrs else m.attrs[k := Old.validation.types.AttrType.AttrType(t, true)], Old.validation.types.AttrsTag.ClosedAttributes())));
         }
       }
@@ -1411,12 +1497,17 @@ module Proofs {
       {
         if (k_O in rt_O.attrs) {
           if (rt_O.attrs[k_O].isRequired && knownToExist_O) {
-            assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()))));
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.True())));
+            assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
+            Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()))));
           } else {
             if (Effects_contains_bc(effs_O, effs_N, e_O, k_O, e_N, k_N);
             effs_O.contains(e_O, k_O)) {
-              assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()))));
+              Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.True())));
+              assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
+              Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()))));
             } else {
+              Ok_bc((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), (Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), Old.validation.typechecker.Effects.singleton(e_O, k_O)), (New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()), New.validation.typechecker.Effects.singleton(e_N, k_N)));
               assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), Old.validation.types.Ok((Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), Effects_singleton_bc(e_O, k_O, e_N, k_N);
               Old.validation.typechecker.Effects.singleton(e_O, k_O))));
             }
@@ -1424,9 +1515,13 @@ module Proofs {
         } else {
           if (RecordType_isOpen_bc(rt_O, rt_N);
           rt_O.isOpen()) {
-            assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))));
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool())));
+            assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
+            Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()))));
           } else {
-            assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))));
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.False())));
+            assert T_N.inferHasAttrHelper(e_N, k_N, rt_N, effs_N, knownToExist_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+            Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()))));
           }
         }
       }
@@ -1448,7 +1543,9 @@ module Proofs {
           case Entity(lub) =>
             if !(EntityTypeStore_isAttrPossible_bc(T_O.ets, T_N.ets, lub, k_O, EntityLUB_forward(lub), k_N);
             T_O.ets.isAttrPossible(lub, k_O)) then
-              T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())))
+              Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())), New.validation.types.Ok(New.validation.types.Type.Bool(New.validation.types.BoolType.False())));
+              T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
+              Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.False())))
             else
               var rt :- T_O.ets.getLubRecordType(lub);
               Typechecker_inferHasAttrHelper_bc(T_O, T_N, e_O, k_O, rt, effs_O, false, e_N, k_N, RecordType_forward(rt), effs_N, false);
@@ -1466,6 +1563,7 @@ module Proofs {
       {
         assert T_N.inferLike(p_N, e_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), var _ :- (Typechecker_ensureStringType_bc(T_O, T_N, e_O, effs_O, e_N, effs_N);
         T_O.ensureStringType(e_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
         Old.validation.types.Ok(Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
       }
 
@@ -1481,6 +1579,7 @@ module Proofs {
       {
         assert T_N.inferArith1(op_N, e_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), var _ :- (Typechecker_ensureIntType_bc(T_O, T_N, e_O, effs_O, e_N, effs_N);
         T_O.ensureIntType(e_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Int(), New.validation.types.Type.Int());
         Old.validation.types.Ok(Old.validation.types.Type.Int()));
       }
 
@@ -1499,6 +1598,7 @@ module Proofs {
         T_O.ensureIntType(e1_O, effs_O));
         var _ :- (Typechecker_ensureIntType_bc(T_O, T_N, e2_O, effs_O, e2_N, effs_N);
         T_O.ensureIntType(e2_O, effs_O));
+        Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Int(), New.validation.types.Type.Int());
         Old.validation.types.Ok(Old.validation.types.Type.Int()));
       }
 
@@ -1519,6 +1619,7 @@ module Proofs {
               Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), rt.attrs[k_O].ty, RecordType_forward(rt).attrs[k_N].ty);
               Old.validation.types.Ok(rt.attrs[k_O].ty)
             else
+              Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.AttrNotFound(Old.validation.types.Type.Record(rt), k_O), New.validation.types.TypeError.AttrNotFound(New.validation.types.Type.Record(RecordType_forward(rt)), k_N));
               Old.validation.types.Err(Old.validation.types.TypeError.AttrNotFound(Old.validation.types.Type.Record(rt), k_O))
           case Entity(lub) =>
             var rt :- T_O.ets.getLubRecordType(lub);
@@ -1527,6 +1628,7 @@ module Proofs {
               Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), rt.attrs[k_O].ty, RecordType_forward(rt).attrs[k_N].ty);
               Old.validation.types.Ok(rt.attrs[k_O].ty)
             else
+              Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.AttrNotFound(Old.validation.types.Type.Entity(lub), k_O), New.validation.types.TypeError.AttrNotFound(New.validation.types.Type.Entity(EntityLUB_forward(lub)), k_N));
               Old.validation.types.Err(Old.validation.types.TypeError.AttrNotFound(Old.validation.types.Type.Entity(lub), k_O))
         });
       }
@@ -1542,6 +1644,7 @@ module Proofs {
         ensures T_N.inferSet(e_N, r_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), T_O.inferSet(e_O, r_O, effs_O))
       {
         if (r_O == []) {
+          Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Never(), New.validation.types.Type.Never());
           assert T_N.inferSet(e_N, r_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Ok(Old.validation.types.Type.Never()));
         } else {
           assert T_N.inferSet(e_N, r_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), var (t, _) :- (Typechecker_infer_bc(T_O, T_N, r_O[0], effs_O, r_N[0], effs_N);
@@ -1607,6 +1710,7 @@ module Proofs {
             Ok_bc((x: ()) => (), (x: ()) => (), (), ());
             Old.validation.types.Ok(())
           else
+            Err_bc((x: ()) => (), (x: ()) => (), Old.validation.types.TypeError.ExtensionErr(Joint.def.core.Expr.Call(name_O, args_O)), New.validation.types.TypeError.ExtensionErr(Joint.def.core.Expr.Call(name_N, args_N)));
             Old.validation.types.Err(Old.validation.types.TypeError.ExtensionErr(Joint.def.core.Expr.Call(name_O, args_O))));
           var _ :- (Typechecker_inferCallArgs_bc(T_O, T_N, e_O, args_O, ty.args, effs_O, e_N, args_N, ExtFunType_forward(ty).args, effs_N);
           T_O.inferCallArgs(e_O, args_O, ty.args, effs_O));
@@ -1620,6 +1724,7 @@ module Proofs {
           Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), ty.ret, ExtFunType_forward(ty).ret);
           Old.validation.types.Ok(ty.ret));
         } else {
+          Err_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.TypeError.ExtensionErr(Joint.def.core.Expr.Call(name_O, args_O)), New.validation.types.TypeError.ExtensionErr(Joint.def.core.Expr.Call(name_N, args_N)));
           assert T_N.inferCall(e_N, name_N, args_N, effs_N) == Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Err(Old.validation.types.TypeError.ExtensionErr(Joint.def.core.Expr.Call(name_O, args_O))));
         }
       }
@@ -1704,11 +1809,15 @@ module Proofs {
           case Record(r) =>
             assert T_N.infer(e_N, effs_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), var rt :- (Typechecker_inferRecord_bc(T_O, T_N, Joint.def.core.Expr.Record(r), r, effs_O, Joint.def.core.Expr.Record(r), r, effs_N);
             T_O.inferRecord(Joint.def.core.Expr.Record(r), r, effs_O));
-            T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Record(rt))));
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Record(rt)), New.validation.types.Ok(New.validation.types.Type.Record(RecordType_forward(rt))));
+            T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Record(rt), New.validation.types.Type.Record(RecordType_forward(rt)));
+            Old.validation.types.Ok(Old.validation.types.Type.Record(rt))));
           case Set(es) =>
             assert T_N.infer(e_N, effs_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), var st :- (Typechecker_inferSet_bc(T_O, T_N, e_O, es, effs_O, e_N, es, effs_N);
             T_O.inferSet(e_O, es, effs_O));
-            T_O.wrap(Old.validation.types.Ok(Old.validation.types.Type.Set(st))));
+            Typechecker_wrap_bc(T_O, T_N, Old.validation.types.Ok(Old.validation.types.Type.Set(st)), New.validation.types.Ok(New.validation.types.Type.Set(Type_forward(st))));
+            T_O.wrap(Ok_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.types.Type.Set(st), New.validation.types.Type.Set(Type_forward(st)));
+            Old.validation.types.Ok(Old.validation.types.Type.Set(st))));
           case HasAttr(e1, k) =>
             Typechecker_inferHasAttr_bc(T_O, T_N, e1, k, effs_O, e1, k, effs_N);
             assert T_N.infer(e_N, effs_N) == Result_forward((x: (Old.validation.types.Type,Old.validation.typechecker.Effects)) => (Type_forward(x.0), Effects_forward(x.1)), (x: (New.validation.types.Type,New.validation.typechecker.Effects)) => (Type_backward(x.0), Effects_backward(x.1)), T_O.inferHasAttr(e1, k, effs_O));
@@ -2309,6 +2418,7 @@ module Proofs {
           requires e_N == e_O
           ensures New.validation.thm.model.IsTrue(r_N, s_N, e_N) == Old.validation.thm.model.IsTrue(r_O, s_O, e_O)
         {
+          IsSafe_bc(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), r_N, s_N, e_N, New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
           assert New.validation.thm.model.IsTrue(r_N, s_N, e_N) == Old.validation.thm.model.IsSafe(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()));
         }
 
@@ -2319,6 +2429,7 @@ module Proofs {
           requires e_N == e_O
           ensures New.validation.thm.model.IsFalse(r_N, s_N, e_N) == Old.validation.thm.model.IsFalse(r_O, s_O, e_O)
         {
+          IsSafe_bc(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), r_N, s_N, e_N, New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
           assert New.validation.thm.model.IsFalse(r_N, s_N, e_N) == Old.validation.thm.model.IsSafe(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()));
         }
 
@@ -2341,6 +2452,7 @@ module Proofs {
           requires e_N == e_O
           ensures New.validation.thm.model.IsTrueStrong(r_N, s_N, e_N) == Old.validation.thm.model.IsTrueStrong(r_O, s_O, e_O)
         {
+          IsSafeStrong_bc(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()), r_N, s_N, e_N, New.validation.types.Type.Bool(New.validation.types.BoolType.True()));
           assert New.validation.thm.model.IsTrueStrong(r_N, s_N, e_N) == Old.validation.thm.model.IsSafeStrong(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.True()));
         }
 
@@ -2351,6 +2463,7 @@ module Proofs {
           requires e_N == e_O
           ensures New.validation.thm.model.IsFalseStrong(r_N, s_N, e_N) == Old.validation.thm.model.IsFalseStrong(r_O, s_O, e_O)
         {
+          IsSafeStrong_bc(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()), r_N, s_N, e_N, New.validation.types.Type.Bool(New.validation.types.BoolType.False()));
           assert New.validation.thm.model.IsFalseStrong(r_N, s_N, e_N) == Old.validation.thm.model.IsSafeStrong(r_O, s_O, e_O, Old.validation.types.Type.Bool(Old.validation.types.BoolType.False()));
         }
 
@@ -2399,7 +2512,8 @@ module Proofs {
           requires lub_N == EntityLUB_forward(lub_O)
           ensures New.validation.thm.model.ExistingEntityInLub(s_N, ev_N, lub_N) == Old.validation.thm.model.ExistingEntityInLub(s_O, ev_O, lub_O)
         {
-          assert New.validation.thm.model.ExistingEntityInLub(s_N, ev_N, lub_N) == (Old.validation.thm.base.InstanceOfType(Joint.def.core.Value.Primitive(Joint.def.core.Primitive.EntityUID(ev_O)), Old.validation.types.Type.Entity(lub_O)) && ev_O in s_O.entities);
+          assert New.validation.thm.model.ExistingEntityInLub(s_N, ev_N, lub_N) == ((InstanceOfType_bc(Joint.def.core.Value.Primitive(Joint.def.core.Primitive.EntityUID(ev_O)), Old.validation.types.Type.Entity(lub_O), Joint.def.core.Value.Primitive(Joint.def.core.Primitive.EntityUID(ev_N)), New.validation.types.Type.Entity(lub_N));
+          Old.validation.thm.base.InstanceOfType(Joint.def.core.Value.Primitive(Joint.def.core.Primitive.EntityUID(ev_O)), Old.validation.types.Type.Entity(lub_O))) && ev_O in s_O.entities);
         }
 
         lemma EntityProjStoreCondition_bc(s_O: Joint.def.core.EntityStore, l_O: Joint.def.core.Attr, lub_O: Old.validation.types.EntityLUB, t'_O: Old.validation.types.Type, isRequired_O: bool, s_N: Joint.def.core.EntityStore, l_N: Joint.def.core.Attr, lub_N: New.validation.types.EntityLUB, t'_N: New.validation.types.Type, isRequired_N: bool)
@@ -2597,7 +2711,11 @@ module Proofs {
           ensures pid_N in policies_N.policies.Keys
           ensures New.validation.thm.toplevel.permissiveTypecheck(pid_N, policies_N, schema_N) == types.Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), Old.validation.thm.toplevel.permissiveTypecheck(pid_O, policies_O, schema_O))
         {
-          var typechecker := Old.validation.typechecker.Typechecker.Typechecker(schema_O.ets, schema_O.acts, schema_O.reqty); assert New.validation.thm.toplevel.permissiveTypecheck(pid_N, policies_N, schema_N) == types.Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), typechecker.typecheck(policies_O.policies[pid_O].toExpr(), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
+          var typechecker := Old.validation.typechecker.Typechecker.Typechecker(schema_O.ets, schema_O.acts, schema_O.reqty);
+          {
+            Typechecker_typecheck_bc(typechecker, Typechecker_forward(typechecker), policies_O.policies[pid_O].toExpr(), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()), policies_N.policies[pid_N].toExpr(), New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()));
+            assert New.validation.thm.toplevel.permissiveTypecheck(pid_N, policies_N, schema_N) == types.Result_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), typechecker.typecheck(policies_O.policies[pid_O].toExpr(), Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool())));
+          }
         }
 
         lemma strictTypecheck_bc(pid_O: Joint.def.core.PolicyID, policies_O: Joint.def.core.PolicyStore, schema_O: Old.validation.thm.toplevel.Schema, pid_N: Joint.def.core.PolicyID, policies_N: Joint.def.core.PolicyStore, schema_N: New.validation.thm.toplevel.Schema)
@@ -3069,7 +3187,8 @@ module Proofs {
           case "Primitive" =>
             var ty1 :- (getJsonField_bc(body, "primitiveType", Json_forward(body), "primitiveType");
             Old.difftest.helpers.getJsonField(body, "primitiveType"));
-            var ty :- Old.difftest.helpers.deserializeEnum(ty1, map ["Bool" := Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()) , "Long" := Old.validation.types.Type.Int() , "String" := Old.validation.types.Type.String()]);
+            var ty :- (deserializeEnum_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), ty1, map ["Bool" := Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()) , "Long" := Old.validation.types.Type.Int() , "String" := Old.validation.types.Type.String()], Json_forward(ty1), map ["Bool" := New.validation.types.Type.Bool(New.validation.types.BoolType.AnyBool()) , "Long" := New.validation.types.Type.Int() , "String" := New.validation.types.Type.String()]);
+            Old.difftest.helpers.deserializeEnum(ty1, map ["Bool" := Old.validation.types.Type.Bool(Old.validation.types.BoolType.AnyBool()) , "Long" := Old.validation.types.Type.Int() , "String" := Old.validation.types.Type.String()]));
             Joint.def.std.Result.Ok(ty)
           case "Set" =>
             var inner :- (deserializeField_bc((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), body, "elementType", typeFromProdJsonRec, Json_forward(body), "elementType", (x1_N: New.difftest.helpers.Json) => FromProdResult_forward((x: Old.validation.types.Type) => Type_forward(x), (x: New.validation.types.Type) => Type_backward(x), typeFromProdJsonRec(Json_backward(x1_N))));
@@ -3134,6 +3253,15 @@ module Proofs {
         requires j_N == Json_forward(j_O)
         ensures New.difftest.main.entityTypePairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityType,Old.validation.validator.TypecheckerEntityType)) => (x.0, TypecheckerEntityType_forward(x.1)), (x: (Joint.def.core.EntityType,New.validation.validator.TypecheckerEntityType)) => (x.0, TypecheckerEntityType_backward(x.1)), Old.difftest.main.entityTypePairFromProdJson(j_O))
       {
+        deserializeTuple2Elts_bc((x: (Joint.def.core.EntityType,Old.validation.validator.TypecheckerEntityType)) => (x.0, TypecheckerEntityType_forward(x.1)), (x: (Joint.def.core.EntityType,New.validation.validator.TypecheckerEntityType)) => (x.0, TypecheckerEntityType_backward(x.1)), (x: Joint.def.base.Name) => x, (x: Joint.def.base.Name) => x, (x: Old.validation.validator.TypecheckerEntityType) => TypecheckerEntityType_forward(x), (x: New.validation.validator.TypecheckerEntityType) => TypecheckerEntityType_backward(x), j_O, Old.difftest.main.nameFromProdJson, (data: Old.difftest.helpers.Json) => var descendants :- Old.difftest.helpers.deserializeField(data, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.nameFromProdJson));
+        var descendants1 := set e: Joint.def.base.Name | e in descendants :: Joint.def.core.EntityType.EntityType(e);
+        var attrs :- Old.difftest.helpers.getJsonField(data, "attributes");
+        var attrs1 :- Old.difftest.helpers.deserializeField(attrs, "attrs", Old.difftest.main.attrTypesFromProdJsonObject);
+        Joint.def.std.Result.Ok(Old.validation.validator.TypecheckerEntityType.TypecheckerEntityType(descendants1, attrs1)), (ty: Joint.def.base.Name, et: Old.validation.validator.TypecheckerEntityType) => Joint.def.std.Result.Ok((Joint.def.core.EntityType.EntityType(ty), et)), j_N, New.difftest.main.nameFromProdJson, (data: New.difftest.helpers.Json) => var descendants :- New.difftest.helpers.deserializeField(data, "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.nameFromProdJson));
+        var descendants1 := set e: Joint.def.base.Name | e in descendants :: Joint.def.core.EntityType.EntityType(e);
+        var attrs :- New.difftest.helpers.getJsonField(data, "attributes");
+        var attrs1 :- New.difftest.helpers.deserializeField(attrs, "attrs", New.difftest.main.attrTypesFromProdJsonObject);
+        Joint.def.std.Result.Ok(New.validation.validator.TypecheckerEntityType.TypecheckerEntityType(descendants1, attrs1)), (ty: Joint.def.base.Name, et: New.validation.validator.TypecheckerEntityType) => Joint.def.std.Result.Ok((Joint.def.core.EntityType.EntityType(ty), et)));
         assert New.difftest.main.entityTypePairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityType,Old.validation.validator.TypecheckerEntityType)) => (x.0, TypecheckerEntityType_forward(x.1)), (x: (Joint.def.core.EntityType,New.validation.validator.TypecheckerEntityType)) => (x.0, TypecheckerEntityType_backward(x.1)), Old.difftest.helpers.deserializeTuple2Elts(j_O, Old.difftest.main.nameFromProdJson, (data: Old.difftest.helpers.Json) => var descendants :- (deserializeField_bc((x: set<Joint.def.base.Name>) => x, (x: set<Joint.def.base.Name>) => x, data, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.nameFromProdJson), Json_forward(data), "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.nameFromProdJson));
         Old.difftest.helpers.deserializeField(data, "descendants", setDeserializer_bc((x: Joint.def.base.Name) => x, (x: Joint.def.base.Name) => x, Old.difftest.main.nameFromProdJson, New.difftest.main.nameFromProdJson);
         Old.difftest.helpers.setDeserializer(Old.difftest.main.nameFromProdJson)));
@@ -3155,6 +3283,15 @@ module Proofs {
         requires j_N == Json_forward(j_O)
         ensures New.difftest.main.actionIdPairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityUID,Old.validation.validator.TypecheckerActionId)) => (x.0, TypecheckerActionId_forward(x.1)), (x: (Joint.def.core.EntityUID,New.validation.validator.TypecheckerActionId)) => (x.0, TypecheckerActionId_backward(x.1)), Old.difftest.main.actionIdPairFromProdJson(j_O))
       {
+        deserializeTuple2Elts_bc((x: (Joint.def.core.EntityUID,Old.validation.validator.TypecheckerActionId)) => (x.0, TypecheckerActionId_forward(x.1)), (x: (Joint.def.core.EntityUID,New.validation.validator.TypecheckerActionId)) => (x.0, TypecheckerActionId_backward(x.1)), (x: Joint.def.core.EntityUID) => x, (x: Joint.def.core.EntityUID) => x, (x: Old.validation.validator.TypecheckerActionId) => TypecheckerActionId_forward(x), (x: New.validation.validator.TypecheckerActionId) => TypecheckerActionId_backward(x), j_O, Old.difftest.main.entityUIDFromProdJson, (data: Old.difftest.helpers.Json) => var appliesTo :- Old.difftest.helpers.deserializeField(data, "appliesTo", Old.difftest.main.applySpecFromProdJson);
+        var descendants :- Old.difftest.helpers.deserializeField(data, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson));
+        var context :- Old.difftest.helpers.getJsonField(data, "context");
+        var context1 :- Old.difftest.helpers.deserializeField(context, "attrs", Old.difftest.main.attrTypesFromProdJsonObject);
+        Joint.def.std.Result.Ok(Old.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, context1)), (uid: Joint.def.core.EntityUID, act: Old.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act)), j_N, New.difftest.main.entityUIDFromProdJson, (data: New.difftest.helpers.Json) => var appliesTo :- New.difftest.helpers.deserializeField(data, "appliesTo", New.difftest.main.applySpecFromProdJson);
+        var descendants :- New.difftest.helpers.deserializeField(data, "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson));
+        var context :- New.difftest.helpers.getJsonField(data, "context");
+        var context1 :- New.difftest.helpers.deserializeField(context, "attrs", New.difftest.main.attrTypesFromProdJsonObject);
+        Joint.def.std.Result.Ok(New.validation.validator.TypecheckerActionId.TypecheckerActionId(appliesTo, descendants, context1)), (uid: Joint.def.core.EntityUID, act: New.validation.validator.TypecheckerActionId) => Joint.def.std.Result.Ok((uid, act)));
         assert New.difftest.main.actionIdPairFromProdJson(j_N) == FromProdResult_forward((x: (Joint.def.core.EntityUID,Old.validation.validator.TypecheckerActionId)) => (x.0, TypecheckerActionId_forward(x.1)), (x: (Joint.def.core.EntityUID,New.validation.validator.TypecheckerActionId)) => (x.0, TypecheckerActionId_backward(x.1)), Old.difftest.helpers.deserializeTuple2Elts(j_O, Old.difftest.main.entityUIDFromProdJson, (data: Old.difftest.helpers.Json) => var appliesTo :- (deserializeField_bc((x: Old.validation.validator.TypecheckerApplySpec) => TypecheckerApplySpec_forward(x), (x: New.validation.validator.TypecheckerApplySpec) => TypecheckerApplySpec_backward(x), data, "appliesTo", Old.difftest.main.applySpecFromProdJson, Json_forward(data), "appliesTo", New.difftest.main.applySpecFromProdJson);
         Old.difftest.helpers.deserializeField(data, "appliesTo", Old.difftest.main.applySpecFromProdJson));
         var descendants :- (deserializeField_bc((x: set<Joint.def.core.EntityUID>) => x, (x: set<Joint.def.core.EntityUID>) => x, data, "descendants", Old.difftest.helpers.setDeserializer(Old.difftest.main.entityUIDFromProdJson), Json_forward(data), "descendants", New.difftest.helpers.setDeserializer(New.difftest.main.entityUIDFromProdJson));
