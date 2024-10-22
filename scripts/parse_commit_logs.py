@@ -32,8 +32,6 @@ def diff_files(file1, file2):
 
 def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_args = "", delete_output=False, use_other_combine_dfy=None):
     if run_cedar:
-        if pr_id in [44, 111]:
-            typecart_args += " -b true"  # generate backward translation functions
         # if pr_id != 111:
         #     return 0
         # if hash_after != 'd860076a403a03d4b4948279cb6d7c112900608a':
@@ -76,7 +74,7 @@ def run_pr(pr_id, hash_before, hash_after, num_files, run_backward, typecart_arg
     if typecart_return_value.returncode == 0:
         num_lemmas = count_strings(" lemma ", "proofs/proofs.dfy")  # includes axioms
         num_axioms = count_strings(" {:axiom} ", "proofs/proofs.dfy")
-        if num_lemmas == 0 or typecart_args == "-a 1 -p false": # do not run Dafny for this case
+        if num_lemmas == 0 or typecart_args == "-a 1 -p false -b true": # do not run Dafny for this case
             subprocess.run(f'printf "{num_lemmas}, {num_axioms}, 0/0, 0/{num_lemmas}, {typecart_end - typecart_start:.02f}, 0\n" >> result.csv', shell=True)
         else:
             subprocess.run(f'printf "{num_lemmas}, {num_axioms}" >> result.csv', shell=True)
@@ -153,9 +151,9 @@ def main(run_backward, typecart_args_list):
                 run_pr_with_multiple_config(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, typecart_args_list)
                 if run_cedar:
                     if last_pr_id in [111]:
-                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, typecart_args="-p false", use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}_no_proof.dfy')
+                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, typecart_args="-p false -b true", use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}_no_proof.dfy')
                     if last_pr_id in [44, 111, 157, 163, 197]:
-                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}.dfy')
+                        run_pr(last_pr_id, commit_hashes[-1], commit_hashes[-2], num_files, run_backward, typecart_args="-b true", use_other_combine_dfy=f'proofs_{last_pr_id}{"" if run_backward else "_forward"}.dfy')
                 if last_pr_id == 1:
                     return  # older histories are not the same repo for cryptools
             elif len(commit_hashes) >= 2:
@@ -176,4 +174,4 @@ def main(run_backward, typecart_args_list):
 
 
 if __name__ == "__main__":
-    main(run_backward=True, typecart_args_list=["-a 1 -p false", "-p false", "", "-h true -p false", "-h true"])
+    main(run_backward=True, typecart_args_list=["-a 1 -p false -b true", "-p false -b true", "-b true", "-b false", "-h true -p false -b true", "-h true -b true"])

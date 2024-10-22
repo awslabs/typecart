@@ -206,7 +206,7 @@ module Proofs {
 
       function RecordType_forward(R_O: Old.validation.types.RecordType): New.validation.types.RecordType
       {
-        New.validation.types.RecordType(Translations.MapBuiltinTypes.Map((mp: Joint.def.core.Attr) => mp, (mp: Joint.def.core.Attr) => mp, (mp: Old.validation.types.AttrType) => AttrType_forward(mp), R_O), New.validation.types.OpenAttributes())
+        New.validation.types.RecordType(Translations.MapBuiltinTypes.Map((mp: Joint.def.core.Attr) => mp, (mp: Joint.def.core.Attr) => mp, (mp: Old.validation.types.AttrType) => AttrType_forward(mp), R_O), New.validation.types.ClosedAttributes())
       }
 
       function RecordType_backward(R_N: New.validation.types.RecordType): Old.validation.types.RecordType
