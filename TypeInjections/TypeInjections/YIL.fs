@@ -1259,7 +1259,7 @@ module YIL =
                 + (this.tpvars true false tpvs)
                 + (if consS.IsEmpty then "" else " = ")
                 + listToString (consS, " | ")
-                + (decls ds)
+                + (if ds.IsEmpty then "" else decls ds)
             | Class (n, isTrait, tpvs, p, ds, a) ->
                 if isTrait then "trait " else "class "
                 + (this.meta a)
