@@ -1404,7 +1404,10 @@ module YIL =
             + (this.expr (fst c) pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) =
-            c.name + (this.localDeclsBr (c.ins, true))
+            if c.ins.IsEmpty then 
+                c.name
+            else
+                c.name + (this.localDeclsBr (c.ins, true))
 
         member this.tps(ts: Type list) =
             if ts.IsEmpty then
