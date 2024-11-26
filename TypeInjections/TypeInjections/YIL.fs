@@ -1322,10 +1322,12 @@ module YIL =
                 + (this.tpvars false g tpvs)
                 + (this.localDeclsBr (ins.decls, true))
                 + (match methodType with
+                   // For predicates, Dafny does not allow printing ": bool" when outs.outputType.IsSome;
+                   // however, Dafny allows printing ": (res: bool)" for the result "res" to be used in the method.
                    | IsPredicate
                    | IsLeastPredicate
                    | IsGreatestPredicate
-                   | IsPredicateMethod -> ""
+                   | IsPredicateMethod when outs.outputType.IsSome -> ""
                    | IsLemma
                    | IsMethod -> if outs.decls.IsEmpty then "" else " returns " + outputsS // no need to print "returns ()"
                    | _ -> ": " + outputsS)
