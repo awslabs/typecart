@@ -1708,12 +1708,14 @@ module YIL =
                 let ldsStr =
                     List.map this.localDecl lds |> String.concat ", "
 
-                "set "
+                (if 0 < precedence then "(" else "")
+                + "set "
                 + ldsStr
                 + " | "
                 + (expr 0 predicate)
                 + " :: "
                 + (expr 0 body)
+                + (if 0 < precedence then ")" else "")
             | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
             | ESeqConstr (_, l, i) -> "seq(" + (expr 0 l) + ", " + (expr 0 i) + ")"
             | ESeqSelect (s, _, elem, f, t) ->
@@ -1742,7 +1744,8 @@ module YIL =
                 let ldsStr =
                     List.map this.localDecl lds |> String.concat ", "
 
-                "map "
+                (if 0 < precedence then "(" else "")
+                + "map "
                 + ldsStr
                 + " | "
                 + (expr 0 p)
@@ -1750,6 +1753,7 @@ module YIL =
                 + match tL with
                   | None -> expr 0 tR
                   | Some tL -> (expr 11 tL) + " := " + (expr 0 tR)
+                + (if 0 < precedence then ")" else "")
             | EUnOpApply (op, e) -> this.unaryOperator op precedence (expr (this.unaryOperatorPrecedence op) e)
             | EBinOpApply (op, e1, e2) ->
                 let resolvedOp = this.binaryOperatorResolve op
