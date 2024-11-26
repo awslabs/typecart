@@ -1401,7 +1401,7 @@ module YIL =
             + (match snd c with
                | None -> ""
                | Some label -> label + ": ")
-            + (this.expr (fst c) pctx)
+            + (this.exprWithPrecedence (fst c) 1 pctx)
 
         member this.datatypeConstructor(c: DatatypeConstructor, pctx: Context) =
             if c.ins.IsEmpty then 
