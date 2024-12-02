@@ -1684,7 +1684,7 @@ module YIL =
                             expr 3 arg2 // ==> is 2
                         | _ -> expr 1 b // ; is 0
                     | Exists, None -> expr 1 b // ; is 0
-                (if 0 < precedence then "(" else "")
+                (if 1 < precedence then "(" else "")
                 + q.ToString()
                 + " "
                 + this.localDeclsBr (lds, false)
@@ -1694,7 +1694,7 @@ module YIL =
                        indented(body, false)
                    else
                        " " + body)
-                + (if 0 < precedence then ")" else "")
+                + (if 1 < precedence then ")" else "")
             | EOld e -> "old(" + (expr 0 e) + ")"
             | ETuple (es) -> exprs es
             | EProj (e, i) -> expr 11 e + "." + i.ToString()
@@ -1710,14 +1710,14 @@ module YIL =
                 let ldsStr =
                     List.map this.localDecl lds |> String.concat ", "
 
-                (if 0 < precedence then "(" else "")
+                (if 1 < precedence then "(" else "")
                 + "set "
                 + ldsStr
                 + " | "
                 + (expr 0 predicate)
                 + " :: "
                 + (expr 0 body)
-                + (if 0 < precedence then ")" else "")
+                + (if 1 < precedence then ")" else "")
             | ESeq (_, es) -> "[" + (exprsNoBr es ", ") + "]"
             | ESeqConstr (_, l, i) -> "seq(" + (expr 0 l) + ", " + (expr 0 i) + ")"
             | ESeqSelect (s, _, elem, f, t) ->
@@ -1746,7 +1746,7 @@ module YIL =
                 let ldsStr =
                     List.map this.localDecl lds |> String.concat ", "
 
-                (if 0 < precedence then "(" else "")
+                (if 1 < precedence then "(" else "")
                 + "map "
                 + ldsStr
                 + " | "
@@ -1755,7 +1755,7 @@ module YIL =
                 + match tL with
                   | None -> expr 0 tR
                   | Some tL -> (expr 11 tL) + " := " + (expr 0 tR)
-                + (if 0 < precedence then ")" else "")
+                + (if 1 < precedence then ")" else "")
             | EUnOpApply (op, e) -> this.unaryOperator op precedence (expr (this.unaryOperatorPrecedence op) e)
             | EBinOpApply (op, e1, e2) ->
                 let resolvedOp = this.binaryOperatorResolve op
